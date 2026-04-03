@@ -27,17 +27,9 @@ func TestGetPath(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			t.Run("FolderTree", func(t *testing.T) {
-				if result := ft.GetPath(test.id); result != test.expected {
-					t.Errorf("got %q, want %q", result, test.expected)
-				}
-			})
-
-			t.Run("FolderMap", func(t *testing.T) {
-				if result := fm.GetPath(test.id); result != test.expected {
-					t.Errorf("got %q, want %q", result, test.expected)
-				}
-			})
+			if result := fm.GetPath(test.id); result != test.expected {
+				t.Errorf("got %q, want %q", result, test.expected)
+			}
 		})
 	}
 }

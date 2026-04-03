@@ -21,32 +21,6 @@ type (
 	FolderMap  map[string]Folder
 )
 
-func (ft FolderTree) GetPath(targetID string) string {
-	var segments []string
-	currentID := targetID
-
-	for currentID != root {
-		found := false
-
-		for _, f := range ft {
-			if f.id == currentID {
-				segments = append(segments, f.displayName)
-				currentID = f.parent
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			break
-		}
-	}
-
-	slices.Reverse(segments)
-
-	return strings.Join(segments, "/")
-}
-
 func (ft FolderTree) ToMap() FolderMap {
 	fMap := make(map[string]Folder, len(ft))
 
