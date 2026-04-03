@@ -12,9 +12,9 @@ const (
 )
 
 type Folder struct {
-	id          string
-	parent      string
-	displayName string
+	ID          string
+	Parent      string
+	DisplayName string
 }
 
 type (
@@ -26,7 +26,7 @@ func (ft FolderTree) ToMap() FolderMap {
 	fMap := make(map[string]Folder, len(ft))
 
 	for _, f := range ft {
-		fMap[f.id] = f
+		fMap[f.ID] = f
 	}
 
 	return fMap
@@ -36,9 +36,9 @@ func (ft FolderTree) Validate() error {
 	fm := ft.ToMap()
 
 	for _, f := range ft {
-		if f.parent != root {
-			if _, exists := fm[f.parent]; !exists {
-				return fmt.Errorf("folder %q has a non-existing parent %q", f.id, f.parent)
+		if f.Parent != root {
+			if _, exists := fm[f.Parent]; !exists {
+				return fmt.Errorf("folder %q has a non-existing parent %q", f.ID, f.Parent)
 			}
 		}
 	}
@@ -57,8 +57,8 @@ func (fm FolderMap) GetPath(targetID string) (string, error) {
 			return "", fmt.Errorf("folder %q does not exist", currentID)
 		}
 
-		segments = append(segments, f.displayName)
-		currentID = f.parent
+		segments = append(segments, f.DisplayName)
+		currentID = f.Parent
 	}
 
 	slices.Reverse(segments)

@@ -1,13 +1,19 @@
 package main
 
 import (
-	"fmt"
-
+	"playlist-manager/internal/library"
 	"playlist-manager/internal/utils"
 )
 
 func main() {
-	fmt.Println("Hello, world!")
-
 	utils.CheckHealth()
+
+	ft := library.FolderTree{
+		{"artists", "root", "Artists"},
+		{"ado", "artists", "Ado"},
+		{"vt", "artists", "VT"},
+		{"hololive", "vt", "Hololive"},
+	}
+
+	library.Print(ft.ToMap())
 }
