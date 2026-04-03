@@ -4,6 +4,40 @@ import (
 	"testing"
 )
 
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		tree    FolderTree
+		wantErr bool
+	}{
+		{
+			name: "ValidTree",
+			tree: FolderTree{
+				{"artists", root, "Artists"},
+				{"ado", "artists", "Ado"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "OrphanedFolder",
+			tree: FolderTree{
+				{"ado", "missing_parent", "Ado"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.tree.Validate()
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGetPath(t *testing.T) {
 	ft := FolderTree{
 		{"artists", root, "Artists"},
@@ -18,16 +52,23 @@ func TestGetPath(t *testing.T) {
 		name     string
 		id       string
 		expected string
+		wantErr  bool
 	}{
-		{"InvalidID", "unknown", ""},
-		{"RootLevel", "artists", "Artists"},
-		{"DeepLevel", "ado", "Artists/Ado"},
-		{"DeeperLevel", "hololive", "Artists/VT/Hololive"},
+		{"InvalidID", "unknown", "", true},
+		{"RootLevel", "artists", "Artists", false},
+		{"DeepLevel", "ado", "Artists/Ado", false},
+		{"DeeperLevel", "hololive", "Artists/VT/Hololive", false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if result := fm.GetPath(test.id); result != test.expected {
+			result, err := fm.GetPath(test.id)
+
+			if (err != nil) != test.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, test.wantErr)
+			}
+
+			if !test.wantErr && result != test.expected {
 				t.Errorf("got %q, want %q", result, test.expected)
 			}
 		})

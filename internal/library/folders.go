@@ -2,6 +2,7 @@
 package library
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -31,7 +32,21 @@ func (ft FolderTree) ToMap() FolderMap {
 	return fMap
 }
 
-func (fm FolderMap) GetPath(targetID string) string {
+func (ft FolderTree) Validate() error {
+	fm := ft.ToMap()
+
+	for _, f := range ft {
+		if f.parent != root {
+			if _, exists := fm[f.parent]; !exists {
+				return fmt.Errorf("folder %q has a non-existing parent %q", f.id, f.parent)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (fm FolderMap) GetPath(targetID string) (string, error) {
 	var segments []string
 	currentID := targetID
 
@@ -39,7 +54,7 @@ func (fm FolderMap) GetPath(targetID string) string {
 		f, ok := fm[currentID]
 
 		if !ok {
-			return strings.Join(segments, "/")
+			return "", fmt.Errorf("folder %q does not exist", currentID)
 		}
 
 		segments = append(segments, f.displayName)
@@ -48,5 +63,5 @@ func (fm FolderMap) GetPath(targetID string) string {
 
 	slices.Reverse(segments)
 
-	return strings.Join(segments, "/")
+	return strings.Join(segments, "/"), nil
 }
