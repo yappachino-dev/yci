@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"playlist-manager/internal/utils"
+)
 
 func main() {
-	fmt.Print("Hello, world!")
+	fmt.Println("Hello, world!")
+
+	utils.CheckHealth()
 }
