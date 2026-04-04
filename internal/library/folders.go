@@ -13,17 +13,17 @@ const (
 
 type Folder struct {
 	ID          string
-	Parent      string
+	ParentID    string
 	DisplayName string
 }
 
 type (
-	FolderTree []Folder
-	FolderMap  map[string]Folder
+	folderTree []Folder
+	folderMap  map[string]Folder
 )
 
-func (ft FolderTree) ToMap() FolderMap {
-	fMap := make(map[string]Folder, len(ft))
+func (ft folderTree) toMap() folderMap {
+	fMap := make(folderMap, len(ft))
 
 	for _, f := range ft {
 		fMap[f.ID] = f
@@ -32,13 +32,13 @@ func (ft FolderTree) ToMap() FolderMap {
 	return fMap
 }
 
-func (ft FolderTree) Validate() error {
-	fm := ft.ToMap()
+func (ft folderTree) validate() error {
+	fm := ft.toMap()
 
 	for _, f := range ft {
-		if f.Parent != root {
-			if _, exists := fm[f.Parent]; !exists {
-				return fmt.Errorf("folder %q has a non-existing parent %q", f.ID, f.Parent)
+		if f.ParentID != root {
+			if _, exists := fm[f.ParentID]; !exists {
+				return fmt.Errorf("folder %q has a non-existing parent %q", f.ID, f.ParentID)
 			}
 		}
 	}
@@ -46,7 +46,7 @@ func (ft FolderTree) Validate() error {
 	return nil
 }
 
-func (fm FolderMap) GetPath(targetID string) (string, error) {
+func (fm folderMap) getPath(targetID string) (string, error) {
 	var segments []string
 	currentID := targetID
 
@@ -58,7 +58,7 @@ func (fm FolderMap) GetPath(targetID string) (string, error) {
 		}
 
 		segments = append(segments, f.DisplayName)
-		currentID = f.Parent
+		currentID = f.ParentID
 	}
 
 	slices.Reverse(segments)

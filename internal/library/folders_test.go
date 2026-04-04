@@ -7,12 +7,12 @@ import (
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
-		tree    FolderTree
+		tree    folderTree
 		wantErr bool
 	}{
 		{
 			name: "ValidTree",
-			tree: FolderTree{
+			tree: folderTree{
 				{"artists", root, "Artists"},
 				{"ado", "artists", "Ado"},
 			},
@@ -20,7 +20,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name: "OrphanedFolder",
-			tree: FolderTree{
+			tree: folderTree{
 				{"ado", "missing_parent", "Ado"},
 			},
 			wantErr: true,
@@ -29,7 +29,7 @@ func TestValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.tree.Validate()
+			err := tt.tree.validate()
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
@@ -39,14 +39,14 @@ func TestValidate(t *testing.T) {
 }
 
 func TestGetPath(t *testing.T) {
-	ft := FolderTree{
+	ft := folderTree{
 		{"artists", root, "Artists"},
 		{"ado", "artists", "Ado"},
 		{"vt", "artists", "VT"},
 		{"hololive", "vt", "Hololive"},
 	}
 
-	fm := ft.ToMap()
+	fm := ft.toMap()
 
 	tests := []struct {
 		name     string
@@ -62,7 +62,7 @@ func TestGetPath(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := fm.GetPath(test.id)
+			result, err := fm.getPath(test.id)
 
 			if (err != nil) != test.wantErr {
 				t.Fatalf("error = %v, wantErr %v", err, test.wantErr)
