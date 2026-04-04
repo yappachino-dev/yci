@@ -7,7 +7,8 @@ import (
 type Library struct {
 	Paths AppPaths
 
-	index folderMap
+	folderIdx folderMap
+	artistIdx artistMap
 }
 
 func NewLibrary() *Library {
@@ -25,17 +26,17 @@ func NewLibrary() *Library {
 	}
 
 	return &Library{
-		Paths: paths,
-		index: ft.toMap(),
+		Paths:     paths,
+		folderIdx: ft.toMap(),
 	}
 }
 
 func (l *Library) TreePrint() {
-	treePrint(l.index)
+	treePrint(l.folderIdx)
 }
 
 func (l *Library) HasChildren(id string) bool {
-	for _, f := range l.index {
+	for _, f := range l.folderIdx {
 		if f.ParentID == id {
 			return true
 		}
@@ -45,21 +46,21 @@ func (l *Library) HasChildren(id string) bool {
 }
 
 func (l *Library) AddFolder(id string, parent string, name string) error {
-	if _, exists := l.index[id]; exists {
+	if _, exists := l.folderIdx[id]; exists {
 		return fmt.Errorf("folder %q already exists", id)
 	}
 
-	if _, exists := l.index[parent]; !exists {
+	if _, exists := l.folderIdx[parent]; !exists {
 		return fmt.Errorf("folder %q does not exist", parent)
 	}
 
-	l.index[id] = Folder{id, parent, name}
+	l.folderIdx[id] = Folder{id, parent, name}
 
 	return nil
 }
 
 func (l *Library) RemoveFolder(id string) error {
-	if _, exists := l.index[id]; !exists {
+	if _, exists := l.folderIdx[id]; !exists {
 		return fmt.Errorf("folder %q does not exist", id)
 	}
 
@@ -69,7 +70,7 @@ func (l *Library) RemoveFolder(id string) error {
 
 	// TODO: file check
 
-	delete(l.index, id)
+	delete(l.folderIdx, id)
 
 	return nil
 }

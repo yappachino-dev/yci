@@ -17,7 +17,7 @@ func Download(dir string, url string) {
 		"--extract-audio",        // download only audio
 		"--audio-format", "opus", // use opus audio-format
 		"--audio-quality", "0", // best sound quality
-		"--add-metadata",              // stitch metadata
+		"--embed-metadata",            // stitch metadata
 		"--embed-thumbnail",           // stitch thumbnail
 		"--convert-thumbnails", "jpg", // convert thumbnail to jpg
 		"--sleep-interval", "5",

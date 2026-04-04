@@ -15,12 +15,9 @@ func main() {
 	lib.TreePrint()
 
 	funcs := []func() error{
-		func() error { return lib.AddFolder("jp", "holo", "JP") },
-		func() error { return lib.AddFolder("jp", "hololive", "JP") },
-		func() error { return lib.AddFolder("en", "hololive", "EN") },
-		func() error { return lib.RemoveFolder("holo") },
-		func() error { return lib.RemoveFolder("hololive") },
-		func() error { return lib.RemoveFolder("en") },
+		func() error { return lib.AddFolder("hololive_jp", "hololive", "JP") },
+		func() error { return lib.AddFolder("omaru_polka", "hololive_jp", "Omaru Polka") },
+		func() error { return lib.AddFolder("hololive_en", "hololive", "EN") },
 	}
 
 	for _, f := range funcs {
@@ -29,4 +26,8 @@ func main() {
 		}
 		lib.TreePrint()
 	}
+
+	// downloader.Download(lib.Paths.Temp, "https://youtu.be/TGBWr24_Vp4")
+
+	lib.ProcessTempFolder()
 }
