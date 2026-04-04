@@ -24,13 +24,20 @@ func printTreeNode(id string, prefix string, childrenOf map[string][]Folder) {
 	}
 }
 
-func treePrint(fm folderMap) {
+func (l *Library) treePrint() error {
 	childrenOf := make(map[string][]Folder)
 
-	for _, f := range fm {
+	folders, err := l.GetFolders()
+	if err != nil {
+		return err
+	}
+
+	for _, f := range folders {
 		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
 	}
 
 	fmt.Printf("%s\n", root)
 	printTreeNode(root, "", childrenOf)
+
+	return nil
 }

@@ -11,12 +11,6 @@ const (
 	root string = "root"
 )
 
-type Folder struct {
-	ID          string
-	ParentID    string
-	DisplayName string
-}
-
 type (
 	folderTree []Folder
 	folderMap  map[string]Folder
