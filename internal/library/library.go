@@ -5,10 +5,13 @@ import (
 )
 
 type Library struct {
+	Paths AppPaths
+
 	index folderMap
 }
 
 func NewLibrary() *Library {
+	// TODO: hardcoded
 	ft := folderTree{
 		{ID: "artists", ParentID: "root", DisplayName: "Artists"},
 		{ID: "ado", ParentID: "artists", DisplayName: "Ado"},
@@ -16,7 +19,13 @@ func NewLibrary() *Library {
 		{ID: "hololive", ParentID: "vt", DisplayName: "Hololive"},
 	}
 
+	paths, err := GetPaths()
+	if err != nil {
+		fmt.Println("error :( %w", err)
+	}
+
 	return &Library{
+		Paths: paths,
 		index: ft.toMap(),
 	}
 }

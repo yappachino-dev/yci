@@ -51,9 +51,9 @@ func (fm folderMap) getPath(targetID string) (string, error) {
 	currentID := targetID
 
 	for currentID != root {
-		f, ok := fm[currentID]
+		f, exists := fm[currentID]
 
-		if !ok {
+		if !exists {
 			return "", fmt.Errorf("folder %q does not exist", currentID)
 		}
 
