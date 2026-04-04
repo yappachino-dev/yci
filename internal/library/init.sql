@@ -19,3 +19,13 @@ CREATE TABLE IF NOT EXISTS channels (
     FOREIGN KEY (artist_id) references artists(id) ON DELETE CASCADE,
     UNIQUE(artist_id, channel_name)
 );
+
+CREATE TABLE IF NOT EXISTS tracks (
+    id            TEXT PRIMARY KEY,
+    title         TEXT NOT NULL,
+    album         TEXT,
+    artist_id     TEXT,
+    duration_sec  INTEGER DEFAULT 0,
+    relative_path TEXT NOT NULL UNIQUE,
+    FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE SET NULL
+);

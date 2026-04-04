@@ -11,13 +11,13 @@ import (
 type artistMap map[string]Artist
 
 func (l *Library) ProcessTempFolder() error {
-	files, err := os.ReadDir(l.Paths.Temp)
+	files, err := os.ReadDir(l.Paths.Staging)
 	if err != nil {
 		return err
 	}
 
 	for _, file := range files {
-		f, err := os.Open(filepath.Join(l.Paths.Temp, file.Name()))
+		f, err := os.Open(filepath.Join(l.Paths.Staging, file.Name()))
 		if err != nil {
 			return err
 		}

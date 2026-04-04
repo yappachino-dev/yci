@@ -9,7 +9,7 @@ import (
 type AppPaths struct {
 	Config  string
 	Library string
-	Temp    string
+	Staging string
 }
 
 func GetPaths() (AppPaths, error) {
@@ -26,6 +26,6 @@ func GetPaths() (AppPaths, error) {
 	return AppPaths{
 		Config:  filepath.Join(conf, "yappachino", "playlist-manager"),
 		Library: filepath.Join(home, "Music", "Managed"),
-		Temp:    filepath.Join(home, "Music", "tmp"),
+		Staging: filepath.Join(home, "Music", "Staging"),
 	}, nil
 }
