@@ -11,6 +11,25 @@ type Artist struct {
 	Artist   string
 }
 
+func (l *Library) GetArtist(id string) (Artist, error) {
+	var a Artist
+	var folder sql.NullString
+
+	query := "SELECT id, display_name, folder_id FROM artists WHERE id = ?"
+	err := l.db.QueryRow(query, id).Scan(&a.ID, &a.Artist, &folder)
+	if err != nil {
+		return a, err
+	}
+
+	if folder.Valid {
+		a.FolderID = folder.String
+	} else {
+		a.FolderID = RootID
+	}
+
+	return a, nil
+}
+
 func (l *Library) GetArtists() ([]Artist, error) {
 	query := "SELECT id, display_name, folder_id FROM artists"
 
@@ -32,7 +51,7 @@ func (l *Library) GetArtists() ([]Artist, error) {
 		if folder.Valid {
 			a.FolderID = folder.String
 		} else {
-			a.FolderID = root
+			a.FolderID = RootID
 		}
 
 		artists = append(artists, a)
@@ -45,7 +64,7 @@ func (l *Library) AddArtist(id string, name string, folderID string) error {
 	query := "INSERT INTO artists (id, display_name, folder_id) VALUES (?, ?, ?)"
 
 	var folder any = folderID
-	if folderID == "" || folderID == "root" {
+	if folderID == "" || folderID == RootID {
 		folder = nil
 	}
 
@@ -72,7 +91,7 @@ func (l *Library) RemoveArtist(id string) error {
 
 func (l *Library) MapToFolder(artistID string, folderID string) error {
 	var folder any = folderID
-	if folderID == "" || folderID == "root" {
+	if folderID == "" || folderID == RootID {
 		folder = nil
 	} else {
 		var exists bool

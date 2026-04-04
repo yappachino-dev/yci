@@ -12,11 +12,12 @@ type Track struct {
 	ArtistID     string
 	DurationSec  int
 	RelativePath string
+	SourceID     string
 }
 
 func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
 	query := `
-		SELECT id, title, album, artist_id, duration_sec, relative_path 
+		SELECT id, title, album, artist_id, duration_sec, relative_path, source_id 
 		FROM tracks 
 		WHERE artist_id = ?`
 
@@ -31,8 +32,9 @@ func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
 		var t Track
 		var aID sql.NullString
 		var album sql.NullString
+		var source sql.NullString
 
-		if err := rows.Scan(&t.ID, &t.Title, &album, &aID, &t.DurationSec, &t.RelativePath); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &album, &aID, &t.DurationSec, &t.RelativePath, &source); err != nil {
 			return nil, err
 		}
 
@@ -41,6 +43,9 @@ func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
 		}
 		if album.Valid {
 			t.Album = album.String
+		}
+		if source.Valid {
+			t.SourceID = source.String
 		}
 
 		tracks = append(tracks, t)
@@ -51,15 +56,15 @@ func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
 
 func (l *Library) AddTrack(t Track) error {
 	query := `
-	INSERT INTO tracks (id, title, album, artist_id, duration_sec, relative_path) 
-	VALUES (?, ?, ?, ?, ?, ?)`
+		INSERT INTO tracks (id, title, album, artist_id, duration_sec, relative_path, source_id) 
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	var artist any = t.ArtistID
 	if t.ArtistID == "" {
 		artist = nil
 	}
 
-	_, err := l.db.Exec(query, t.ID, t.Title, t.Album, artist, t.DurationSec, t.RelativePath)
+	_, err := l.db.Exec(query, t.ID, t.Title, t.Album, artist, t.DurationSec, t.RelativePath, t.SourceID)
 	if err != nil {
 		return fmt.Errorf("failed to add track %q: %w", t.Title, err)
 	}

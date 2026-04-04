@@ -9,7 +9,7 @@ import (
 )
 
 func Download(dir string, url string) {
-	outputPath := filepath.Join(dir, "%(title)s.%(ext)s")
+	outputPath := filepath.Join(dir, "%(id)s.opus")
 
 	cmd := exec.Command("yt-dlp",
 		"--ignore-config",        // ignore user config

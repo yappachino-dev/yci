@@ -1,5 +1,10 @@
 package library
 
+import (
+	"database/sql"
+	"fmt"
+)
+
 type Channel struct {
 	ID          int
 	ArtistID    string
@@ -25,4 +30,19 @@ func (l *Library) GetChannels() ([]Channel, error) {
 	}
 
 	return channels, nil
+}
+
+func (l *Library) GetArtistByChannel(channelName string) (string, error) {
+	query := "SELECT artist_id FROM channels WHERE channel_name = ?"
+
+	var artistID string
+	err := l.db.QueryRow(query, channelName).Scan(&artistID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("database error checking channel %q: %w", channelName, err)
+	}
+
+	return artistID, nil
 }

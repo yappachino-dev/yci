@@ -27,5 +27,6 @@ CREATE TABLE IF NOT EXISTS tracks (
     artist_id     TEXT,
     duration_sec  INTEGER DEFAULT 0,
     relative_path TEXT NOT NULL UNIQUE,
+    source_id     TEXT,
     FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE SET NULL
 );

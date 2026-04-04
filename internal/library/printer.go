@@ -36,8 +36,8 @@ func (l *Library) treePrint() error {
 		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
 	}
 
-	fmt.Printf("%s\n", root)
-	printTreeNode(root, "", childrenOf)
+	fmt.Printf("%s\n", RootID)
+	printTreeNode(RootID, "", childrenOf)
 
 	return nil
 }

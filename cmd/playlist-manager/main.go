@@ -25,6 +25,8 @@ func main() {
 		return
 	}
 
+	// downloader.Download(lib.Paths.Staging, "https://youtu.be/TGBWr24_Vp4")
+
 	argc := len(os.Args)
 
 	if argc < 2 {
@@ -33,6 +35,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "ps":
+		lib.ProcessStaging()
 	case "ls":
 		cmd := flag.NewFlagSet("ls", flag.ExitOnError)
 
@@ -87,7 +91,7 @@ func main() {
 				}
 			}
 
-			traverse("root", "")
+			traverse(library.RootID, "")
 			w.Flush()
 			fmt.Println()
 		}
@@ -128,7 +132,7 @@ func main() {
 
 		id := cmd.String("i", "", "Folder ID (slug)")
 		name := cmd.String("n", "", "Display Name")
-		parent := cmd.String("p", "root", "Parent ID")
+		parent := cmd.String("p", library.RootID, "Parent ID")
 
 		cmd.Parse(os.Args[2:])
 
@@ -137,7 +141,13 @@ func main() {
 			return
 		}
 
-		if err := lib.AddFolder(*id, *name, *parent); err != nil {
+		folder := library.Folder{
+			ID:          *id,
+			DisplayName: *name,
+			ParentID:    *parent,
+		}
+
+		if err := lib.AddFolder(folder); err != nil {
 			fmt.Printf("Error: %v\n", err)
 		} else {
 			fmt.Printf("Created { id: %s, name: %s, parent: %s } folder\n", *id, *name, *parent)
@@ -164,7 +174,8 @@ func main() {
 		cmd := flag.NewFlagSet("mv-folder", flag.ExitOnError)
 
 		id := cmd.String("i", "", "Folder ID")
-		parent := cmd.String("p", "root", "Target Parent Folder ID")
+		parent := cmd.String("p", library.RootID, "Target Parent Folder ID")
+
 		cmd.Parse(os.Args[2:])
 
 		if *id == "" {
@@ -182,7 +193,8 @@ func main() {
 
 		id := cmd.String("i", "", "Artist ID (slug)")
 		name := cmd.String("n", "", "Display Name")
-		folder := cmd.String("f", "root", "Folder ID")
+		folder := cmd.String("f", library.RootID, "Folder ID")
+
 		cmd.Parse(os.Args[2:])
 
 		if *id == "" || *name == "" {
@@ -199,6 +211,7 @@ func main() {
 		cmd := flag.NewFlagSet("rm-artist", flag.ExitOnError)
 
 		id := cmd.String("i", "", "Artist ID (slug)")
+
 		cmd.Parse(os.Args[2:])
 
 		if *id == "" {
@@ -215,7 +228,8 @@ func main() {
 		cmd := flag.NewFlagSet("mv-artist", flag.ExitOnError)
 
 		id := cmd.String("i", "", "Artist ID")
-		folder := cmd.String("f", "root", "Target Folder ID")
+		folder := cmd.String("f", library.RootID, "Target Folder ID")
+
 		cmd.Parse(os.Args[2:])
 
 		if *id == "" {

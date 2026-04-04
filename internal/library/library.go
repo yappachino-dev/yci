@@ -1,3 +1,4 @@
+// Package library handles the music distribution
 package library
 
 import (
@@ -8,6 +9,8 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+const RootID string = "root"
 
 type Library struct {
 	Paths AppPaths

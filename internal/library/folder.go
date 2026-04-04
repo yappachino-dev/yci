@@ -3,6 +3,8 @@ package library
 import (
 	"database/sql"
 	"fmt"
+	"slices"
+	"strings"
 )
 
 type Folder struct {
@@ -33,7 +35,7 @@ func (l *Library) GetFolders() ([]Folder, error) {
 		if parent.Valid {
 			f.ParentID = parent.String
 		} else {
-			f.ParentID = root
+			f.ParentID = RootID
 		}
 
 		folders = append(folders, f)
@@ -42,16 +44,46 @@ func (l *Library) GetFolders() ([]Folder, error) {
 	return folders, nil
 }
 
-func (l *Library) AddFolder(id string, name string, parentID string) error {
-	query := "INSERT INTO folders (id, display_name, parent_id) VALUES (?, ?, ?)"
+func (l *Library) GetFolderPath(folderID string) (string, error) {
+	var segments []string
+	currentID := folderID
 
-	var parent any = parentID
-	if parentID == "" || parentID == "root" {
-		parent = nil
+	for currentID != RootID && currentID != "" {
+		var name string
+		var parentID sql.NullString
+
+		err := l.db.QueryRow("SELECT display_name, parent_id FROM folders WHERE id = ?", currentID).Scan(&name, &parentID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return "", fmt.Errorf("folder %q not found in hierarchy", currentID)
+			}
+			return "", fmt.Errorf("database error resolving path for %q: %w", currentID, err)
+		}
+
+		segments = append(segments, name)
+
+		if parentID.Valid {
+			currentID = parentID.String
+		} else {
+			currentID = RootID
+		}
 	}
 
-	if _, err := l.db.Exec(query, id, name, parent); err != nil {
-		return fmt.Errorf("failed to add %q folder: %w", id, err)
+	slices.Reverse(segments)
+
+	return strings.Join(segments, "/"), nil
+}
+
+func (l *Library) AddFolder(f Folder) error {
+	query := "INSERT INTO folders (id, display_name, parent_id) VALUES (?, ?, ?)"
+
+	var parentID any = f.ParentID
+	if f.ParentID == "" || f.ParentID == RootID {
+		parentID = nil
+	}
+
+	if _, err := l.db.Exec(query, f.ID, f.DisplayName, parentID); err != nil {
+		return fmt.Errorf("failed to add %q folder: %w", f.ID, err)
 	}
 
 	return nil
@@ -97,7 +129,7 @@ func (l *Library) MoveFolder(folderID string, newParentID string) error {
 	}
 
 	currentParent := newParentID
-	for currentParent != "root" && currentParent != "" {
+	for currentParent != RootID && currentParent != "" {
 		if currentParent == folderID {
 			return fmt.Errorf("cycle detected: cannot move folder %q into its own descendant %q", folderID, newParentID)
 		}
@@ -114,12 +146,12 @@ func (l *Library) MoveFolder(folderID string, newParentID string) error {
 		if nextParent.Valid {
 			currentParent = nextParent.String
 		} else {
-			currentParent = "root"
+			currentParent = RootID
 		}
 	}
 
 	var parent any = newParentID
-	if newParentID == "" || newParentID == "root" {
+	if newParentID == "" || newParentID == RootID {
 		parent = nil
 	}
 
