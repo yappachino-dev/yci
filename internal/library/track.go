@@ -15,6 +15,42 @@ type Track struct {
 	SourceID     string
 }
 
+func (l *Library) GetAllTracks() ([]Track, error) {
+	query := `SELECT id, title, album, artist_id, duration_sec, relative_path, source_id FROM tracks`
+
+	rows, err := l.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all tracks: %w", err)
+	}
+	defer rows.Close()
+
+	var tracks []Track
+	for rows.Next() {
+		var t Track
+		var aID sql.NullString
+		var album sql.NullString
+		var source sql.NullString
+
+		if err := rows.Scan(&t.ID, &t.Title, &album, &aID, &t.DurationSec, &t.RelativePath, &source); err != nil {
+			return nil, err
+		}
+
+		if aID.Valid {
+			t.ArtistID = aID.String
+		}
+		if album.Valid {
+			t.Album = album.String
+		}
+		if source.Valid {
+			t.SourceID = source.String
+		}
+
+		tracks = append(tracks, t)
+	}
+
+	return tracks, nil
+}
+
 func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
 	query := `
 		SELECT id, title, album, artist_id, duration_sec, relative_path, source_id 
