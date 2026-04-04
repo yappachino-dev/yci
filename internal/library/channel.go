@@ -3,6 +3,7 @@ package library
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type Channel struct {
@@ -45,4 +46,25 @@ func (l *Library) GetArtistByChannel(channelName string) (string, error) {
 	}
 
 	return artistID, nil
+}
+
+func (l *Library) AddChannel(artistID, channelName string) error {
+	artistID = strings.TrimSpace(artistID)
+	channelName = strings.TrimSpace(channelName)
+
+	if artistID == "" || channelName == "" {
+		return fmt.Errorf("artist ID and channel name cannot be empty")
+	}
+
+	query := "INSERT INTO channels (artist_id, channel_name) VALUES (?, ?)"
+
+	_, err := l.db.Exec(query, artistID, channelName)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return fmt.Errorf("the channel %q is already linked to an artist", channelName)
+		}
+		return fmt.Errorf("failed to link channel %q: %w", channelName, err)
+	}
+
+	return nil
 }

@@ -60,16 +60,16 @@ func (l *Library) GetArtists() ([]Artist, error) {
 	return artists, nil
 }
 
-func (l *Library) AddArtist(id string, name string, folderID string) error {
+func (l *Library) AddArtist(a Artist) error {
 	query := "INSERT INTO artists (id, display_name, folder_id) VALUES (?, ?, ?)"
 
-	var folder any = folderID
-	if folderID == "" || folderID == RootID {
+	var folder any = a.FolderID
+	if a.FolderID == "" || a.FolderID == RootID {
 		folder = nil
 	}
 
-	if _, err := l.db.Exec(query, id, name, folder); err != nil {
-		return fmt.Errorf("failed to add %q artist: %w", id, err)
+	if _, err := l.db.Exec(query, a.ID, a.Artist, folder); err != nil {
+		return fmt.Errorf("failed to add %q artist: %w", a.ID, err)
 	}
 
 	return nil
