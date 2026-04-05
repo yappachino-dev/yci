@@ -20,7 +20,7 @@ var (
 
 var processCmd = &cobra.Command{
 	Use:     "process",
-	Aliases: []string{"import", "sync"},
+	Aliases: []string{"import"},
 	Short:   "Process and import downloaded files",
 }
 

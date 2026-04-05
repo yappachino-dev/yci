@@ -45,6 +45,45 @@ func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
 	return l.queryTracks(query, artistID)
 }
 
+func (l *Library) GetTracksByFolder(folderID string, recursive bool) ([]Track, error) {
+	folderPath, err := l.ResolveFolderPath(folderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch everything that starts with this folder's path
+	// The trailing '/' ensures we don't accidentally match "Rock-Pop" when looking for "Rock"
+	likeTarget := ""
+	if folderPath != "" {
+		likeTarget = folderPath + "/%"
+	} else {
+		likeTarget = "%" // If root folder, match everything
+	}
+
+	query := `SELECT id, title, album, artist_id, duration_sec, relative_path, source_id 
+	          FROM tracks WHERE relative_path LIKE ?`
+
+	tracks, err := l.queryTracks(query, likeTarget)
+	if err != nil {
+		return nil, err
+	}
+
+	if recursive || folderPath == "" {
+		return tracks, nil
+	}
+
+	// If NOT recursive, filter out tracks sitting in deeper sub-folders
+	var exactMatches []Track
+	for _, t := range tracks {
+		// filepath.ToSlash ensures we use consistent forward slashes for DB strings
+		if filepath.ToSlash(filepath.Dir(t.RelativePath)) == folderPath {
+			exactMatches = append(exactMatches, t)
+		}
+	}
+
+	return exactMatches, nil
+}
+
 func (l *Library) queryTracks(query string, args ...any) ([]Track, error) {
 	rows, err := l.db.Query(query, args...)
 	if err != nil {
