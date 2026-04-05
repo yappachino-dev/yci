@@ -13,9 +13,7 @@ type Channel struct {
 }
 
 func (l *Library) GetChannels() ([]Channel, error) {
-	query := "SELECT id, artist_id, channel_name FROM channels"
-
-	rows, err := l.db.Query(query)
+	rows, err := l.db.Query("SELECT id, artist_id, channel_name FROM channels")
 	if err != nil {
 		return nil, err
 	}
@@ -34,21 +32,18 @@ func (l *Library) GetChannels() ([]Channel, error) {
 }
 
 func (l *Library) GetArtistByChannel(channelName string) (string, error) {
-	query := "SELECT artist_id FROM channels WHERE channel_name = ?"
-
 	var artistID string
-	err := l.db.QueryRow(query, channelName).Scan(&artistID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", nil
-		}
-		return "", fmt.Errorf("database error checking channel %q: %w", channelName, err)
+
+	err := l.db.QueryRow("SELECT artist_id FROM channels WHERE channel_name = ?", channelName).Scan(&artistID)
+
+	if err == sql.ErrNoRows {
+		return "", nil
 	}
 
-	return artistID, nil
+	return artistID, l.wrapErr(err, "channel mapping", channelName)
 }
 
-func (l *Library) AddChannel(artistID string, channelName string) error {
+func (l *Library) AddChannel(artistID, channelName string) error {
 	artistID = strings.TrimSpace(artistID)
 	channelName = strings.TrimSpace(channelName)
 
@@ -56,12 +51,12 @@ func (l *Library) AddChannel(artistID string, channelName string) error {
 		return fmt.Errorf("artist ID and channel name cannot be empty")
 	}
 
-	query := "INSERT INTO channels (artist_id, channel_name) VALUES (?, ?)"
+	query := `INSERT INTO channels (artist_id, channel_name) VALUES (?, ?)`
 
 	_, err := l.db.Exec(query, artistID, channelName)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return fmt.Errorf("the channel %q is already linked to an artist", channelName)
+			return fmt.Errorf("channel %q is already linked to an artist", channelName)
 		}
 		return fmt.Errorf("failed to link channel %q: %w", channelName, err)
 	}
@@ -69,15 +64,15 @@ func (l *Library) AddChannel(artistID string, channelName string) error {
 	return nil
 }
 
-func (l *Library) RemoveChannel(artistID string, channelName string) error {
+func (l *Library) RemoveChannel(artistID, channelName string) error {
 	res, err := l.db.Exec("DELETE FROM channels WHERE artist_id = ? AND channel_name = ?", artistID, channelName)
 	if err != nil {
-		return fmt.Errorf("failed to delete channel link: %w", err)
+		return l.wrapErr(err, "channel link", channelName)
 	}
 
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("channel link %q -> %q not found", channelName, artistID)
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return fmt.Errorf("no link found between artist %q and channel %q", artistID, channelName)
 	}
+
 	return nil
 }

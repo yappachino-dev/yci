@@ -46,7 +46,7 @@ var editFolderCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("✏️  Updated folder: %s\n", folder.ID)
+		fmt.Printf("  Updated folder: %s\n", folder.ID)
 		return nil
 	},
 }
@@ -81,7 +81,7 @@ var editArtistCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("✏️  Updated artist: %s\n", artist.ID)
+		fmt.Printf("  Updated artist: %s\n", artist.ID)
 		return nil
 	},
 }

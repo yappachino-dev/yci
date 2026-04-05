@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Artist struct {
@@ -13,102 +14,55 @@ type Artist struct {
 	Artist   string
 }
 
-func (l *Library) GetArtist(id string) (Artist, error) {
+func scanArtist(s scannable) (Artist, error) {
 	var a Artist
-	var folder sql.NullString
+	var folderID sql.NullString
 
-	query := "SELECT id, display_name, folder_id FROM artists WHERE id = ?"
-	err := l.db.QueryRow(query, id).Scan(&a.ID, &a.Artist, &folder)
-	if err != nil {
-		return a, err
-	}
+	err := s.Scan(&a.ID, &a.Artist, &folderID)
+	a.FolderID = fromNull(folderID, RootID)
 
-	if folder.Valid {
-		a.FolderID = folder.String
-	} else {
-		a.FolderID = RootID
-	}
+	return a, err
+}
 
-	return a, nil
+func (l *Library) GetArtist(id string) (Artist, error) {
+	query := `SELECT id, display_name, folder_id FROM artists WHERE id = ?`
+
+	a, err := scanArtist(l.db.QueryRow(query, id))
+
+	return a, l.wrapErr(err, "artist", id)
 }
 
 func (l *Library) GetArtists() ([]Artist, error) {
-	query := "SELECT id, display_name, folder_id FROM artists"
+	query := `SELECT id, display_name, folder_id FROM artists`
 
 	rows, err := l.db.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query artists: %w", err)
 	}
 	defer rows.Close()
 
 	var artists []Artist
 	for rows.Next() {
-		var a Artist
-		var folder sql.NullString
-
-		if err := rows.Scan(&a.ID, &a.Artist, &folder); err != nil {
+		a, err := scanArtist(rows)
+		if err != nil {
 			return nil, err
 		}
-
-		if folder.Valid {
-			a.FolderID = folder.String
-		} else {
-			a.FolderID = RootID
-		}
-
 		artists = append(artists, a)
 	}
 
 	return artists, nil
 }
 
-func (l *Library) GetArtistPath(artistID string) (string, error) {
-	var name string
-	var folderID sql.NullString
-
-	err := l.db.QueryRow("SELECT display_name, folder_id FROM artists WHERE id = ?", artistID).Scan(&name, &folderID)
-	if err != nil {
-		return "", fmt.Errorf("database error resolving artist %q: %w", artistID, err)
-	}
-
-	targetFolder := RootID
-	if folderID.Valid {
-		targetFolder = folderID.String
-	}
-
-	folderPath, err := l.GetFolderPath(targetFolder)
-	if err != nil {
-		return "", err
-	}
-
-	if folderPath == "" {
-		return name, nil
-	}
-	return folderPath + "/" + name, nil
-}
-
-func (l *Library) buildArtistPath(a Artist) (string, error) {
-	folderPath, err := l.GetFolderPath(a.FolderID)
-	if err != nil {
-		return "", fmt.Errorf("could not resolve new folder path: %w", err)
-	}
-
-	if folderPath == "" {
-		return a.Artist, nil
-	}
-	return folderPath + "/" + a.Artist, nil
-}
-
 func (l *Library) AddArtist(a Artist) error {
-	query := "INSERT INTO artists (id, display_name, folder_id) VALUES (?, ?, ?)"
+	query := `INSERT INTO artists (id, display_name, folder_id) VALUES (?, ?, ?)`
 
-	var folder any = a.FolderID
-	if a.FolderID == "" || a.FolderID == RootID {
-		folder = nil
-	}
-
-	if _, err := l.db.Exec(query, a.ID, a.Artist, folder); err != nil {
-		return fmt.Errorf("failed to add %q artist: %w", a.ID, err)
+	_, err := l.db.Exec(query,
+		strings.TrimSpace(a.ID),
+		strings.TrimSpace(a.Artist),
+		toNull(a.FolderID),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add artist %q: %w", a.ID, err)
 	}
 
 	return nil
@@ -117,52 +71,84 @@ func (l *Library) AddArtist(a Artist) error {
 func (l *Library) RemoveArtist(id string) error {
 	res, err := l.db.Exec("DELETE FROM artists WHERE id = ?", id)
 	if err != nil {
-		return fmt.Errorf("failed to delete artist %q: %w", id, err)
+		return l.wrapErr(err, "artist", id)
 	}
 
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("artist %q not found", id)
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return l.wrapErr(sql.ErrNoRows, "artist", id)
 	}
 
 	return nil
 }
 
-func (l *Library) UpdateArtist(oldID string, newArtist Artist) error {
-	oldRelativePath, err := l.GetArtistPath(oldID)
+func (l *Library) UpdateArtist(oldID string, updated Artist) error {
+	oldArtist, err := l.GetArtist(oldID)
 	if err != nil {
 		return err
 	}
 
-	newRelativePath, err := l.buildArtistPath(newArtist)
+	tx, err := l.db.Begin()
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
-	oldAbsPath := filepath.Join(l.Paths.Library, oldRelativePath)
-	newAbsPath := filepath.Join(l.Paths.Library, newRelativePath)
+	if oldArtist.FolderID != updated.FolderID {
+		newRel, err := l.ResolveFolderPath(updated.FolderID)
+		if err != nil {
+			return fmt.Errorf("failed to resolve new folder path: %w", err)
+		}
 
-	if oldAbsPath != newAbsPath {
-		os.MkdirAll(filepath.Dir(newAbsPath), 0o755)
+		rows, err := tx.Query(`SELECT id, relative_path FROM tracks WHERE artist_id = ?`, oldID)
+		if err != nil {
+			return fmt.Errorf("failed to query tracks for movement: %w", err)
+		}
 
-		if err := os.Rename(oldAbsPath, newAbsPath); err != nil {
-			return fmt.Errorf("failed to move artist folder on disk: %w", err)
+		type trackMove struct {
+			ID      string
+			OldPath string
+			NewPath string
+		}
+		var moves []trackMove
+
+		for rows.Next() {
+			var tID, oldPath string
+			if err := rows.Scan(&tID, &oldPath); err != nil {
+				rows.Close()
+				return err
+			}
+
+			filename := filepath.Base(filepath.FromSlash(oldPath))
+			newPath := filename
+			if newRel != "" {
+				newPath = filepath.ToSlash(filepath.Join(newRel, filename))
+			}
+			moves = append(moves, trackMove{ID: tID, OldPath: oldPath, NewPath: newPath})
+		}
+		rows.Close()
+
+		updateQuery := `UPDATE tracks SET relative_path = ? WHERE id = ?`
+		for _, m := range moves {
+			if _, err := tx.Exec(updateQuery, m.NewPath, m.ID); err != nil {
+				return fmt.Errorf("failed to update track %q relative_path: %w", m.ID, err)
+			}
+
+			oldAbs := filepath.Join(l.Paths.Library, filepath.FromSlash(m.OldPath))
+			newAbs := filepath.Join(l.Paths.Library, filepath.FromSlash(m.NewPath))
+
+			if err := os.MkdirAll(filepath.Dir(newAbs), 0o755); err != nil {
+				return fmt.Errorf("failed to create destination directory: %w", err)
+			}
+			if err := os.Rename(oldAbs, newAbs); err != nil {
+				return fmt.Errorf("failed to move track file on disk: %w", err)
+			}
 		}
 	}
 
 	query := `UPDATE artists SET id = ?, display_name = ?, folder_id = ? WHERE id = ?`
-	if _, err := l.db.Exec(query, newArtist.ID, newArtist.Artist, newArtist.FolderID, oldID); err != nil {
-		return fmt.Errorf("failed to update artist in db: %w", err)
+	if _, err := tx.Exec(query, strings.TrimSpace(updated.ID), updated.Artist, toNull(updated.FolderID), oldID); err != nil {
+		return fmt.Errorf("failed to update artist in database: %w", err)
 	}
 
-	trackQuery := `UPDATE tracks SET relative_path = REPLACE(relative_path, ?, ?) WHERE relative_path LIKE ?`
-
-	oldPrefix := oldRelativePath + "/"
-	newPrefix := newRelativePath + "/"
-
-	if _, err := l.db.Exec(trackQuery, oldPrefix, newPrefix, oldPrefix+"%"); err != nil {
-		return fmt.Errorf("failed to update track paths: %w", err)
-	}
-
-	return nil
+	return tx.Commit()
 }
