@@ -22,11 +22,17 @@ var downloadCmd = &cobra.Command{
 			return err
 		}
 
-		var urls []string
+		delayFlag, _ := cmd.Flags().GetString("delay")
+		delayParts := strings.Split(delayFlag, ":")
+		if len(delayParts) != 2 {
+			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
+		}
+		minSleep, maxSleep := delayParts[0], delayParts[1]
+
+		var rawUrls []string
 		for _, arg := range args {
-			cleanArg := strings.TrimSpace(arg)
-			if cleanArg != "" {
-				urls = append(urls, cleanArg)
+			if cleanArg := strings.TrimSpace(arg); cleanArg != "" {
+				rawUrls = append(rawUrls, cleanArg)
 			}
 		}
 
@@ -36,23 +42,48 @@ var downloadCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to read urls from file: %w", err)
 			}
-			urls = append(urls, fileUrls...)
+			rawUrls = append(rawUrls, fileUrls...)
 		}
 
-		if len(urls) == 0 {
+		if len(rawUrls) == 0 {
 			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
 		}
 
-		fmt.Printf("Starting download queue for %d tracks...\n\n", len(urls))
+		seenUrls := make(map[string]bool)
+		var uniqueUrls []string
+
+		for _, u := range rawUrls {
+			if !seenUrls[u] {
+				seenUrls[u] = true
+				uniqueUrls = append(uniqueUrls, u)
+			}
+		}
+
+		queueSkipped := len(rawUrls) - len(uniqueUrls)
+
+		fmt.Printf("Starting queue for %d unique tracks... (Skipped %d duplicates in input)\n\n", len(uniqueUrls), queueSkipped)
 
 		targetPath := filepath.Join(lib.Paths.Staging, "%(id)s.opus")
 		successCount := 0
+		dbSkippedCount := 0
 
-		for i, url := range urls {
-			fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(urls))
+		for i, url := range uniqueUrls {
+			fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(rawUrls))
+
+			if sourceID := lib.ExtractSourceID(url); sourceID != "" {
+				exists, err := lib.TrackExistsBySourceID(sourceID)
+				if err != nil {
+					fmt.Printf(" Warning: DB check failed for %s: %v\n", sourceID, err)
+				} else if exists {
+					fmt.Printf(" Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
+					dbSkippedCount++
+					continue
+				}
+			}
+
 			fmt.Printf("Target: %s\n", url)
 
-			if err := downloader.Download(targetPath, url); err != nil {
+			if err := downloader.Download(targetPath, url, minSleep, maxSleep); err != nil {
 				fmt.Printf(" Error downloading %s: %v\n\n", url, err)
 				continue
 			}
@@ -61,7 +92,12 @@ var downloadCmd = &cobra.Command{
 			fmt.Println()
 		}
 
-		fmt.Printf(" Download complete! Successfully retrieved %d/%d tracks.\n", successCount, len(urls))
+		fmt.Printf(" Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
+			successCount,
+			dbSkippedCount,
+			len(uniqueUrls)-successCount-dbSkippedCount,
+		)
+
 		if successCount > 0 {
 			fmt.Println("▶ Run `yci process staging` to import them into your library.")
 		}
@@ -74,6 +110,7 @@ func init() {
 	rootCmd.AddCommand(downloadCmd)
 
 	downloadCmd.Flags().StringP("file", "f", "", "Read a list of URLs from a text file (one per line)")
+	downloadCmd.Flags().StringP("delay", "d", "5:30", "Randomized delay between downloads in seconds (format min:max)")
 }
 
 // --- Helper Functions ---

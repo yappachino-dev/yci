@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 type Track struct {
@@ -61,6 +62,32 @@ func (l *Library) queryTracks(query string, args ...any) ([]Track, error) {
 	}
 
 	return tracks, nil
+}
+
+var ytRegex = regexp.MustCompile(`(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})`)
+
+func (l *Library) ExtractSourceID(url string) string {
+	matches := ytRegex.FindStringSubmatch(url)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
+func (l *Library) TrackExistsBySourceID(sourceID string) (bool, error) {
+	if sourceID == "" {
+		return false, nil
+	}
+
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM tracks WHERE source_id = ?)"
+
+	err := l.db.QueryRow(query, sourceID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
 
 func (l *Library) AddTrack(t Track) error {

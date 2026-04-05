@@ -7,10 +7,11 @@ import (
 	"os/exec"
 )
 
-func Download(exactOutputPath string, url string) error {
+func Download(exactOutputPath string, url string, minSleep string, maxSleep string) error {
 	args := []string{
 		"--ignore-config",
 		"--no-cookies",
+		"--abort-on-error",
 
 		"--extract-audio",
 		"--audio-format", "opus",
@@ -21,8 +22,8 @@ func Download(exactOutputPath string, url string) error {
 		"--convert-thumbnails", "jpg",
 
 		"--no-playlist",
-		"--sleep-interval", "5",
-		"--max-sleep-interval", "30",
+		"--sleep-interval", minSleep,
+		"--max-sleep-interval", maxSleep,
 
 		// "--sponsorblock-remove music_off,intro,outro"
 		"--output", exactOutputPath,
