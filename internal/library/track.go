@@ -3,6 +3,8 @@ package library
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 type Track struct {
@@ -109,14 +111,26 @@ func (l *Library) AddTrack(t Track) error {
 }
 
 func (l *Library) RemoveTrack(id string) error {
-	res, err := l.db.Exec("DELETE FROM tracks WHERE id = ?", id)
+	var relativePath string
+
+	err := l.db.QueryRow("SELECT relative_path FROM tracks WHERE id = ?", id).Scan(&relativePath)
 	if err != nil {
-		return fmt.Errorf("failed to remove track %q: %w", id, err)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("track %q not found in database", id)
+		}
+		return fmt.Errorf("database error: %w", err)
 	}
 
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("track %q does not exist", id)
+	absolutePath := filepath.Join(l.Paths.Library, relativePath)
+
+	err = os.Remove(absolutePath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete physical file %q: %w", absolutePath, err)
+	}
+
+	_, err = l.db.Exec("DELETE FROM tracks WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete track from database: %w", err)
 	}
 
 	return nil

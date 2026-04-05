@@ -48,7 +48,7 @@ func (l *Library) GetArtistByChannel(channelName string) (string, error) {
 	return artistID, nil
 }
 
-func (l *Library) AddChannel(artistID, channelName string) error {
+func (l *Library) AddChannel(artistID string, channelName string) error {
 	artistID = strings.TrimSpace(artistID)
 	channelName = strings.TrimSpace(channelName)
 
@@ -66,5 +66,18 @@ func (l *Library) AddChannel(artistID, channelName string) error {
 		return fmt.Errorf("failed to link channel %q: %w", channelName, err)
 	}
 
+	return nil
+}
+
+func (l *Library) RemoveChannel(artistID string, channelName string) error {
+	res, err := l.db.Exec("DELETE FROM channels WHERE artist_id = ? AND channel_name = ?", artistID, channelName)
+	if err != nil {
+		return fmt.Errorf("failed to delete channel link: %w", err)
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("channel link %q -> %q not found", channelName, artistID)
+	}
 	return nil
 }

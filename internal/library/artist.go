@@ -3,6 +3,8 @@ package library
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 type Artist struct {
@@ -60,6 +62,43 @@ func (l *Library) GetArtists() ([]Artist, error) {
 	return artists, nil
 }
 
+func (l *Library) GetArtistPath(artistID string) (string, error) {
+	var name string
+	var folderID sql.NullString
+
+	err := l.db.QueryRow("SELECT display_name, folder_id FROM artists WHERE id = ?", artistID).Scan(&name, &folderID)
+	if err != nil {
+		return "", fmt.Errorf("database error resolving artist %q: %w", artistID, err)
+	}
+
+	targetFolder := RootID
+	if folderID.Valid {
+		targetFolder = folderID.String
+	}
+
+	folderPath, err := l.GetFolderPath(targetFolder)
+	if err != nil {
+		return "", err
+	}
+
+	if folderPath == "" {
+		return name, nil
+	}
+	return folderPath + "/" + name, nil
+}
+
+func (l *Library) buildArtistPath(a Artist) (string, error) {
+	folderPath, err := l.GetFolderPath(a.FolderID)
+	if err != nil {
+		return "", fmt.Errorf("could not resolve new folder path: %w", err)
+	}
+
+	if folderPath == "" {
+		return a.Artist, nil
+	}
+	return folderPath + "/" + a.Artist, nil
+}
+
 func (l *Library) AddArtist(a Artist) error {
 	query := "INSERT INTO artists (id, display_name, folder_id) VALUES (?, ?, ?)"
 
@@ -78,38 +117,51 @@ func (l *Library) AddArtist(a Artist) error {
 func (l *Library) RemoveArtist(id string) error {
 	res, err := l.db.Exec("DELETE FROM artists WHERE id = ?", id)
 	if err != nil {
-		return fmt.Errorf("failed to remove artist %q: %w", id, err)
+		return fmt.Errorf("failed to delete artist %q: %w", id, err)
 	}
 
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("artist %q does not exist", id)
+		return fmt.Errorf("artist %q not found", id)
 	}
 
 	return nil
 }
 
-func (l *Library) MapToFolder(artistID string, folderID string) error {
-	var folder any = folderID
-	if folderID == "" || folderID == RootID {
-		folder = nil
-	} else {
-		var exists bool
+func (l *Library) UpdateArtist(oldID string, newArtist Artist) error {
+	oldRelativePath, err := l.GetArtistPath(oldID)
+	if err != nil {
+		return err
+	}
 
-		err := l.db.QueryRow("SELECT EXISTS(SELECT 1 FROM folders WHERE id = ?)", folderID).Scan(&exists)
-		if err != nil || !exists {
-			return fmt.Errorf("target folder %q does not exist", folderID)
+	newRelativePath, err := l.buildArtistPath(newArtist)
+	if err != nil {
+		return err
+	}
+
+	oldAbsPath := filepath.Join(l.Paths.Library, oldRelativePath)
+	newAbsPath := filepath.Join(l.Paths.Library, newRelativePath)
+
+	if oldAbsPath != newAbsPath {
+		os.MkdirAll(filepath.Dir(newAbsPath), 0o755)
+
+		if err := os.Rename(oldAbsPath, newAbsPath); err != nil {
+			return fmt.Errorf("failed to move artist folder on disk: %w", err)
 		}
 	}
 
-	res, err := l.db.Exec("UPDATE artists SET folder_id = ? WHERE id = ?", folder, artistID)
-	if err != nil {
-		return fmt.Errorf("failed to map artist %q to folder %q: %w", artistID, folderID, err)
+	query := `UPDATE artists SET id = ?, display_name = ?, folder_id = ? WHERE id = ?`
+	if _, err := l.db.Exec(query, newArtist.ID, newArtist.Artist, newArtist.FolderID, oldID); err != nil {
+		return fmt.Errorf("failed to update artist in db: %w", err)
 	}
 
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("artist %q does not exist", artistID)
+	trackQuery := `UPDATE tracks SET relative_path = REPLACE(relative_path, ?, ?) WHERE relative_path LIKE ?`
+
+	oldPrefix := oldRelativePath + "/"
+	newPrefix := newRelativePath + "/"
+
+	if _, err := l.db.Exec(trackQuery, oldPrefix, newPrefix, oldPrefix+"%"); err != nil {
+		return fmt.Errorf("failed to update track paths: %w", err)
 	}
 
 	return nil
