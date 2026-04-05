@@ -161,8 +161,8 @@ func listTracks() {
 	}
 
 	w := newTabWriter()
-	fmt.Fprintln(w, "ID\tTITLE\tARTIST_ID\tSOURCE_ID\tPATH")
-	fmt.Fprintln(w, "--\t-----\t---------\t---------\t----")
+	fmt.Fprintln(w, "ID\tARTIST_ID\tSOURCE_ID\tTITLE")
+	fmt.Fprintln(w, "--\t---------\t---------\t-----")
 
 	for _, t := range tracks {
 		shortID := t.ID
@@ -170,7 +170,7 @@ func listTracks() {
 			shortID = shortID[:8]
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", shortID, t.Title, t.ArtistID, t.SourceID, t.RelativePath)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", shortID, t.ArtistID, t.SourceID, t.Title)
 	}
 
 	w.Flush()

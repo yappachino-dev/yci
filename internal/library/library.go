@@ -58,7 +58,3 @@ func (l *Library) Init() error {
 func (l *Library) Close() error {
 	return l.db.Close()
 }
-
-func (l *Library) TreePrint() {
-	l.treePrint()
-}
