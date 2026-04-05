@@ -13,7 +13,7 @@ import (
 var lib *library.Library
 
 var rootCmd = &cobra.Command{
-	Use:   "yt-cli",
+	Use:   "yci",
 	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		var err error
