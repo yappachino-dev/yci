@@ -5,32 +5,38 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 )
 
-func Download(dir string, url string) {
-	outputPath := filepath.Join(dir, "%(id)s.opus")
+func Download(exactOutputPath string, url string) error {
+	args := []string{
+		"--ignore-config",
+		"--no-cookies",
 
-	cmd := exec.Command("yt-dlp",
-		"--ignore-config",        // ignore user config
-		"--no-cookies",           // don't use cookies to avoid account ban
-		"--extract-audio",        // download only audio
-		"--audio-format", "opus", // use opus audio-format
-		"--audio-quality", "0", // best sound quality
-		"--embed-metadata",            // stitch metadata
-		"--embed-thumbnail",           // stitch thumbnail
-		"--convert-thumbnails", "jpg", // convert thumbnail to jpg
+		"--extract-audio",
+		"--audio-format", "opus",
+		"--audio-quality", "0",
+
+		"--embed-metadata",
+		"--embed-thumbnail",
+		"--convert-thumbnails", "jpg",
+
+		"--no-playlist",
 		"--sleep-interval", "5",
 		"--max-sleep-interval", "30",
-		"--output", outputPath,
+
+		// "--sponsorblock-remove music_off,intro,outro"
+		"--output", exactOutputPath,
 		url,
-	)
+	}
+
+	cmd := exec.Command("yt-dlp", args...)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
-	if err != nil {
-		fmt.Print(err)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("yt-dlp execution failed: %w", err)
 	}
+
+	return nil
 }
