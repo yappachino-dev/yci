@@ -51,13 +51,11 @@ func (l *Library) GetTracksByFolder(folderID string, recursive bool) ([]Track, e
 		return nil, err
 	}
 
-	// Fetch everything that starts with this folder's path
-	// The trailing '/' ensures we don't accidentally match "Rock-Pop" when looking for "Rock"
 	likeTarget := ""
 	if folderPath != "" {
 		likeTarget = folderPath + "/%"
 	} else {
-		likeTarget = "%" // If root folder, match everything
+		likeTarget = "%"
 	}
 
 	query := `SELECT id, title, album, artist_id, duration_sec, relative_path, source_id 
@@ -72,10 +70,8 @@ func (l *Library) GetTracksByFolder(folderID string, recursive bool) ([]Track, e
 		return tracks, nil
 	}
 
-	// If NOT recursive, filter out tracks sitting in deeper sub-folders
 	var exactMatches []Track
 	for _, t := range tracks {
-		// filepath.ToSlash ensures we use consistent forward slashes for DB strings
 		if filepath.ToSlash(filepath.Dir(t.RelativePath)) == folderPath {
 			exactMatches = append(exactMatches, t)
 		}

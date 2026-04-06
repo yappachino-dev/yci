@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,78 +28,22 @@ var downloadCmd = &cobra.Command{
 		if len(delayParts) != 2 {
 			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
 		}
-		minSleep, maxSleep := delayParts[0], delayParts[1]
-
-		var rawUrls []string
-		for _, arg := range args {
-			if cleanArg := strings.TrimSpace(arg); cleanArg != "" {
-				rawUrls = append(rawUrls, cleanArg)
-			}
-		}
-
 		filePath, _ := cmd.Flags().GetString("file")
-		if filePath != "" {
-			fileUrls, err := readUrlsFromFile(filePath)
-			if err != nil {
-				return fmt.Errorf("failed to read urls from file: %w", err)
-			}
-			rawUrls = append(rawUrls, fileUrls...)
+
+		uniqueUrls, queueSkipped, err := filterUniqueURLs(args, filePath)
+		if err != nil {
+			return err
 		}
-
-		if len(rawUrls) == 0 {
-			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
-		}
-
-		seenUrls := make(map[string]bool)
-		var uniqueUrls []string
-
-		for _, u := range rawUrls {
-			if !seenUrls[u] {
-				seenUrls[u] = true
-				uniqueUrls = append(uniqueUrls, u)
-			}
-		}
-
-		queueSkipped := len(rawUrls) - len(uniqueUrls)
 
 		fmt.Printf("Starting queue for %d unique tracks... (Skipped %d duplicates in input)\n\n", len(uniqueUrls), queueSkipped)
 
-		targetPath := filepath.Join(lib.Paths.Staging, "%(id)s.opus")
-		successCount := 0
-		dbSkippedCount := 0
-
-		for i, url := range uniqueUrls {
-			fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(rawUrls))
-
-			if sourceID := lib.ExtractSourceID(url); sourceID != "" {
-				exists, err := lib.TrackExistsBySourceID(sourceID)
-				if err != nil {
-					fmt.Printf(" Warning: DB check failed for %s: %v\n", sourceID, err)
-				} else if exists {
-					fmt.Printf(" Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
-					dbSkippedCount++
-					continue
-				}
-			}
-
-			fmt.Printf("Target: %s\n", url)
-
-			if err := downloader.Download(targetPath, url, minSleep, maxSleep); err != nil {
-				fmt.Printf(" Error downloading %s: %v\n\n", url, err)
-				continue
-			}
-
-			successCount++
-			fmt.Println()
-		}
+		stats := processQueue(uniqueUrls, delayParts[0], delayParts[1])
 
 		fmt.Printf(" Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
-			successCount,
-			dbSkippedCount,
-			len(uniqueUrls)-successCount-dbSkippedCount,
+			stats.success, stats.skipped, stats.failed,
 		)
 
-		if successCount > 0 {
+		if stats.success > 0 {
 			fmt.Println("▶ Run `yci process staging` to import them into your library.")
 		}
 
@@ -126,9 +71,24 @@ func readUrlsFromFile(path string) ([]string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" && !strings.HasPrefix(line, "#") {
-			urls = append(urls, line)
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
 		}
+
+		u, err := url.Parse(line)
+		if err == nil {
+			queryParams := u.Query()
+
+			queryParams.Del("si")
+			queryParams.Del("feature")
+
+			u.RawQuery = queryParams.Encode()
+
+			line = u.String()
+		}
+
+		urls = append(urls, line)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -136,4 +96,96 @@ func readUrlsFromFile(path string) ([]string, error) {
 	}
 
 	return urls, nil
+}
+
+func filterUniqueURLs(args []string, filePath string) ([]string, int, error) {
+	var rawUrls []string
+	for _, arg := range args {
+		if cleanArg := strings.TrimSpace(arg); cleanArg != "" {
+			rawUrls = append(rawUrls, cleanArg)
+		}
+	}
+
+	if filePath != "" {
+		fileUrls, err := readUrlsFromFile(filePath)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to read urls from file: %w", err)
+		}
+		rawUrls = append(rawUrls, fileUrls...)
+	}
+
+	if len(rawUrls) == 0 {
+		return nil, 0, fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
+	}
+
+	stagedIDs := make(map[string]bool)
+
+	if stagedFiles, err := os.ReadDir(lib.Paths.Staging); err != nil {
+		return nil, 0, fmt.Errorf("failed to read staged dir: %w", err)
+	} else {
+		for _, f := range stagedFiles {
+			stagedIDs[strings.TrimSuffix(f.Name(), ".opus")] = true
+		}
+	}
+
+	seenUrls := make(map[string]bool)
+	var uniqueUrls []string
+
+	for _, u := range rawUrls {
+		if !seenUrls[u] {
+			seenUrls[u] = true
+
+			if stagedIDs[lib.ExtractSourceID(u)] {
+				continue
+			}
+
+			uniqueUrls = append(uniqueUrls, u)
+		}
+	}
+
+	return uniqueUrls, len(rawUrls) - len(uniqueUrls), nil
+}
+
+type processResult struct {
+	success int
+	skipped int
+	failed  int
+}
+
+func processQueue(urls []string, minSleep string, maxSleep string) processResult {
+	targetPath := filepath.Join(lib.Paths.Staging, "%(id)s.opus")
+
+	successCount := 0
+	dbSkippedCount := 0
+
+	for i, url := range urls {
+		fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(urls))
+
+		if sourceID := lib.ExtractSourceID(url); sourceID != "" {
+			exists, err := lib.TrackExistsBySourceID(sourceID)
+			if err != nil {
+				fmt.Printf(" Warning: DB check failed for %s: %v\n", sourceID, err)
+			} else if exists {
+				fmt.Printf(" Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
+				dbSkippedCount++
+				continue
+			}
+		}
+
+		fmt.Printf("Target: %s\n", url)
+
+		if err := downloader.Download(targetPath, url, minSleep, maxSleep); err != nil {
+			fmt.Printf(" Error downloading %s: %v\n\n", url, err)
+			continue
+		}
+
+		successCount++
+		fmt.Println()
+	}
+
+	return processResult{
+		success: successCount,
+		skipped: dbSkippedCount,
+		failed:  len(urls) - successCount - dbSkippedCount,
+	}
 }
