@@ -257,7 +257,7 @@ type StagingConfig interface {
 	LibraryDir() string
 }
 
-type NLinkHandler func(channelName string, title string) (artistID ArtistID, err error)
+type NLinkHandler func(channelName string, title string) (artistID string, err error)
 
 type TrackService struct {
 	repo           TrackRepository
@@ -462,10 +462,12 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 	}
 
 	if artistID == "" {
-		artistID, err = onUnknown(channelName, title)
+		res, err := onUnknown(channelName, title)
 		if err != nil {
 			return err
 		}
+
+		artistID = ArtistID(res)
 
 		if artistID == "skip" || artistID == "" {
 			return nil
@@ -520,6 +522,33 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 	})
 
 	return txErr
+}
+
+func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
+	track, err := s.repo.ByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("delete track: failed to find track meta: %w", err)
+	}
+
+	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.repo.Delete(txCtx, id); err != nil {
+			return err
+		}
+
+		absPath := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(string(track.RelativePath)))
+
+		if err := s.diskMover.DeleteFile(txCtx, absPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to drop file on physical drive: %w", err)
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		return fmt.Errorf("delete track: %w", txErr)
+	}
+
+	return nil
 }
 
 type SQLiteTrackRepository struct {
