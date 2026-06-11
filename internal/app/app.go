@@ -30,7 +30,7 @@ func NewContainer(dbConn *sql.DB, paths library.AppPaths) *Container {
 	diskMover := library.NewOSDiskMover()
 	metaReader := library.NewTagMetadataReader()
 
-	folderService := library.NewFolderService(folderRepo, trackRepo, diskMover, transactor, rootID)
+	folderService := library.NewFolderService(folderRepo, trackRepo, diskMover, transactor, rootID, paths)
 
 	trackService := library.NewTrackService(
 		trackRepo,

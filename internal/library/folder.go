@@ -254,15 +254,18 @@ type FolderService struct {
 	diskMover   PhysicalMover
 	transactor  Transactor
 	rootFolder  FolderID
+	config      StagingConfig
 }
 
-func NewFolderService(r FolderRepository, tm TracksPathWriter, dm PhysicalMover, t Transactor, root FolderID) *FolderService {
+func NewFolderService(r FolderRepository, tm TracksPathWriter, dm PhysicalMover, t Transactor, root FolderID, cfg StagingConfig) *FolderService {
 	return &FolderService{
 		repo:        r,
 		trackWriter: tm,
 		diskMover:   dm,
 		transactor:  t,
 		rootFolder:  root,
+
+		config: cfg,
 	}
 }
 
@@ -363,7 +366,10 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 				return err
 			}
 
-			if err := s.diskMover.MoveDirectory(txCtx, oldPath, newPath); err != nil {
+			oldAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(oldPath))
+			newAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(newPath))
+
+			if err := s.diskMover.MoveDirectory(txCtx, oldAbs, newAbs); err != nil {
 				return err
 			}
 
