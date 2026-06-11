@@ -2,37 +2,53 @@
 package cmd
 
 import (
+	"database/sql"
+	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"playlist-manager/internal/app"
 	"playlist-manager/internal/library"
 )
 
-var lib *library.Library
+// var lib *library.Library
+
+var appl *app.Container
 
 var rootCmd = &cobra.Command{
 	Use:   "yci",
 	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		var err error
-
-		lib, err = library.NewLibrary()
+		paths, err := library.GetPaths()
 		if err != nil {
-			return fmt.Errorf("failed to initialize library: %w", err)
+			return fmt.Errorf("failed to retrieve system configurations: %w", err)
 		}
 
-		if err := lib.Init(); err != nil {
-			return fmt.Errorf("failed to initialize db: %w", err)
+		if err := os.MkdirAll(paths.Config, 0o755); err != nil {
+			return fmt.Errorf("failed creating application configuration directory: %w", err)
 		}
+
+		dbConn, err := sql.Open("sqlite", filepath.Join(paths.Config, "data.db"))
+		if err != nil {
+			return fmt.Errorf("failed opening SQLite storage engine: %w", err)
+		}
+
+		if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+			dbConn.Close()
+			return fmt.Errorf("failed enabling foreign key constraints: %w", err)
+		}
+
+		appl = app.NewContainer(dbConn, paths)
 
 		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		if lib != nil {
-			if err := lib.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to cleanly close database: %v\n", err)
+		if appl != nil && appl.DB != nil {
+			if err := appl.DB.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to cleanly close database connections: %v\n", err)
 			}
 		}
 	},

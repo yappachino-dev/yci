@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"strings"
 
+	"playlist-manager/internal/library"
+
 	"github.com/spf13/cobra"
 )
 
 // --- Command Definitions ---
 
 var editCmd = &cobra.Command{
-	Use:     "edit",
-	Aliases: []string{"mod", "update"},
-	Short:   "Edit an existing resource in the library",
-	Args:    cobra.NoArgs,
+	Use:   "edit",
+	Short: "Edit an existing resource in the library",
+	Args:  cobra.NoArgs,
 }
 
 var editFolderCmd = &cobra.Command{
@@ -24,29 +25,26 @@ var editFolderCmd = &cobra.Command{
 		oldID, _ := cmd.Flags().GetString("id")
 		oldID = strings.TrimSpace(oldID)
 
-		folder, err := lib.GetFolder(oldID)
-		if err != nil {
-			return fmt.Errorf("could not fetch folder: %w", err)
-		}
+		params := library.FolderUpdateParams{}
 
 		if cmd.Flags().Changed("name") {
-			name, _ := cmd.Flags().GetString("name")
-			folder.DisplayName = strings.TrimSpace(name)
+			n, _ := cmd.Flags().GetString("name")
+			params.Name = library.FolderName(strings.TrimSpace(n))
 		}
 		if cmd.Flags().Changed("parent") {
-			parent, _ := cmd.Flags().GetString("parent")
-			folder.ParentID = strings.TrimSpace(parent)
+			p, _ := cmd.Flags().GetString("parent")
+			params.Parent = library.FolderID(strings.TrimSpace(p))
 		}
 		if cmd.Flags().Changed("new-id") {
-			newID, _ := cmd.Flags().GetString("new-id")
-			folder.ID = strings.TrimSpace(newID)
+			n, _ := cmd.Flags().GetString("new-id")
+			params.NewID = library.FolderID(strings.TrimSpace(n))
 		}
 
-		if err := lib.UpdateFolder(oldID, folder); err != nil {
+		if err := appl.FolderService.Update(cmd.Context(), library.FolderID(oldID), params); err != nil {
 			return err
 		}
 
-		fmt.Printf("  Updated folder: %s\n", folder.ID)
+		fmt.Printf("  Updated folder: %s\n", oldID)
 		return nil
 	},
 }
@@ -59,29 +57,26 @@ var editArtistCmd = &cobra.Command{
 		oldID, _ := cmd.Flags().GetString("id")
 		oldID = strings.TrimSpace(oldID)
 
-		artist, err := lib.GetArtist(oldID)
-		if err != nil {
-			return fmt.Errorf("could not fetch artist: %w", err)
-		}
+		params := library.ArtistUpdateParams{}
 
 		if cmd.Flags().Changed("name") {
 			name, _ := cmd.Flags().GetString("name")
-			artist.Artist = strings.TrimSpace(name)
+			params.Name = library.ArtistName(strings.TrimSpace(name))
 		}
 		if cmd.Flags().Changed("folder") {
 			folder, _ := cmd.Flags().GetString("folder")
-			artist.FolderID = strings.TrimSpace(folder)
+			params.Folder = library.FolderID(strings.TrimSpace(folder))
 		}
 		if cmd.Flags().Changed("new-id") {
 			newID, _ := cmd.Flags().GetString("new-id")
-			artist.ID = strings.TrimSpace(newID)
+			params.NewID = library.ArtistID(strings.TrimSpace(newID))
 		}
 
-		if err := lib.UpdateArtist(oldID, artist); err != nil {
+		if err := appl.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params); err != nil {
 			return err
 		}
 
-		fmt.Printf("  Updated artist: %s\n", artist.ID)
+		fmt.Printf("  Updated artist: %s\n", oldID)
 		return nil
 	},
 }
@@ -109,15 +104,15 @@ func init() {
 	// --- Dynamic Autocompletions ---
 
 	editFolderCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 
@@ -125,15 +120,15 @@ func init() {
 	})
 
 	editFolderCmd.RegisterFlagCompletionFunc("parent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 
@@ -141,15 +136,15 @@ func init() {
 	})
 
 	editArtistCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		artists, err := lib.GetArtists()
+		artists, err := appl.ArtistService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, a := range artists {
-			if strings.HasPrefix(a.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Artist))
+			if strings.HasPrefix(string(a.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
 			}
 		}
 
@@ -157,15 +152,15 @@ func init() {
 	})
 
 	editArtistCmd.RegisterFlagCompletionFunc("folder", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 

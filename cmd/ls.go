@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -17,7 +18,7 @@ var lsCmd = &cobra.Command{
 	Short: "List library entities (defaults to folders)",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		listFolders()
+		listFolders(cmd.Context())
 	},
 }
 
@@ -25,7 +26,7 @@ var lsFoldersCmd = &cobra.Command{
 	Use:   "folders",
 	Short: "List all folders in a visual tree hierarchy",
 	Run: func(cmd *cobra.Command, args []string) {
-		listFolders()
+		listFolders(cmd.Context())
 	},
 }
 
@@ -33,7 +34,7 @@ var lsArtistsCmd = &cobra.Command{
 	Use:   "artists",
 	Short: "List all managed artists",
 	Run: func(cmd *cobra.Command, args []string) {
-		listArtists()
+		listArtists(cmd.Context())
 	},
 }
 
@@ -41,7 +42,7 @@ var lsChannelsCmd = &cobra.Command{
 	Use:   "channels",
 	Short: "List all YouTube channel aliases linked to artists",
 	Run: func(cmd *cobra.Command, args []string) {
-		listChannels()
+		listChannels(cmd.Context())
 	},
 }
 
@@ -49,7 +50,7 @@ var lsTracksCmd = &cobra.Command{
 	Use:   "tracks",
 	Short: "List all tracks in the library",
 	Run: func(cmd *cobra.Command, args []string) {
-		listTracks()
+		listTracks(cmd.Context())
 	},
 }
 
@@ -70,8 +71,8 @@ func newTabWriter() *tabwriter.Writer {
 	return tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 }
 
-func listFolders() {
-	folders, err := lib.GetFolders()
+func listFolders(ctx context.Context) {
+	folders, err := appl.FolderService.All(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching folders: %v\n", err)
 		return
@@ -81,13 +82,13 @@ func listFolders() {
 	fmt.Fprintln(w, "ID\tNAME\tPARENT")
 	fmt.Fprintln(w, "--\t----\t------")
 
-	childrenOf := make(map[string][]library.Folder)
+	childrenOf := make(map[library.FolderID][]library.NFolder)
 	for _, f := range folders {
 		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
 	}
 
-	var traverse func(parentID string, prefix string)
-	traverse = func(parentID string, prefix string) {
+	var traverse func(parentID library.FolderID, prefix string)
+	traverse = func(parentID library.FolderID, prefix string) {
 		children := childrenOf[parentID]
 		for i, child := range children {
 			isLast := (i == len(children)-1)
@@ -97,7 +98,7 @@ func listFolders() {
 				connector = "└─ "
 			}
 
-			nameWithTree := prefix + connector + child.DisplayName
+			nameWithTree := prefix + connector + string(child.Name)
 			fmt.Fprintf(w, "%s\t%s\t%s\n", child.ID, nameWithTree, child.ParentID)
 
 			newPrefix := prefix + "│  "
@@ -109,14 +110,14 @@ func listFolders() {
 		}
 	}
 
-	traverse(library.RootID, "")
+	traverse(library.FolderID(library.RootID), "")
 
 	w.Flush()
 	fmt.Println()
 }
 
-func listArtists() {
-	artists, err := lib.GetArtists()
+func listArtists(ctx context.Context) {
+	artists, err := appl.ArtistService.All(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching artists: %v\n", err)
 		return
@@ -127,15 +128,15 @@ func listArtists() {
 	fmt.Fprintln(w, "--\t----\t---------")
 
 	for _, a := range artists {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", a.ID, a.Artist, a.FolderID)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", a.ID, a.Name, a.FolderID)
 	}
 
 	w.Flush()
 	fmt.Println()
 }
 
-func listChannels() {
-	channels, err := lib.GetChannels()
+func listChannels(ctx context.Context) {
+	channels, err := appl.ChannelLinker.AllChannels(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching channels: %v\n", err)
 		return
@@ -153,8 +154,8 @@ func listChannels() {
 	fmt.Println()
 }
 
-func listTracks() {
-	tracks, err := lib.GetAllTracks()
+func listTracks(ctx context.Context) {
+	tracks, err := appl.TrackService.All(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching tracks: %v\n", err)
 		return

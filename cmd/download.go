@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -15,10 +16,11 @@ import (
 )
 
 var downloadCmd = &cobra.Command{
-	Use:     "download [urls...]",
-	Aliases: []string{"dl", "get"},
-	Short:   "Download YouTube audio directly to the staging area",
+	Use:   "download [urls...]",
+	Short: "Download YouTube audio directly to the staging area",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
 		if err := utils.CheckDependencies(); err != nil {
 			return err
 		}
@@ -37,9 +39,10 @@ var downloadCmd = &cobra.Command{
 
 		fmt.Printf("Starting queue for %d unique tracks... (Skipped %d duplicates in input)\n\n", len(uniqueUrls), queueSkipped)
 
-		stats := processQueue(uniqueUrls, delayParts[0], delayParts[1])
+		stats := processQueue(ctx, uniqueUrls, delayParts[0], delayParts[1])
 
-		fmt.Printf(" Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
+		fmt.Printf(
+			" Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
 			stats.success, stats.skipped, stats.failed,
 		)
 
@@ -120,7 +123,7 @@ func filterUniqueURLs(args []string, filePath string) ([]string, int, error) {
 
 	stagedIDs := make(map[string]bool)
 
-	if stagedFiles, err := os.ReadDir(lib.Paths.Staging); err != nil {
+	if stagedFiles, err := os.ReadDir(appl.Paths.Staging); err != nil {
 		return nil, 0, fmt.Errorf("failed to read staged dir: %w", err)
 	} else {
 		for _, f := range stagedFiles {
@@ -135,7 +138,7 @@ func filterUniqueURLs(args []string, filePath string) ([]string, int, error) {
 		if !seenUrls[u] {
 			seenUrls[u] = true
 
-			if stagedIDs[lib.ExtractSourceID(u)] {
+			if stagedIDs[utils.ExtractSourceID(u)] {
 				continue
 			}
 
@@ -152,8 +155,8 @@ type processResult struct {
 	failed  int
 }
 
-func processQueue(urls []string, minSleep string, maxSleep string) processResult {
-	targetPath := filepath.Join(lib.Paths.Staging, "%(id)s.opus")
+func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep string) processResult {
+	targetPath := filepath.Join(appl.Paths.Staging, "%(id)s.opus")
 
 	successCount := 0
 	dbSkippedCount := 0
@@ -161,8 +164,8 @@ func processQueue(urls []string, minSleep string, maxSleep string) processResult
 	for i, url := range urls {
 		fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(urls))
 
-		if sourceID := lib.ExtractSourceID(url); sourceID != "" {
-			exists, err := lib.TrackExistsBySourceID(sourceID)
+		if sourceID := utils.ExtractSourceID(url); sourceID != "" {
+			exists, err := appl.TrackService.ExistsBySourceID(ctx, sourceID)
 			if err != nil {
 				fmt.Printf(" Warning: DB check failed for %s: %v\n", sourceID, err)
 			} else if exists {

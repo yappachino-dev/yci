@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"playlist-manager/internal/library"
-	"playlist-manager/internal/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -32,21 +31,7 @@ var createFolderCmd = &cobra.Command{
 		name = strings.TrimSpace(name)
 		parent = strings.TrimSpace(parent)
 
-		if id == "" {
-			id = utils.NameToSlug(name)
-		}
-
-		if parent == "" {
-			parent = library.RootID
-		}
-
-		f := library.Folder{
-			ID:          id,
-			DisplayName: name,
-			ParentID:    parent,
-		}
-
-		if err := lib.AddFolder(f); err != nil {
+		if err := appl.FolderService.Create(cmd.Context(), library.FolderID(id), library.FolderID(parent), library.FolderName(name)); err != nil {
 			return err
 		}
 
@@ -68,25 +53,7 @@ var createArtistCmd = &cobra.Command{
 		name = strings.TrimSpace(name)
 		folder = strings.TrimSpace(folder)
 
-		if id == "" {
-			id = utils.NameToSlug(name)
-		}
-
-		if folder == "" {
-			if _, err := lib.GetFolder(id); err == nil {
-				folder = id
-			} else {
-				folder = library.RootID
-			}
-		}
-
-		a := library.Artist{
-			ID:       id,
-			Artist:   name,
-			FolderID: folder,
-		}
-
-		if err := lib.AddArtist(a); err != nil {
+		if err := appl.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name)); err != nil {
 			return err
 		}
 
@@ -106,16 +73,16 @@ var createChannelCmd = &cobra.Command{
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
 
-		artist, err := lib.GetArtist(artistID)
+		artist, err := appl.ArtistService.ByID(cmd.Context(), library.ArtistID(artistID))
 		if err != nil {
 			return fmt.Errorf("could not find artist with ID %q: %w", artistID, err)
 		}
 
-		if err := lib.AddChannel(artistID, channelName); err != nil {
+		if err := appl.ChannelLinker.LinkChannelToArtist(cmd.Context(), library.ArtistID(artistID), channelName); err != nil {
 			return err
 		}
 
-		fmt.Printf(" Linked channel %q to Artist: %s\n", channelName, artist.Artist)
+		fmt.Printf(" Linked channel %q to Artist: %s\n", channelName, artist.Name)
 		return nil
 	},
 }
@@ -149,15 +116,15 @@ func init() {
 	// --- Dynamic Autocompletions ---
 
 	createFolderCmd.RegisterFlagCompletionFunc("parent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 
@@ -165,15 +132,15 @@ func init() {
 	})
 
 	createArtistCmd.RegisterFlagCompletionFunc("folder", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 
@@ -181,15 +148,15 @@ func init() {
 	})
 
 	createChannelCmd.RegisterFlagCompletionFunc("artist", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		artists, err := lib.GetArtists()
+		artists, err := appl.ArtistService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, a := range artists {
-			if strings.HasPrefix(a.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Artist))
+			if strings.HasPrefix(string(a.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
 			}
 		}
 

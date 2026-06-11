@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
+
+	"playlist-manager/internal/library"
 
 	"github.com/spf13/cobra"
 )
@@ -30,7 +33,7 @@ var processStagingCmd = &cobra.Command{
 	Aliases: []string{"queue", "pending"},
 	Short:   "Process the staging directory and import .opus files",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runProcessStaging()
+		return runProcessStaging(cmd.Context())
 	},
 }
 
@@ -47,9 +50,9 @@ func init() {
 
 // --- Helper Functions ---
 
-func runProcessStaging() error {
+func runProcessStaging(ctx context.Context) error {
 	if fallbackArtist != "" {
-		if _, err := lib.GetArtist(fallbackArtist); err != nil {
+		if _, err := appl.ArtistService.ByID(ctx, library.ArtistID(fallbackArtist)); err != nil {
 			return fmt.Errorf("invalid fallback artist %q: %w", fallbackArtist, err)
 		}
 	}
@@ -88,7 +91,7 @@ func runProcessStaging() error {
 
 	fmt.Println("Processing staging directory...")
 
-	if err := lib.ProcessStaging(handler); err != nil {
+	if err := appl.TrackService.ProcessStaging(ctx, handler); err != nil {
 		return err
 	}
 

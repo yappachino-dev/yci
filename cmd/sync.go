@@ -20,6 +20,8 @@ var syncCmd = &cobra.Command{
 	Aliases: []string{"repair", "recover"},
 	Short:   "Scan the database and download missing physical files",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
 		if err := utils.CheckDependencies(); err != nil {
 			return err
 		}
@@ -36,31 +38,31 @@ var syncCmd = &cobra.Command{
 		}
 		minSleep, maxSleep := delayParts[0], delayParts[1]
 
-		var tracks []library.Track
+		var tracks []library.NTrack
 		var err error
 
 		if artist != "" {
 			fmt.Printf(" Scanning missing files for artist: %s...\n", artist)
-			tracks, err = lib.GetTracksByArtist(artist)
+			tracks, err = appl.TrackService.ByArtistID(ctx, library.ArtistID(artist))
 		} else if folder != "" {
 			fmt.Printf(" Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
-			tracks, err = lib.GetTracksByFolder(folder, recursive)
+			tracks, err = appl.TrackService.ByFolder(ctx, library.FolderID(folder), recursive)
 		} else {
 			fmt.Println(" Scanning entire library for missing files...")
-			tracks, err = lib.GetAllTracks()
+			tracks, err = appl.TrackService.All(ctx)
 		}
 
 		if err != nil {
 			return fmt.Errorf("database query failed: %w", err)
 		}
 
-		var missing []library.Track
+		var missing []library.NTrack
 		for _, t := range tracks {
 			if t.SourceID == "" {
 				continue
 			}
 
-			absPath := filepath.Join(lib.Paths.Library, filepath.FromSlash(t.RelativePath))
+			absPath := filepath.Join(appl.Paths.Library, filepath.FromSlash(string(t.RelativePath)))
 			if _, err := os.Stat(absPath); os.IsNotExist(err) {
 				missing = append(missing, t)
 			}
@@ -88,7 +90,7 @@ var syncCmd = &cobra.Command{
 			fmt.Printf("--- [Recovering %d / %d] ---\n", i+1, len(missing))
 			fmt.Printf("Track: %s\n", t.Title)
 
-			targetPath := filepath.Join(lib.Paths.Library, filepath.FromSlash(t.RelativePath))
+			targetPath := filepath.Join(appl.Paths.Library, filepath.FromSlash(string(t.RelativePath)))
 
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				fmt.Printf(" Failed to create directory for %s: %v\n\n", t.Title, err)
@@ -126,15 +128,15 @@ func init() {
 	// --- Dynamic Autocompletions ---
 
 	syncCmd.RegisterFlagCompletionFunc("artist", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		artists, err := lib.GetArtists()
+		artists, err := appl.ArtistService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, a := range artists {
-			if strings.HasPrefix(a.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Artist))
+			if strings.HasPrefix(string(a.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
 			}
 		}
 
@@ -142,15 +144,15 @@ func init() {
 	})
 
 	syncCmd.RegisterFlagCompletionFunc("folder", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"playlist-manager/internal/library"
+
 	"github.com/spf13/cobra"
 )
 
@@ -21,13 +23,15 @@ var deleteFolderCmd = &cobra.Command{
 	Aliases: []string{"f"},
 	Short:   "Delete a folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
 		id, _ := cmd.Flags().GetString("id")
 		force, _ := cmd.Flags().GetBool("force")
 
 		id = strings.TrimSpace(id)
 
 		if !force {
-			isEmpty, err := lib.IsFolderEmpty(id)
+			isEmpty, err := appl.FolderService.IsEmpty(ctx, library.FolderID(id))
 			if err != nil {
 				return fmt.Errorf("failed to check folder contents: %w", err)
 			}
@@ -36,7 +40,7 @@ var deleteFolderCmd = &cobra.Command{
 			}
 		}
 
-		if err := lib.RemoveFolder(id); err != nil {
+		if err := appl.FolderService.Delete(ctx, library.FolderID(id)); err != nil {
 			return err
 		}
 
@@ -53,7 +57,7 @@ var deleteArtistCmd = &cobra.Command{
 		id, _ := cmd.Flags().GetString("id")
 		id = strings.TrimSpace(id)
 
-		if err := lib.RemoveArtist(id); err != nil {
+		if err := appl.ArtistService.Delete(cmd.Context(), library.ArtistID(id)); err != nil {
 			return err
 		}
 
@@ -73,7 +77,7 @@ var deleteChannelCmd = &cobra.Command{
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
 
-		if err := lib.RemoveChannel(artistID, channelName); err != nil {
+		if err := appl.ChannelLinker.UnlinkChannel(cmd.Context(), library.ArtistID(artistID), channelName); err != nil {
 			return err
 		}
 
@@ -90,7 +94,7 @@ var deleteTrackCmd = &cobra.Command{
 		id, _ := cmd.Flags().GetString("id")
 		id = strings.TrimSpace(id)
 
-		if err := lib.RemoveTrack(id); err != nil {
+		if err := appl.TrackService.Delete(cmd.Context(), library.TrackID(id)); err != nil {
 			return err
 		}
 
@@ -127,30 +131,30 @@ func init() {
 	// --- Dynamic Autocompletions ---
 
 	deleteFolderCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := lib.GetFolders()
+		folders, err := appl.FolderService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, f := range folders {
-			if strings.HasPrefix(f.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.DisplayName))
+			if strings.HasPrefix(string(f.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
 			}
 		}
 		return comps, cobra.ShellCompDirectiveNoFileComp
 	})
 
 	deleteArtistCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		artists, err := lib.GetArtists()
+		artists, err := appl.ArtistService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, a := range artists {
-			if strings.HasPrefix(a.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Artist))
+			if strings.HasPrefix(string(a.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
 			}
 		}
 
@@ -158,15 +162,15 @@ func init() {
 	})
 
 	deleteChannelCmd.RegisterFlagCompletionFunc("artist", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		artists, err := lib.GetArtists()
+		artists, err := appl.ArtistService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, a := range artists {
-			if strings.HasPrefix(a.ID, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Artist))
+			if strings.HasPrefix(string(a.ID), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
 			}
 		}
 
@@ -174,7 +178,7 @@ func init() {
 	})
 
 	deleteChannelCmd.RegisterFlagCompletionFunc("name", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		channels, err := lib.GetChannels()
+		channels, err := appl.ChannelLinker.AllChannels(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
@@ -190,14 +194,14 @@ func init() {
 	})
 
 	deleteTrackCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		tracks, err := lib.GetAllTracks()
+		tracks, err := appl.TrackService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, t := range tracks {
-			if strings.HasPrefix(t.ID, toComplete) {
+			if strings.HasPrefix(string(t.ID), toComplete) {
 				comps = append(comps, fmt.Sprintf("%s\t%s", t.ID, t.Title))
 			}
 		}
