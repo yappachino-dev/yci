@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"playlist-manager/internal/library"
+	"playlist-manager/internal/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,11 @@ var createFolderCmd = &cobra.Command{
 
 		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
+		parent = strings.TrimSpace(parent)
+
+		if id == "" {
+			id = utils.NameToSlug(name)
+		}
 
 		if parent == "" {
 			parent = library.RootID
@@ -60,9 +66,18 @@ var createArtistCmd = &cobra.Command{
 
 		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
+		folder = strings.TrimSpace(folder)
+
+		if id == "" {
+			id = utils.NameToSlug(name)
+		}
 
 		if folder == "" {
-			folder = library.RootID
+			if _, err := lib.GetFolder(id); err == nil {
+				folder = id
+			} else {
+				folder = library.RootID
+			}
 		}
 
 		a := library.Artist{
@@ -114,16 +129,16 @@ func init() {
 	createCmd.AddCommand(createArtistCmd)
 	createCmd.AddCommand(createChannelCmd)
 
-	createFolderCmd.Flags().StringP("id", "i", "", "The unique slug ID for the folder (Required)")
+	createFolderCmd.Flags().StringP("id", "i", "", "The unique slug ID for the folder")
 	createFolderCmd.Flags().StringP("name", "n", "", "Display name of the folder (Required)")
 	createFolderCmd.Flags().StringP("parent", "p", library.RootID, "Parent folder ID (defaults to root)")
-	createFolderCmd.MarkFlagRequired("id")
+	// createFolderCmd.MarkFlagRequired("id")
 	createFolderCmd.MarkFlagRequired("name")
 
-	createArtistCmd.Flags().StringP("id", "i", "", "The unique slug ID for the artist (Required)")
+	createArtistCmd.Flags().StringP("id", "i", "", "The unique slug ID for the artist")
 	createArtistCmd.Flags().StringP("name", "n", "", "Name of the artist (Required)")
-	createArtistCmd.Flags().StringP("folder", "f", library.RootID, "Parent folder ID (defaults to root)")
-	createArtistCmd.MarkFlagRequired("id")
+	createArtistCmd.Flags().StringP("folder", "f", "", "Parent folder ID (defaults to folder with same id; root)")
+	// createArtistCmd.MarkFlagRequired("id")
 	createArtistCmd.MarkFlagRequired("name")
 
 	createChannelCmd.Flags().StringP("artist", "a", "", "The target Artist ID (Required)")

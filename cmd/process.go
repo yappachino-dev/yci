@@ -12,8 +12,9 @@ import (
 // --- Flag variables ---
 
 var (
-	skipUnknown    bool
-	fallbackArtist string
+	skipUnknown       bool
+	skipCollabArtists bool
+	fallbackArtist    string
 )
 
 // --- Command Definitions ---
@@ -40,6 +41,7 @@ func init() {
 	processCmd.AddCommand(processStagingCmd)
 
 	processStagingCmd.Flags().BoolVar(&skipUnknown, "skip-unknown", false, "Automatically skip tracks with unknown channels")
+	processStagingCmd.Flags().BoolVar(&skipCollabArtists, "skip-collab-artists", false, "Automatically skip tracks multiple channels as artist")
 	processStagingCmd.Flags().StringVarP(&fallbackArtist, "fallback-artist", "f", "", "Automatically link unknown channels to this Artist ID")
 }
 
@@ -54,6 +56,9 @@ func runProcessStaging() error {
 
 	handler := func(channelName string, title string) (string, error) {
 		if skipUnknown {
+			return "skip", nil
+		}
+		if skipCollabArtists && strings.Contains(channelName, ",") {
 			return "skip", nil
 		}
 		if fallbackArtist != "" {

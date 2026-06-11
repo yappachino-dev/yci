@@ -51,6 +51,16 @@ func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error 
 	return err
 }
 
+const deleteTrack = `-- name: DeleteTrack :exec
+DELETE FROM tracks
+WHERE id = ?1
+`
+
+func (q *Queries) DeleteTrack(ctx context.Context, id string) error {
+	_, err := q.exec(ctx, q.deleteTrackStmt, deleteTrack, id)
+	return err
+}
+
 const getTrack = `-- name: GetTrack :one
 SELECT id, title, album, artist_id, duration_sec, relative_path, source_id
 FROM tracks
@@ -72,14 +82,14 @@ func (q *Queries) GetTrack(ctx context.Context, id string) (Track, error) {
 	return i, err
 }
 
-const getTracksByArtistID = `-- name: GetTracksByArtistID :many
+const getTracksByArtist = `-- name: GetTracksByArtist :many
 SELECT id, title, album, artist_id, duration_sec, relative_path, source_id
 FROM tracks
 WHERE artist_id = ?1
 `
 
-func (q *Queries) GetTracksByArtistID(ctx context.Context, artistID sql.NullString) ([]Track, error) {
-	rows, err := q.query(ctx, q.getTracksByArtistIDStmt, getTracksByArtistID, artistID)
+func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString) ([]Track, error) {
+	rows, err := q.query(ctx, q.getTracksByArtistStmt, getTracksByArtist, artistID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,19 +156,72 @@ func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]Track, er
 	return items, nil
 }
 
-const updateTracksPathAfterMove = `-- name: UpdateTracksPathAfterMove :exec
+const updateTrack = `-- name: UpdateTrack :exec
+UPDATE tracks
+SET id = ?1,
+    title = ?2,
+    album = ?3,
+    artist_id = ?4,
+    duration_sec = ?5,
+    relative_path = ?6,
+    source_id = ?7
+WHERE id = ?8
+`
+
+type UpdateTrackParams struct {
+	NewID        string         `json:"new_id"`
+	Title        string         `json:"title"`
+	Album        sql.NullString `json:"album"`
+	ArtistID     sql.NullString `json:"artist_id"`
+	DurationSec  sql.NullInt64  `json:"duration_sec"`
+	RelativePath string         `json:"relative_path"`
+	SourceID     sql.NullString `json:"source_id"`
+	OldID        string         `json:"old_id"`
+}
+
+func (q *Queries) UpdateTrack(ctx context.Context, arg UpdateTrackParams) error {
+	_, err := q.exec(ctx, q.updateTrackStmt, updateTrack,
+		arg.NewID,
+		arg.Title,
+		arg.Album,
+		arg.ArtistID,
+		arg.DurationSec,
+		arg.RelativePath,
+		arg.SourceID,
+		arg.OldID,
+	)
+	return err
+}
+
+const updateTrackPath = `-- name: UpdateTrackPath :exec
+UPDATE tracks
+SET relative_path = ?1
+WHERE id = ?2
+`
+
+type UpdateTrackPathParams struct {
+	RelativePath string `json:"relative_path"`
+	ID           string `json:"id"`
+}
+
+func (q *Queries) UpdateTrackPath(ctx context.Context, arg UpdateTrackPathParams) error {
+	_, err := q.exec(ctx, q.updateTrackPathStmt, updateTrackPath, arg.RelativePath, arg.ID)
+	return err
+}
+
+const updateTrackPathsByPrefix = `-- name: UpdateTrackPathsByPrefix :exec
 UPDATE tracks
 SET relative_path = REPLACE(relative_path, ?1, ?2)
 WHERE relative_path LIKE ?3
 `
 
-type UpdateTracksPathAfterMoveParams struct {
+type UpdateTrackPathsByPrefixParams struct {
 	OldPrefix   string `json:"old_prefix"`
 	NewPrefix   string `json:"new_prefix"`
 	MatchPrefix string `json:"match_prefix"`
 }
 
-func (q *Queries) UpdateTracksPathAfterMove(ctx context.Context, arg UpdateTracksPathAfterMoveParams) error {
-	_, err := q.exec(ctx, q.updateTracksPathAfterMoveStmt, updateTracksPathAfterMove, arg.OldPrefix, arg.NewPrefix, arg.MatchPrefix)
+func (q *Queries) UpdateTrackPathsByPrefix(ctx context.Context, arg UpdateTrackPathsByPrefixParams) error {
+	_, err := q.exec(ctx, q.updateTrackPathsByPrefixStmt, updateTrackPathsByPrefix, arg.OldPrefix, arg.NewPrefix, arg.MatchPrefix)
 	return err
 }

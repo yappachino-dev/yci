@@ -27,8 +27,12 @@ func (l *Library) wrapErr(err error, entity, id string) error {
 	if err == nil {
 		return nil
 	}
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("%s %q not found", entity, id)
-	}
-	return fmt.Errorf("database error (%s %q): %w", entity, id, err)
+
+	return fmt.Errorf("%s (id: %s) operation failed: %w", entity, id, err)
+	//
+	// if err == sql.ErrNoRows {
+	// 	return fmt.Errorf("%s %q not found", entity, id)
+	// }
+	//
+	// return fmt.Errorf("database error (%s %q): %w", entity, id, err)
 }

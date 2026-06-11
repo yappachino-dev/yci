@@ -10,6 +10,19 @@ import (
 	"database/sql"
 )
 
+const checkFolderExists = `-- name: CheckFolderExists :one
+SELECT EXISTS (
+    SELECT 1 FROM folders where id = ?1
+)
+`
+
+func (q *Queries) CheckFolderExists(ctx context.Context, id string) (bool, error) {
+	row := q.queryRow(ctx, q.checkFolderExistsStmt, checkFolderExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const checkFolderHasChildren = `-- name: CheckFolderHasChildren :one
 SELECT EXISTS (
     SELECT 1 FROM folders WHERE parent_id = ?1
@@ -61,6 +74,46 @@ func (q *Queries) GetFolder(ctx context.Context, id string) (Folder, error) {
 	var i Folder
 	err := row.Scan(&i.ID, &i.DisplayName, &i.ParentID)
 	return i, err
+}
+
+const getFolderAncestors = `-- name: GetFolderAncestors :many
+WITH RECURSIVE ancestor_chain AS (
+    SELECT id, display_name, parent_id, 0 AS depth
+    FROM folders
+    WHERE folders.id = ?1
+
+    UNION ALL
+
+    SELECT f.id, f.display_name, f.parent_id, ac.depth + 1
+    FROM folders f
+    JOIN ancestor_chain ac ON f.id = ac.parent_id
+)
+SELECT display_name 
+FROM ancestor_chain 
+ORDER BY depth DESC
+`
+
+func (q *Queries) GetFolderAncestors(ctx context.Context, id string) ([]string, error) {
+	rows, err := q.query(ctx, q.getFolderAncestorsStmt, getFolderAncestors, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var display_name string
+		if err := rows.Scan(&display_name); err != nil {
+			return nil, err
+		}
+		items = append(items, display_name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getFolders = `-- name: GetFolders :many

@@ -24,6 +24,9 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.checkFolderExistsStmt, err = db.PrepareContext(ctx, checkFolderExists); err != nil {
+		return nil, fmt.Errorf("error preparing query CheckFolderExists: %w", err)
+	}
 	if q.checkFolderHasChildrenStmt, err = db.PrepareContext(ctx, checkFolderHasChildren); err != nil {
 		return nil, fmt.Errorf("error preparing query CheckFolderHasChildren: %w", err)
 	}
@@ -51,6 +54,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteFolderStmt, err = db.PrepareContext(ctx, deleteFolder); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteFolder: %w", err)
 	}
+	if q.deleteTrackStmt, err = db.PrepareContext(ctx, deleteTrack); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteTrack: %w", err)
+	}
 	if q.getArtistStmt, err = db.PrepareContext(ctx, getArtist); err != nil {
 		return nil, fmt.Errorf("error preparing query GetArtist: %w", err)
 	}
@@ -66,14 +72,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getFolderStmt, err = db.PrepareContext(ctx, getFolder); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFolder: %w", err)
 	}
+	if q.getFolderAncestorsStmt, err = db.PrepareContext(ctx, getFolderAncestors); err != nil {
+		return nil, fmt.Errorf("error preparing query GetFolderAncestors: %w", err)
+	}
 	if q.getFoldersStmt, err = db.PrepareContext(ctx, getFolders); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFolders: %w", err)
 	}
 	if q.getTrackStmt, err = db.PrepareContext(ctx, getTrack); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTrack: %w", err)
 	}
-	if q.getTracksByArtistIDStmt, err = db.PrepareContext(ctx, getTracksByArtistID); err != nil {
-		return nil, fmt.Errorf("error preparing query GetTracksByArtistID: %w", err)
+	if q.getTracksByArtistStmt, err = db.PrepareContext(ctx, getTracksByArtist); err != nil {
+		return nil, fmt.Errorf("error preparing query GetTracksByArtist: %w", err)
 	}
 	if q.getTracksByPathStmt, err = db.PrepareContext(ctx, getTracksByPath); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTracksByPath: %w", err)
@@ -84,14 +93,25 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateFolderStmt, err = db.PrepareContext(ctx, updateFolder); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateFolder: %w", err)
 	}
-	if q.updateTracksPathAfterMoveStmt, err = db.PrepareContext(ctx, updateTracksPathAfterMove); err != nil {
-		return nil, fmt.Errorf("error preparing query UpdateTracksPathAfterMove: %w", err)
+	if q.updateTrackStmt, err = db.PrepareContext(ctx, updateTrack); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateTrack: %w", err)
+	}
+	if q.updateTrackPathStmt, err = db.PrepareContext(ctx, updateTrackPath); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateTrackPath: %w", err)
+	}
+	if q.updateTrackPathsByPrefixStmt, err = db.PrepareContext(ctx, updateTrackPathsByPrefix); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateTrackPathsByPrefix: %w", err)
 	}
 	return &q, nil
 }
 
 func (q *Queries) Close() error {
 	var err error
+	if q.checkFolderExistsStmt != nil {
+		if cerr := q.checkFolderExistsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing checkFolderExistsStmt: %w", cerr)
+		}
+	}
 	if q.checkFolderHasChildrenStmt != nil {
 		if cerr := q.checkFolderHasChildrenStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing checkFolderHasChildrenStmt: %w", cerr)
@@ -137,6 +157,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing deleteFolderStmt: %w", cerr)
 		}
 	}
+	if q.deleteTrackStmt != nil {
+		if cerr := q.deleteTrackStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteTrackStmt: %w", cerr)
+		}
+	}
 	if q.getArtistStmt != nil {
 		if cerr := q.getArtistStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getArtistStmt: %w", cerr)
@@ -162,6 +187,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getFolderStmt: %w", cerr)
 		}
 	}
+	if q.getFolderAncestorsStmt != nil {
+		if cerr := q.getFolderAncestorsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getFolderAncestorsStmt: %w", cerr)
+		}
+	}
 	if q.getFoldersStmt != nil {
 		if cerr := q.getFoldersStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getFoldersStmt: %w", cerr)
@@ -172,9 +202,9 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getTrackStmt: %w", cerr)
 		}
 	}
-	if q.getTracksByArtistIDStmt != nil {
-		if cerr := q.getTracksByArtistIDStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getTracksByArtistIDStmt: %w", cerr)
+	if q.getTracksByArtistStmt != nil {
+		if cerr := q.getTracksByArtistStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getTracksByArtistStmt: %w", cerr)
 		}
 	}
 	if q.getTracksByPathStmt != nil {
@@ -192,9 +222,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updateFolderStmt: %w", cerr)
 		}
 	}
-	if q.updateTracksPathAfterMoveStmt != nil {
-		if cerr := q.updateTracksPathAfterMoveStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing updateTracksPathAfterMoveStmt: %w", cerr)
+	if q.updateTrackStmt != nil {
+		if cerr := q.updateTrackStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateTrackStmt: %w", cerr)
+		}
+	}
+	if q.updateTrackPathStmt != nil {
+		if cerr := q.updateTrackPathStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateTrackPathStmt: %w", cerr)
+		}
+	}
+	if q.updateTrackPathsByPrefixStmt != nil {
+		if cerr := q.updateTrackPathsByPrefixStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateTrackPathsByPrefixStmt: %w", cerr)
 		}
 	}
 	return err
@@ -234,55 +274,65 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                            DBTX
-	tx                            *sql.Tx
-	checkFolderHasChildrenStmt    *sql.Stmt
-	checkTracksBySourceIDStmt     *sql.Stmt
-	createArtistStmt              *sql.Stmt
-	createChannelStmt             *sql.Stmt
-	createFolderStmt              *sql.Stmt
-	createTrackStmt               *sql.Stmt
-	deleteArtistStmt              *sql.Stmt
-	deleteChannelStmt             *sql.Stmt
-	deleteFolderStmt              *sql.Stmt
-	getArtistStmt                 *sql.Stmt
-	getArtistIDByChannelStmt      *sql.Stmt
-	getArtistsStmt                *sql.Stmt
-	getChannelsStmt               *sql.Stmt
-	getFolderStmt                 *sql.Stmt
-	getFoldersStmt                *sql.Stmt
-	getTrackStmt                  *sql.Stmt
-	getTracksByArtistIDStmt       *sql.Stmt
-	getTracksByPathStmt           *sql.Stmt
-	updateArtistStmt              *sql.Stmt
-	updateFolderStmt              *sql.Stmt
-	updateTracksPathAfterMoveStmt *sql.Stmt
+	db                           DBTX
+	tx                           *sql.Tx
+	checkFolderExistsStmt        *sql.Stmt
+	checkFolderHasChildrenStmt   *sql.Stmt
+	checkTracksBySourceIDStmt    *sql.Stmt
+	createArtistStmt             *sql.Stmt
+	createChannelStmt            *sql.Stmt
+	createFolderStmt             *sql.Stmt
+	createTrackStmt              *sql.Stmt
+	deleteArtistStmt             *sql.Stmt
+	deleteChannelStmt            *sql.Stmt
+	deleteFolderStmt             *sql.Stmt
+	deleteTrackStmt              *sql.Stmt
+	getArtistStmt                *sql.Stmt
+	getArtistIDByChannelStmt     *sql.Stmt
+	getArtistsStmt               *sql.Stmt
+	getChannelsStmt              *sql.Stmt
+	getFolderStmt                *sql.Stmt
+	getFolderAncestorsStmt       *sql.Stmt
+	getFoldersStmt               *sql.Stmt
+	getTrackStmt                 *sql.Stmt
+	getTracksByArtistStmt        *sql.Stmt
+	getTracksByPathStmt          *sql.Stmt
+	updateArtistStmt             *sql.Stmt
+	updateFolderStmt             *sql.Stmt
+	updateTrackStmt              *sql.Stmt
+	updateTrackPathStmt          *sql.Stmt
+	updateTrackPathsByPrefixStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                            tx,
-		tx:                            tx,
-		checkFolderHasChildrenStmt:    q.checkFolderHasChildrenStmt,
-		checkTracksBySourceIDStmt:     q.checkTracksBySourceIDStmt,
-		createArtistStmt:              q.createArtistStmt,
-		createChannelStmt:             q.createChannelStmt,
-		createFolderStmt:              q.createFolderStmt,
-		createTrackStmt:               q.createTrackStmt,
-		deleteArtistStmt:              q.deleteArtistStmt,
-		deleteChannelStmt:             q.deleteChannelStmt,
-		deleteFolderStmt:              q.deleteFolderStmt,
-		getArtistStmt:                 q.getArtistStmt,
-		getArtistIDByChannelStmt:      q.getArtistIDByChannelStmt,
-		getArtistsStmt:                q.getArtistsStmt,
-		getChannelsStmt:               q.getChannelsStmt,
-		getFolderStmt:                 q.getFolderStmt,
-		getFoldersStmt:                q.getFoldersStmt,
-		getTrackStmt:                  q.getTrackStmt,
-		getTracksByArtistIDStmt:       q.getTracksByArtistIDStmt,
-		getTracksByPathStmt:           q.getTracksByPathStmt,
-		updateArtistStmt:              q.updateArtistStmt,
-		updateFolderStmt:              q.updateFolderStmt,
-		updateTracksPathAfterMoveStmt: q.updateTracksPathAfterMoveStmt,
+		db:                           tx,
+		tx:                           tx,
+		checkFolderExistsStmt:        q.checkFolderExistsStmt,
+		checkFolderHasChildrenStmt:   q.checkFolderHasChildrenStmt,
+		checkTracksBySourceIDStmt:    q.checkTracksBySourceIDStmt,
+		createArtistStmt:             q.createArtistStmt,
+		createChannelStmt:            q.createChannelStmt,
+		createFolderStmt:             q.createFolderStmt,
+		createTrackStmt:              q.createTrackStmt,
+		deleteArtistStmt:             q.deleteArtistStmt,
+		deleteChannelStmt:            q.deleteChannelStmt,
+		deleteFolderStmt:             q.deleteFolderStmt,
+		deleteTrackStmt:              q.deleteTrackStmt,
+		getArtistStmt:                q.getArtistStmt,
+		getArtistIDByChannelStmt:     q.getArtistIDByChannelStmt,
+		getArtistsStmt:               q.getArtistsStmt,
+		getChannelsStmt:              q.getChannelsStmt,
+		getFolderStmt:                q.getFolderStmt,
+		getFolderAncestorsStmt:       q.getFolderAncestorsStmt,
+		getFoldersStmt:               q.getFoldersStmt,
+		getTrackStmt:                 q.getTrackStmt,
+		getTracksByArtistStmt:        q.getTracksByArtistStmt,
+		getTracksByPathStmt:          q.getTracksByPathStmt,
+		updateArtistStmt:             q.updateArtistStmt,
+		updateFolderStmt:             q.updateFolderStmt,
+		updateTrackStmt:              q.updateTrackStmt,
+		updateTrackPathStmt:          q.updateTrackPathStmt,
+		updateTrackPathsByPrefixStmt: q.updateTrackPathsByPrefixStmt,
 	}
 }

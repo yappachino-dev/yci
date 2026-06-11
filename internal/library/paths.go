@@ -29,3 +29,11 @@ func GetPaths() (AppPaths, error) {
 		Staging: filepath.Join(home, "Music", "Staging"),
 	}, nil
 }
+
+func (p AppPaths) StagingDir() string {
+	return p.Staging
+}
+
+func (p AppPaths) LibraryDir() string {
+	return p.Library
+}

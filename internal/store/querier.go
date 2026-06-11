@@ -10,6 +10,7 @@ import (
 )
 
 type Querier interface {
+	CheckFolderExists(ctx context.Context, id string) (bool, error)
 	CheckFolderHasChildren(ctx context.Context, id sql.NullString) (bool, error)
 	CheckTracksBySourceID(ctx context.Context, sourceID sql.NullString) (bool, error)
 	CreateArtist(ctx context.Context, arg CreateArtistParams) error
@@ -19,18 +20,22 @@ type Querier interface {
 	DeleteArtist(ctx context.Context, id string) error
 	DeleteChannel(ctx context.Context, arg DeleteChannelParams) error
 	DeleteFolder(ctx context.Context, id string) error
+	DeleteTrack(ctx context.Context, id string) error
 	GetArtist(ctx context.Context, id string) (Artist, error)
 	GetArtistIDByChannel(ctx context.Context, channelName sql.NullString) (string, error)
 	GetArtists(ctx context.Context) ([]Artist, error)
 	GetChannels(ctx context.Context) ([]Channel, error)
 	GetFolder(ctx context.Context, id string) (Folder, error)
+	GetFolderAncestors(ctx context.Context, id string) ([]string, error)
 	GetFolders(ctx context.Context) ([]Folder, error)
 	GetTrack(ctx context.Context, id string) (Track, error)
-	GetTracksByArtistID(ctx context.Context, artistID sql.NullString) ([]Track, error)
+	GetTracksByArtist(ctx context.Context, artistID sql.NullString) ([]Track, error)
 	GetTracksByPath(ctx context.Context, path string) ([]Track, error)
 	UpdateArtist(ctx context.Context, arg UpdateArtistParams) error
 	UpdateFolder(ctx context.Context, arg UpdateFolderParams) error
-	UpdateTracksPathAfterMove(ctx context.Context, arg UpdateTracksPathAfterMoveParams) error
+	UpdateTrack(ctx context.Context, arg UpdateTrackParams) error
+	UpdateTrackPath(ctx context.Context, arg UpdateTrackPathParams) error
+	UpdateTrackPathsByPrefix(ctx context.Context, arg UpdateTrackPathsByPrefixParams) error
 }
 
 var _ Querier = (*Queries)(nil)
