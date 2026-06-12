@@ -17,6 +17,8 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("set goose dialect: %w", err)
 	}
 
+	goose.SetLogger(goose.NopLogger())
+
 	if err := goose.UpContext(ctx, db, "."); err != nil {
 		return fmt.Errorf("run schema migrations: %w", err)
 	}
