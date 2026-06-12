@@ -231,15 +231,10 @@ func (s *FolderService) ResolvePath(ctx context.Context, id FolderID) (string, e
 	}
 
 	if len(names) == 0 {
-		return "", fmt.Errorf("resolve path %q: %w", id, err)
+		return "", fmt.Errorf("resolve path %q: no ancestors found", id)
 	}
 
-	segments := make([]string, 0, len(names))
-	for _, name := range names {
-		segments = append(segments, name)
-	}
-
-	return filepath.ToSlash(filepath.Join(segments...)), nil
+	return filepath.ToSlash(filepath.Join(names...)), nil
 }
 
 func (s *FolderService) PredictPath(ctx context.Context, parent FolderID, name FolderName) (string, error) {
