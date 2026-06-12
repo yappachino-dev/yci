@@ -16,6 +16,7 @@ type Container struct {
 	ArtistService  *library.ArtistService
 	TrackService   *library.TrackService
 	ChannelService *library.ChannelService
+	StagingService *library.StagingService
 	Paths          library.AppPaths
 }
 
@@ -37,14 +38,18 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (
 	metaReader := library.NewTagMetadataReader()
 
 	channelService := library.NewChannelService(channelRepo)
-	folderService := library.NewFolderService(folderRepo, trackRepo, diskMover, transactor, rootID, paths)
+	folderService := library.NewFolderService(
+		folderRepo,
+		trackRepo,
+		diskMover,
+		transactor,
+		rootID,
+		paths,
+	)
 
 	trackService := library.NewTrackService(
 		trackRepo,
-		artistRepo,
 		folderService,
-		channelService,
-		metaReader,
 		diskMover,
 		transactor,
 		paths,
@@ -52,12 +57,24 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (
 
 	artistService := library.NewArtistService(artistRepo, folderRepo, trackService, transactor, rootID)
 
+	stagingService := library.NewStagingService(library.StagingServiceConfig{
+		TrackCreator:   trackService,
+		ArtistReader:   artistRepo,
+		FolderResolver: folderService,
+		Linker:         channelService,
+		MetaReader:     metaReader,
+		DiskMover:      diskMover,
+		Transactor:     transactor,
+		Config:         paths,
+	})
+
 	return &Container{
 		DB:             dbConn,
 		FolderService:  folderService,
 		ArtistService:  artistService,
 		TrackService:   trackService,
 		ChannelService: channelService,
+		StagingService: stagingService,
 		Paths:          paths,
 	}, nil
 }

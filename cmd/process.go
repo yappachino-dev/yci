@@ -95,7 +95,7 @@ func runProcessStaging(ctx context.Context) error {
 
 	fmt.Println("Processing staging directory...")
 
-	if err := appl.TrackService.ProcessStaging(ctx, handler); err != nil {
+	if err := appl.StagingService.ProcessStaging(ctx, handler); err != nil {
 		if errors.Is(err, library.ErrProcessAborted) {
 			fmt.Println("\nProcessing loop aborted by user.")
 			return nil
