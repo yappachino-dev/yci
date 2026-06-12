@@ -12,16 +12,14 @@ import (
 // --- Command Definitions ---
 
 var createCmd = &cobra.Command{
-	Use:     "create",
-	Aliases: []string{"mk", "add"},
-	Short:   "Create a new resource in the library",
-	Args:    cobra.NoArgs,
+	Use:   "create",
+	Short: "Create a new resource in the library",
+	Args:  cobra.NoArgs,
 }
 
 var createFolderCmd = &cobra.Command{
-	Use:     "folder",
-	Aliases: []string{"f"},
-	Short:   "Create a new folder",
+	Use:   "folder",
+	Short: "Create a new folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, _ := cmd.Flags().GetString("id")
 		name, _ := cmd.Flags().GetString("name")
@@ -41,9 +39,8 @@ var createFolderCmd = &cobra.Command{
 }
 
 var createArtistCmd = &cobra.Command{
-	Use:     "artist",
-	Aliases: []string{"a"},
-	Short:   "Create a new artist",
+	Use:   "artist",
+	Short: "Create a new artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, _ := cmd.Flags().GetString("id")
 		name, _ := cmd.Flags().GetString("name")
@@ -63,9 +60,8 @@ var createArtistCmd = &cobra.Command{
 }
 
 var createChannelCmd = &cobra.Command{
-	Use:     "channel",
-	Aliases: []string{"c", "link"},
-	Short:   "Link a YouTube channel name to an existing artist",
+	Use:   "channel",
+	Short: "Link a YouTube channel name to an existing artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		artistID, _ := cmd.Flags().GetString("artist")
 		channelName, _ := cmd.Flags().GetString("name")

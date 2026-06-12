@@ -18,9 +18,8 @@ var editCmd = &cobra.Command{
 }
 
 var editFolderCmd = &cobra.Command{
-	Use:     "folder",
-	Aliases: []string{"f"},
-	Short:   "Rename or move a folder",
+	Use:   "folder",
+	Short: "Rename or move a folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		oldID, _ := cmd.Flags().GetString("id")
 		oldID = strings.TrimSpace(oldID)
@@ -50,9 +49,8 @@ var editFolderCmd = &cobra.Command{
 }
 
 var editArtistCmd = &cobra.Command{
-	Use:     "artist",
-	Aliases: []string{"a"},
-	Short:   "Rename or move an artist",
+	Use:   "artist",
+	Short: "Rename or move an artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		oldID, _ := cmd.Flags().GetString("id")
 		oldID = strings.TrimSpace(oldID)

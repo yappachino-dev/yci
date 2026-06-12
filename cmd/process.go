@@ -24,15 +24,13 @@ var (
 // --- Command Definitions ---
 
 var processCmd = &cobra.Command{
-	Use:     "process",
-	Aliases: []string{"import"},
-	Short:   "Process and import downloaded files",
+	Use:   "process",
+	Short: "Process and import downloaded files",
 }
 
 var processStagingCmd = &cobra.Command{
-	Use:     "staging",
-	Aliases: []string{"queue", "pending"},
-	Short:   "Process the staging directory and import .opus files",
+	Use:   "staging",
+	Short: "Process the staging directory and import .opus files",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runProcessStaging(cmd.Context())
 	},

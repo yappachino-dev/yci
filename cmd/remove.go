@@ -12,16 +12,14 @@ import (
 // --- Command Definitions ---
 
 var deleteCmd = &cobra.Command{
-	Use:     "delete",
-	Aliases: []string{"rm", "remove"},
-	Short:   "Delete a resource from the library",
-	Args:    cobra.NoArgs,
+	Use:   "delete",
+	Short: "Delete a resource from the library",
+	Args:  cobra.NoArgs,
 }
 
 var deleteFolderCmd = &cobra.Command{
-	Use:     "folder",
-	Aliases: []string{"f"},
-	Short:   "Delete a folder",
+	Use:   "folder",
+	Short: "Delete a folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
@@ -50,9 +48,8 @@ var deleteFolderCmd = &cobra.Command{
 }
 
 var deleteArtistCmd = &cobra.Command{
-	Use:     "artist",
-	Aliases: []string{"a"},
-	Short:   "Delete an artist (WARNING: channels cascade, tracks become orphaned)",
+	Use:   "artist",
+	Short: "Delete an artist (WARNING: channels cascade, tracks become orphaned)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, _ := cmd.Flags().GetString("id")
 		id = strings.TrimSpace(id)
@@ -67,9 +64,8 @@ var deleteArtistCmd = &cobra.Command{
 }
 
 var deleteChannelCmd = &cobra.Command{
-	Use:     "channel",
-	Aliases: []string{"c", "link"},
-	Short:   "Unlink a YouTube channel from an artist",
+	Use:   "channel",
+	Short: "Unlink a YouTube channel from an artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		artistID, _ := cmd.Flags().GetString("artist")
 		channelName, _ := cmd.Flags().GetString("name")
@@ -87,9 +83,8 @@ var deleteChannelCmd = &cobra.Command{
 }
 
 var deleteTrackCmd = &cobra.Command{
-	Use:     "track",
-	Aliases: []string{"t"},
-	Short:   "Delete a track from the database AND remove the physical file",
+	Use:   "track",
+	Short: "Delete a track from the database AND remove the physical file",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, _ := cmd.Flags().GetString("id")
 		id = strings.TrimSpace(id)

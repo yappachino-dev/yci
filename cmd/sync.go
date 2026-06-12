@@ -16,9 +16,8 @@ import (
 // --- Command Definitions ---
 
 var syncCmd = &cobra.Command{
-	Use:     "sync",
-	Aliases: []string{"repair", "recover"},
-	Short:   "Scan the database and download missing physical files",
+	Use:   "sync",
+	Short: "Scan the database and download missing physical files",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
