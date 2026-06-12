@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"playlist-manager/internal/appctx"
@@ -17,16 +16,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-type Track struct {
-	ID           string
-	Title        string
-	Album        string
-	ArtistID     string
-	DurationSec  int
-	RelativePath string
-	SourceID     string
-}
 
 type (
 	TrackID   string
@@ -40,153 +29,6 @@ type NTrack struct {
 	ArtistID     ArtistID
 	RelativePath TrackPath
 	SourceID     string
-}
-
-func scanTrack(s scannable) (Track, error) {
-	var t Track
-	var aID, album, source sql.NullString
-
-	err := s.Scan(&t.ID, &t.Title, &album, &aID, &t.DurationSec, &t.RelativePath, &source)
-	if err != nil {
-		return t, err
-	}
-
-	t.ArtistID = fromNull(aID, "")
-	t.Album = fromNull(album, "")
-	t.SourceID = fromNull(source, "")
-
-	return t, nil
-}
-
-func (l *Library) GetAllTracks() ([]Track, error) {
-	query := `SELECT id, title, album, artist_id, duration_sec, relative_path, source_id FROM tracks`
-	return l.queryTracks(query)
-}
-
-func (l *Library) GetTracksByArtist(artistID string) ([]Track, error) {
-	query := `SELECT id, title, album, artist_id, duration_sec, relative_path, source_id
-              FROM tracks WHERE artist_id = ?`
-	return l.queryTracks(query, artistID)
-}
-
-func (l *Library) GetTracksByFolder(folderID string, recursive bool) ([]Track, error) {
-	folderPath, err := l.ResolveFolderPath(folderID)
-	if err != nil {
-		return nil, err
-	}
-
-	likeTarget := ""
-	if folderPath != "" {
-		likeTarget = folderPath + "/%"
-	} else {
-		likeTarget = "%"
-	}
-
-	query := `SELECT id, title, album, artist_id, duration_sec, relative_path, source_id 
-	          FROM tracks WHERE relative_path LIKE ?`
-
-	tracks, err := l.queryTracks(query, likeTarget)
-	if err != nil {
-		return nil, err
-	}
-
-	if recursive || folderPath == "" {
-		return tracks, nil
-	}
-
-	var exactMatches []Track
-	for _, t := range tracks {
-		if filepath.ToSlash(filepath.Dir(t.RelativePath)) == folderPath {
-			exactMatches = append(exactMatches, t)
-		}
-	}
-
-	return exactMatches, nil
-}
-
-func (l *Library) queryTracks(query string, args ...any) ([]Track, error) {
-	rows, err := l.db.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("track query failed: %w", err)
-	}
-	defer rows.Close()
-
-	var tracks []Track
-	for rows.Next() {
-		t, err := scanTrack(rows)
-		if err != nil {
-			return nil, err
-		}
-		tracks = append(tracks, t)
-	}
-
-	return tracks, nil
-}
-
-var ytRegex = regexp.MustCompile(`(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})`)
-
-func (l *Library) ExtractSourceID(url string) string {
-	matches := ytRegex.FindStringSubmatch(url)
-	if len(matches) > 1 {
-		return matches[1]
-	}
-	return ""
-}
-
-func (l *Library) TrackExistsBySourceID(sourceID string) (bool, error) {
-	if sourceID == "" {
-		return false, nil
-	}
-
-	var exists bool
-	query := "SELECT EXISTS(SELECT 1 FROM tracks WHERE source_id = ?)"
-
-	err := l.db.QueryRow(query, sourceID).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-
-	return exists, nil
-}
-
-func (l *Library) AddTrack(t Track) error {
-	query := `
-		INSERT INTO tracks (id, title, album, artist_id, duration_sec, relative_path, source_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
-
-	_, err := l.db.Exec(
-		query,
-		t.ID,
-		t.Title,
-		toNull(t.Album),
-		toNull(t.ArtistID),
-		t.DurationSec,
-		t.RelativePath,
-		toNull(t.SourceID),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to add track %q: %w", t.Title, err)
-	}
-
-	return nil
-}
-
-func (l *Library) RemoveTrack(id string) error {
-	var relativePath string
-
-	err := l.db.QueryRow("SELECT relative_path FROM tracks WHERE id = ?", id).Scan(&relativePath)
-	if err != nil {
-		return l.wrapErr(err, "track", id)
-	}
-
-	absPath := filepath.Join(l.Paths.Library, relativePath)
-	if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete physical file for track %q: %w", id, err)
-	}
-
-	_, err = l.db.Exec("DELETE FROM tracks WHERE id = ?", id)
-
-	return l.wrapErr(err, "track", id)
 }
 
 type TrackCreateParams struct {
@@ -257,7 +99,7 @@ type StagingConfig interface {
 	LibraryDir() string
 }
 
-type NLinkHandler func(channelName string, title string) (artistID string, err error)
+type LinkHandler func(channelName string, title string) (artistID string, err error)
 
 type TrackService struct {
 	repo           TrackRepository
@@ -423,7 +265,7 @@ func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursiv
 	return exactMatches, nil
 }
 
-func (s *TrackService) ProcessStaging(ctx context.Context, onUnknown NLinkHandler) error {
+func (s *TrackService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {
 	stagingDir := s.config.StagingDir()
 	files, err := os.ReadDir(stagingDir)
 	if err != nil {
@@ -444,7 +286,7 @@ func (s *TrackService) ProcessStaging(ctx context.Context, onUnknown NLinkHandle
 	return nil
 }
 
-func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName string, onUnknown NLinkHandler) error {
+func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName string, onUnknown LinkHandler) error {
 	oldPathNative := filepath.Join(s.config.StagingDir(), fileName)
 
 	m, err := s.metaReader.Read(ctx, oldPathNative)
