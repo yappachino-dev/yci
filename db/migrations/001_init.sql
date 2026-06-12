@@ -1,18 +1,20 @@
-CREATE TABLE IF NOT EXISTS folders (
+-- +goose Up
+-- +goose StatementBegin
+CREATE TABLE folders (
     id           TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     parent_id    TEXT,
     FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS artists (
+CREATE TABLE artists (
     id           TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     folder_id    TEXT,
     FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS channels (
+CREATE TABLE channels (
     id           INTEGER PRIMARY KEY,
     artist_id    TEXT NOT NULL,
     channel_name TEXT,
@@ -20,7 +22,7 @@ CREATE TABLE IF NOT EXISTS channels (
     UNIQUE(artist_id, channel_name)
 );
 
-CREATE TABLE IF NOT EXISTS tracks (
+CREATE TABLE tracks (
     id            TEXT PRIMARY KEY,
     title         TEXT NOT NULL,
     album         TEXT,
@@ -30,3 +32,13 @@ CREATE TABLE IF NOT EXISTS tracks (
     source_id     TEXT,
     FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
+
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+DROP TABLE tracks;
+DROP TABLE channels;
+DROP TABLE artists;
+DROP TABLE folders;
+-- +goose StatementEnd

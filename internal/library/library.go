@@ -40,17 +40,14 @@ func NewLibrary() (*Library, error) {
 	}, nil
 }
 
-//go:embed init.sql
-var initSQL string
-
 func (l *Library) Init() error {
 	if _, err := l.db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 		return err
 	}
 
-	if _, err := l.db.Exec(initSQL); err != nil {
-		return err
-	}
+	// if _, err := l.db.Exec(initSQL); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

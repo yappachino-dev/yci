@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"playlist-manager/internal/app"
+	"playlist-manager/internal/db"
 	"playlist-manager/internal/library"
 )
 
@@ -22,6 +23,8 @@ var rootCmd = &cobra.Command{
 	Use:   "yci",
 	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
 		paths, err := library.GetPaths()
 		if err != nil {
 			return fmt.Errorf("failed to retrieve system configurations: %w", err)
@@ -39,6 +42,11 @@ var rootCmd = &cobra.Command{
 		if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 			dbConn.Close()
 			return fmt.Errorf("failed enabling foreign key constraints: %w", err)
+		}
+
+		if err := db.RunMigrations(ctx, dbConn); err != nil {
+			dbConn.Close()
+			return fmt.Errorf("database migration failed: %w", err)
 		}
 
 		appl = app.NewContainer(dbConn, paths)
