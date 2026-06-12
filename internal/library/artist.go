@@ -131,14 +131,6 @@ type ArtistUpdateParams struct {
 	Folder FolderID
 }
 
-func newIfPresent[T ~string](new, old T) T {
-	if new != "" {
-		return new
-	} else {
-		return old
-	}
-}
-
 func (s *ArtistService) Update(ctx context.Context, oldID ArtistID, params ArtistUpdateParams) error {
 	oldArtist, err := s.repo.ByID(ctx, oldID)
 	if err != nil {
