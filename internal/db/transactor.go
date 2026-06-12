@@ -19,7 +19,7 @@ func NewSQLiteTransactor(db *sql.DB) *SQLiteTransactor {
 func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) (err error) {
 	tx, err := t.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin tx failed: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 
 	defer func() {
@@ -28,7 +28,7 @@ func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx co
 			panic(p)
 		} else if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				err = fmt.Errorf("tx err: %v, rollback err: %w", err, rbErr)
+				err = fmt.Errorf("rollback transaction (original error: %v): %w", err, rbErr)
 			}
 		}
 	}()
@@ -42,7 +42,7 @@ func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx co
 
 	err = tx.Commit()
 	if err != nil {
-		return fmt.Errorf("cannot commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil

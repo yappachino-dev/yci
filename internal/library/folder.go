@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"playlist-manager/internal/appctx"
@@ -120,7 +121,7 @@ func (s *FolderService) Create(ctx context.Context, id FolderID, parentID Folder
 func (s *FolderService) ByID(ctx context.Context, id FolderID) (Folder, error) {
 	f, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return Folder{}, fmt.Errorf("get folder by id %q: %w", id, err)
+		return Folder{}, fmt.Errorf("folder by id %q: %w", id, err)
 	}
 
 	return f, nil
@@ -129,7 +130,7 @@ func (s *FolderService) ByID(ctx context.Context, id FolderID) (Folder, error) {
 func (s *FolderService) All(ctx context.Context) ([]Folder, error) {
 	f, err := s.repo.All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get all folders: %w", err)
+		return nil, fmt.Errorf("all folders: %w", err)
 	}
 
 	return f, nil
@@ -138,7 +139,7 @@ func (s *FolderService) All(ctx context.Context) ([]Folder, error) {
 func (s *FolderService) IsEmpty(ctx context.Context, id FolderID) (bool, error) {
 	hasChildren, err := s.repo.HasChildren(ctx, id)
 	if err != nil {
-		return false, fmt.Errorf("check folder protection safety: %w", err)
+		return false, fmt.Errorf("is folder empty: %w", err)
 	}
 	return !hasChildren, nil
 }
@@ -158,6 +159,15 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 	newID := newIfPresent(params.NewID, oldID)
 	newName := newIfPresent(params.Name, oldFolder.Name)
 	newParent := newIfPresent(params.Parent, oldFolder.ParentID)
+
+	ancestors, err := s.repo.Ancestors(ctx, newParent)
+	if err != nil {
+		return fmt.Errorf("update folder %q: %w", oldID, err)
+	}
+
+	if slices.Contains(ancestors, string(oldID)) {
+		return fmt.Errorf("update folder %q: new parent cannot be a child of current folder", oldID)
+	}
 
 	newFolder := Folder{
 		ID:       newID,

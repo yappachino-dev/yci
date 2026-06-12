@@ -15,12 +15,12 @@ type AppPaths struct {
 func GetPaths() (AppPaths, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return AppPaths{}, fmt.Errorf("couldn't find home directory: %w", err)
+		return AppPaths{}, fmt.Errorf("resolve home directory: %w", err)
 	}
 
 	conf, err := os.UserConfigDir()
 	if err != nil {
-		return AppPaths{}, fmt.Errorf("couldn't find config directory %w", err)
+		return AppPaths{}, fmt.Errorf("resolve config directory: %w", err)
 	}
 
 	return AppPaths{

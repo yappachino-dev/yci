@@ -192,7 +192,7 @@ func (s *TrackService) MoveByArtist(ctx context.Context, id ArtistID, oldFolder,
 
 	newRelFolder, err := s.folderResolver.ResolvePath(ctx, newFolder)
 	if err != nil {
-		return fmt.Errorf("move tracks by artist: failed to resolve target folder: %w", err)
+		return fmt.Errorf("resolve artist target folder path: %w", err)
 	}
 
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -232,7 +232,7 @@ func (s *TrackService) MoveByArtist(ctx context.Context, id ArtistID, oldFolder,
 	})
 
 	if txErr != nil {
-		return fmt.Errorf("move tracks execution for artist %q failed: %w", id, txErr)
+		return fmt.Errorf("move tracks for artist %q: %w", id, txErr)
 	}
 
 	return nil
@@ -285,7 +285,7 @@ func (s *TrackService) ProcessStaging(ctx context.Context, onUnknown LinkHandler
 
 	files, err := os.ReadDir(stagingDir)
 	if err != nil {
-		return fmt.Errorf("could not read staging directory: %w", err)
+		return fmt.Errorf("read staging directory: %w", err)
 	}
 
 	for _, file := range files {
@@ -311,7 +311,7 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 
 	m, err := s.metaReader.Read(ctx, oldPathNative)
 	if err != nil {
-		return fmt.Errorf("metadata extraction failed: %w", err)
+		return fmt.Errorf("extract track metadata: %w", err)
 	}
 
 	channelName := strings.TrimSpace(m.Artist)
@@ -380,7 +380,7 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 		}
 
 		if err := s.diskMover.MoveFile(txCtx, oldPathNative, absPathNative); err != nil {
-			return fmt.Errorf("disk movement failed: %w", err)
+			return fmt.Errorf("move staging file to library: %w", err)
 		}
 
 		return nil
@@ -392,7 +392,7 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
 	track, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("delete track: failed to find track meta: %w", err)
+		return fmt.Errorf("find track metadata for deletion: %w", err)
 	}
 
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -528,7 +528,7 @@ func (r *SQLiteTrackRepository) UpdatePathsBatch(ctx context.Context, moves []Tr
 			RelativePath: string(m.NewPath),
 		})
 		if err != nil {
-			return fmt.Errorf("failed executing batch tracking update for entry %q: %w", m.ID, err)
+			return fmt.Errorf("execute batch tracking update for entry %q: %w", m.ID, err)
 		}
 	}
 

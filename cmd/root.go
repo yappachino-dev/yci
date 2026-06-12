@@ -27,32 +27,32 @@ var rootCmd = &cobra.Command{
 
 		paths, err := library.GetPaths()
 		if err != nil {
-			return fmt.Errorf("failed to retrieve system configurations: %w", err)
+			return fmt.Errorf("load application paths: %w", err)
 		}
 
 		if err = os.MkdirAll(paths.Config, 0o755); err != nil {
-			return fmt.Errorf("failed creating application configuration directory: %w", err)
+			return fmt.Errorf("create config directory: %w", err)
 		}
 
 		dbConn, err := sql.Open("sqlite", filepath.Join(paths.Config, "data.db"))
 		if err != nil {
-			return fmt.Errorf("failed opening SQLite storage engine: %w", err)
+			return fmt.Errorf("open sqlite database: %w", err)
 		}
 
 		if _, err = dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 			dbConn.Close()
-			return fmt.Errorf("failed enabling foreign key constraints: %w", err)
+			return fmt.Errorf("enable foreign key constraints: %w", err)
 		}
 
 		if err = db.RunMigrations(ctx, dbConn); err != nil {
 			dbConn.Close()
-			return fmt.Errorf("database migration failed: %w", err)
+			return fmt.Errorf("execute database migration: %w", err)
 		}
 
 		appl, err = app.NewContainer(ctx, dbConn, paths)
 		if err != nil {
 			dbConn.Close()
-			return fmt.Errorf("failed to bootstrap database prepared cache mapping: %w", err)
+			return fmt.Errorf("initialize application container statements: %w", err)
 		}
 
 		return nil

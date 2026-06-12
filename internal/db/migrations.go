@@ -14,11 +14,11 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 	goose.SetBaseFS(migrations.FS)
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
-		return fmt.Errorf("error setting goose dialect: %w", err)
+		return fmt.Errorf("set goose dialect: %w", err)
 	}
 
 	if err := goose.UpContext(ctx, db, "."); err != nil {
-		return fmt.Errorf("failed running schema migrations: %w", err)
+		return fmt.Errorf("run schema migrations: %w", err)
 	}
 
 	return nil

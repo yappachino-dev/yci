@@ -36,7 +36,7 @@ func Download(exactOutputPath string, url string, minSleep string, maxSleep stri
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("yt-dlp execution failed: %w", err)
+		return fmt.Errorf("execute yt-dlp: %w", err)
 	}
 
 	return nil

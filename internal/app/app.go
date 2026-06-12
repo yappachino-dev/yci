@@ -22,7 +22,7 @@ type Container struct {
 func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (*Container, error) {
 	queries, err := store.Prepare(ctx, dbConn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare application sql statements: %w", err)
+		return nil, fmt.Errorf("prepare database statements: %w", err)
 	}
 
 	transactor := db.NewSQLiteTransactor(dbConn)

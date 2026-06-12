@@ -84,7 +84,7 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 	if folderID == "" {
 		exists, err := s.folderChecker.Exists(ctx, FolderID(id))
 		if err != nil {
-			return fmt.Errorf("check folder fallback for artist %q: %w", id, err)
+			return fmt.Errorf("folder fallback for artist %q: %w", id, err)
 		}
 
 		if exists {
@@ -110,7 +110,7 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 func (s *ArtistService) ByID(ctx context.Context, id ArtistID) (Artist, error) {
 	a, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return Artist{}, fmt.Errorf("get artist by id %q: %w", id, err)
+		return Artist{}, fmt.Errorf("artist by id %q: %w", id, err)
 	}
 
 	return a, nil
@@ -119,7 +119,7 @@ func (s *ArtistService) ByID(ctx context.Context, id ArtistID) (Artist, error) {
 func (s *ArtistService) All(ctx context.Context) ([]Artist, error) {
 	a, err := s.repo.All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get all artists: %w", err)
+		return nil, fmt.Errorf("all artists: %w", err)
 	}
 
 	return a, nil
