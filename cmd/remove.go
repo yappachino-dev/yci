@@ -77,7 +77,7 @@ var deleteChannelCmd = &cobra.Command{
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
 
-		if err := appl.ChannelLinker.UnlinkChannel(cmd.Context(), library.ArtistID(artistID), channelName); err != nil {
+		if err := appl.ChannelService.Unlink(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
 			return err
 		}
 
@@ -178,15 +178,15 @@ func init() {
 	})
 
 	deleteChannelCmd.RegisterFlagCompletionFunc("name", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		channels, err := appl.ChannelLinker.AllChannels(cmd.Context())
+		channels, err := appl.ChannelService.All(cmd.Context())
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
 		var comps []string
 		for _, c := range channels {
-			if strings.HasPrefix(c.ChannelName, toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\tLinked to: %s", c.ChannelName, c.ArtistID))
+			if strings.HasPrefix(string(c.Name), toComplete) {
+				comps = append(comps, fmt.Sprintf("%s\tLinked to: %s", c.Name, c.ArtistID))
 			}
 		}
 

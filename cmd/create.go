@@ -78,7 +78,7 @@ var createChannelCmd = &cobra.Command{
 			return fmt.Errorf("could not find artist with ID %q: %w", artistID, err)
 		}
 
-		if err := appl.ChannelLinker.LinkChannelToArtist(cmd.Context(), library.ArtistID(artistID), channelName); err != nil {
+		if err := appl.ChannelService.Link(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
 			return err
 		}
 

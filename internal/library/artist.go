@@ -233,6 +233,15 @@ func (r *SQLiteArtistRepository) All(ctx context.Context) ([]Artist, error) {
 	return artists, nil
 }
 
+func (r *SQLiteArtistRepository) FolderID(ctx context.Context, id ArtistID) (FolderID, error) {
+	a, err := r.db(ctx).GetArtist(ctx, string(id))
+	if err != nil {
+		return "", err
+	}
+
+	return FolderID(db.FromNullString(a.FolderID)).FromDB(r.rootID), nil
+}
+
 func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a Artist) error {
 	return r.db(ctx).UpdateArtist(ctx, store.UpdateArtistParams{
 		OldID:       string(id),

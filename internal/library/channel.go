@@ -3,66 +3,99 @@ package library
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"playlist-manager/internal/appctx"
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/store"
 )
 
+type ChannelName string
+
+func (n ChannelName) Validate() error {
+	if strings.TrimSpace(string(n)) == "" {
+		return fmt.Errorf("channel name cannot be empty")
+	}
+	return nil
+}
+
 type Channel struct {
-	ID          int
-	ArtistID    string
-	ChannelName string
+	ID       int
+	ArtistID ArtistID
+	Name     ChannelName
 }
 
-type SQLiteChannelLinker struct {
-	q      *store.Queries
-	rootID FolderID
+type ChannelRepository interface {
+	Create(ctx context.Context, artistID ArtistID, name ChannelName) error
+	FindArtistID(ctx context.Context, name ChannelName) (ArtistID, bool, error)
+	All(ctx context.Context) ([]Channel, error)
+	Delete(ctx context.Context, artistID ArtistID, name ChannelName) error
 }
 
-func NewSQLiteChannelLinker(q *store.Queries, rootID FolderID) *SQLiteChannelLinker {
-	return &SQLiteChannelLinker{
-		q:      q,
-		rootID: rootID,
+type ChannelService struct {
+	repo ChannelRepository
+}
+
+func NewChannelService(repo ChannelRepository) *ChannelService {
+	return &ChannelService{repo: repo}
+}
+
+func (s *ChannelService) Link(ctx context.Context, artistID ArtistID, name ChannelName) error {
+	if err := name.Validate(); err != nil {
+		return fmt.Errorf("link channel: %w", err)
 	}
-}
-
-func (l *SQLiteChannelLinker) LookupArtistByChannel(ctx context.Context, channel string) (ArtistID, error) {
-	artistID, err := l.db(ctx).GetArtistIDByChannel(ctx, db.ToNullString(channel))
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
+	if artistID == "" {
+		return fmt.Errorf("link channel: artist ID cannot be empty")
 	}
 
-	return ArtistID(artistID), nil
+	if err := s.repo.Create(ctx, artistID, name); err != nil {
+		return fmt.Errorf("link channel %q to artist %q: %w", name, artistID, err)
+	}
+	return nil
 }
 
-func (l *SQLiteChannelLinker) LinkChannelToArtist(ctx context.Context, artistID ArtistID, channel string) error {
-	return l.db(ctx).CreateChannel(ctx, store.CreateChannelParams{
+func (s *ChannelService) ResolveArtist(ctx context.Context, name ChannelName) (ArtistID, bool, error) {
+	return s.repo.FindArtistID(ctx, name)
+}
+
+func (s *ChannelService) Unlink(ctx context.Context, artistID ArtistID, name ChannelName) error {
+	return s.repo.Delete(ctx, artistID, name)
+}
+
+func (s *ChannelService) All(ctx context.Context) ([]Channel, error) {
+	return s.repo.All(ctx)
+}
+
+type SQLiteChannelRepository struct {
+	q *store.Queries
+}
+
+func NewSQLiteChannelRepository(q *store.Queries) *SQLiteChannelRepository {
+	return &SQLiteChannelRepository{q: q}
+}
+
+func (r *SQLiteChannelRepository) Create(ctx context.Context, artistID ArtistID, name ChannelName) error {
+	return r.db(ctx).CreateChannel(ctx, store.CreateChannelParams{
 		ArtistID:    string(artistID),
-		ChannelName: db.ToNullString(channel),
+		ChannelName: db.ToNullString(string(name)),
 	})
 }
 
-func (l *SQLiteChannelLinker) ArtistFolderID(ctx context.Context, id ArtistID) (FolderID, error) {
-	row, err := l.db(ctx).GetArtist(ctx, string(id))
+func (r *SQLiteChannelRepository) FindArtistID(ctx context.Context, name ChannelName) (ArtistID, bool, error) {
+	artistID, err := r.db(ctx).GetArtistIDByChannel(ctx, db.ToNullString(string(name)))
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return FolderID(db.FromNullString(row.FolderID)).FromDB(l.rootID), nil
+
+	return ArtistID(artistID), true, nil
 }
 
-func (l *SQLiteChannelLinker) db(ctx context.Context) *store.Queries {
-	if tx, ok := appctx.TxFromContext[*sql.Tx](ctx); ok {
-		return l.q.WithTx(tx)
-	}
-	return l.q
-}
-
-func (l *SQLiteChannelLinker) AllChannels(ctx context.Context) ([]Channel, error) {
-	rows, err := l.db(ctx).GetChannels(ctx)
+func (r *SQLiteChannelRepository) All(ctx context.Context) ([]Channel, error) {
+	rows, err := r.db(ctx).GetChannels(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -70,17 +103,26 @@ func (l *SQLiteChannelLinker) AllChannels(ctx context.Context) ([]Channel, error
 	channels := make([]Channel, 0, len(rows))
 	for _, row := range rows {
 		channels = append(channels, Channel{
-			ID:          int(row.ID),
-			ArtistID:    row.ArtistID,
-			ChannelName: db.FromNullString(row.ChannelName),
+			ID:       int(row.ID),
+			ArtistID: ArtistID(row.ArtistID),
+			Name:     ChannelName(db.FromNullString(row.ChannelName)),
 		})
 	}
+
 	return channels, nil
 }
 
-func (l *SQLiteChannelLinker) UnlinkChannel(ctx context.Context, artistID ArtistID, channel string) error {
-	return l.db(ctx).DeleteChannel(ctx, store.DeleteChannelParams{
+func (r *SQLiteChannelRepository) Delete(ctx context.Context, artistID ArtistID, name ChannelName) error {
+	return r.db(ctx).DeleteChannel(ctx, store.DeleteChannelParams{
 		ArtistID:    string(artistID),
-		ChannelName: db.ToNullString(channel),
+		ChannelName: db.ToNullString(string(name)),
 	})
+}
+
+func (r *SQLiteChannelRepository) db(ctx context.Context) *store.Queries {
+	if tx, ok := appctx.TxFromContext[*sql.Tx](ctx); ok {
+		return r.q.WithTx(tx)
+	}
+
+	return r.q
 }

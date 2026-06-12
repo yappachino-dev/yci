@@ -136,7 +136,7 @@ func listArtists(ctx context.Context) {
 }
 
 func listChannels(ctx context.Context) {
-	channels, err := appl.ChannelLinker.AllChannels(ctx)
+	channels, err := appl.ChannelService.All(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching channels: %v\n", err)
 		return
@@ -147,7 +147,7 @@ func listChannels(ctx context.Context) {
 	fmt.Fprintln(w, "--\t---------\t------------")
 
 	for _, c := range channels {
-		fmt.Fprintf(w, "%d\t%s\t%s\n", c.ID, c.ArtistID, c.ChannelName)
+		fmt.Fprintf(w, "%d\t%s\t%s\n", c.ID, c.ArtistID, c.Name)
 	}
 
 	w.Flush()

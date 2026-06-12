@@ -11,12 +11,12 @@ import (
 )
 
 type Container struct {
-	DB            *sql.DB
-	FolderService *library.FolderService
-	ArtistService *library.ArtistService
-	TrackService  *library.TrackService
-	ChannelLinker *library.SQLiteChannelLinker
-	Paths         library.AppPaths
+	DB             *sql.DB
+	FolderService  *library.FolderService
+	ArtistService  *library.ArtistService
+	TrackService   *library.TrackService
+	ChannelService *library.ChannelService
+	Paths          library.AppPaths
 }
 
 func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (*Container, error) {
@@ -31,17 +31,19 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (
 	folderRepo := library.NewSQLiteFolderRepository(queries, rootID)
 	artistRepo := library.NewSQLiteArtistRepository(queries, rootID)
 	trackRepo := library.NewSQLiteTrackRepository(queries)
-	linker := library.NewSQLiteChannelLinker(queries, rootID)
+	channelRepo := library.NewSQLiteChannelRepository(queries)
 
 	diskMover := library.NewOSDiskMover()
 	metaReader := library.NewTagMetadataReader()
 
+	channelService := library.NewChannelService(channelRepo)
 	folderService := library.NewFolderService(folderRepo, trackRepo, diskMover, transactor, rootID, paths)
 
 	trackService := library.NewTrackService(
 		trackRepo,
+		artistRepo,
 		folderService,
-		linker,
+		channelService,
 		metaReader,
 		diskMover,
 		transactor,
@@ -51,11 +53,11 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (
 	artistService := library.NewArtistService(artistRepo, folderRepo, trackService, transactor, rootID)
 
 	return &Container{
-		DB:            dbConn,
-		FolderService: folderService,
-		ArtistService: artistService,
-		TrackService:  trackService,
-		ChannelLinker: linker,
-		Paths:         paths,
+		DB:             dbConn,
+		FolderService:  folderService,
+		ArtistService:  artistService,
+		TrackService:   trackService,
+		ChannelService: channelService,
+		Paths:          paths,
 	}, nil
 }

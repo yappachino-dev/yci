@@ -92,15 +92,17 @@ type MetadataReader interface {
 	Read(ctx context.Context, path string) (TrackMetadata, error)
 }
 
-type ChannelLinker interface {
-	LookupArtistByChannel(ctx context.Context, channel string) (ArtistID, error)
-	LinkChannelToArtist(ctx context.Context, artistID ArtistID, channel string) error
-	UnlinkChannel(ctx context.Context, artistID ArtistID, channel string) error
-	ArtistFolderID(ctx context.Context, id ArtistID) (FolderID, error)
-	AllChannels(ctx context.Context) ([]Channel, error)
+type ArtistReader interface {
+	FolderID(ctx context.Context, id ArtistID) (FolderID, error)
 }
 
-type FolderPathResolver interface {
+type ChannelLinker interface {
+	Link(ctx context.Context, artistID ArtistID, name ChannelName) error
+	ResolveArtist(ctx context.Context, name ChannelName) (ArtistID, bool, error)
+	All(ctx context.Context) ([]Channel, error)
+}
+
+type FolderResolver interface {
 	ResolvePath(ctx context.Context, id FolderID) (string, error)
 }
 
@@ -118,7 +120,8 @@ type LinkHandler func(channelName string, title string) (StagingResult, error)
 
 type TrackService struct {
 	repo           TrackRepository
-	folderResolver FolderPathResolver
+	artistReader   ArtistReader
+	folderResolver FolderResolver
 	linker         ChannelLinker
 	metaReader     MetadataReader
 	diskMover      PhysicalTrackMover
@@ -128,7 +131,8 @@ type TrackService struct {
 
 func NewTrackService(
 	r TrackRepository,
-	fr FolderPathResolver,
+	ar ArtistReader,
+	fr FolderResolver,
 	cl ChannelLinker,
 	mr MetadataReader,
 	dm PhysicalTrackMover,
@@ -137,6 +141,7 @@ func NewTrackService(
 ) *TrackService {
 	return &TrackService{
 		repo:           r,
+		artistReader:   ar,
 		folderResolver: fr,
 		linker:         cl,
 		metaReader:     mr,
@@ -314,17 +319,17 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 		return fmt.Errorf("extract track metadata: %w", err)
 	}
 
-	channelName := strings.TrimSpace(m.Artist)
+	channelName := ChannelName(strings.TrimSpace(m.Artist))
 	title := strings.TrimSpace(m.Title)
 	sourceID := strings.TrimSuffix(fileName, ".opus")
 
-	artistID, err := s.linker.LookupArtistByChannel(ctx, channelName)
+	artistID, ok, err := s.linker.ResolveArtist(ctx, channelName)
 	if err != nil {
 		return err
 	}
 
-	if artistID == "" {
-		res, err := onUnknown(channelName, title)
+	if !ok {
+		res, err := onUnknown(string(channelName), title)
 		if err != nil {
 			return err
 		}
@@ -338,12 +343,12 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 			artistID = res.Artist
 		}
 
-		if err := s.linker.LinkChannelToArtist(ctx, artistID, channelName); err != nil {
+		if err := s.linker.Link(ctx, artistID, channelName); err != nil {
 			return fmt.Errorf("failed linking unknown channel to artist: %w", err)
 		}
 	}
 
-	folderID, err := s.linker.ArtistFolderID(ctx, artistID)
+	folderID, err := s.artistReader.FolderID(ctx, artistID)
 	if err != nil {
 		return fmt.Errorf("failed tracking artist folder target: %w", err)
 	}
