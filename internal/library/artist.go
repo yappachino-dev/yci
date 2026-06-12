@@ -28,7 +28,7 @@ func (n ArtistName) Validate() error {
 	return nil
 }
 
-type NArtist struct {
+type Artist struct {
 	ID       ArtistID
 	Name     ArtistName
 	FolderID FolderID
@@ -39,10 +39,10 @@ type Transactor interface {
 }
 
 type ArtistRepository interface {
-	Create(ctx context.Context, a NArtist) error
-	ByID(ctx context.Context, id ArtistID) (NArtist, error)
-	All(ctx context.Context) ([]NArtist, error)
-	Update(ctx context.Context, oldID ArtistID, a NArtist) error
+	Create(ctx context.Context, a Artist) error
+	ByID(ctx context.Context, id ArtistID) (Artist, error)
+	All(ctx context.Context) ([]Artist, error)
+	Update(ctx context.Context, oldID ArtistID, a Artist) error
 	Delete(ctx context.Context, id ArtistID) error
 }
 
@@ -94,7 +94,7 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 		}
 	}
 
-	a := NArtist{
+	a := Artist{
 		ID:       id,
 		Name:     name,
 		FolderID: folderID,
@@ -107,16 +107,16 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 	return nil
 }
 
-func (s *ArtistService) ByID(ctx context.Context, id ArtistID) (NArtist, error) {
+func (s *ArtistService) ByID(ctx context.Context, id ArtistID) (Artist, error) {
 	a, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return NArtist{}, fmt.Errorf("get artist by id %q: %w", id, err)
+		return Artist{}, fmt.Errorf("get artist by id %q: %w", id, err)
 	}
 
 	return a, nil
 }
 
-func (s *ArtistService) All(ctx context.Context) ([]NArtist, error) {
+func (s *ArtistService) All(ctx context.Context) ([]Artist, error) {
 	a, err := s.repo.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get all artists: %w", err)
@@ -149,7 +149,7 @@ func (s *ArtistService) Update(ctx context.Context, oldID ArtistID, params Artis
 	newName := newIfPresent(params.Name, oldArtist.Name)
 	newFolder := newIfPresent(params.Folder, oldArtist.FolderID)
 
-	newArtist := NArtist{
+	newArtist := Artist{
 		ID:       newID,
 		Name:     newName,
 		FolderID: newFolder,
@@ -202,7 +202,7 @@ func NewSQLiteArtistRepository(q *store.Queries, rootID FolderID) *SQLiteArtistR
 	}
 }
 
-func (r *SQLiteArtistRepository) Create(ctx context.Context, a NArtist) error {
+func (r *SQLiteArtistRepository) Create(ctx context.Context, a Artist) error {
 	return r.db(ctx).CreateArtist(ctx, store.CreateArtistParams{
 		ID:          string(a.ID),
 		DisplayName: string(a.Name),
@@ -210,28 +210,28 @@ func (r *SQLiteArtistRepository) Create(ctx context.Context, a NArtist) error {
 	})
 }
 
-func (r *SQLiteArtistRepository) ByID(ctx context.Context, id ArtistID) (NArtist, error) {
+func (r *SQLiteArtistRepository) ByID(ctx context.Context, id ArtistID) (Artist, error) {
 	row, err := r.db(ctx).GetArtist(ctx, string(id))
 	if err != nil {
-		return NArtist{}, err
+		return Artist{}, err
 	}
 
-	return NArtist{
+	return Artist{
 		ID:       ArtistID(row.ID),
 		Name:     ArtistName(row.DisplayName),
 		FolderID: FolderID(db.FromNullString(row.FolderID)).FromDB(r.rootID),
 	}, nil
 }
 
-func (r *SQLiteArtistRepository) All(ctx context.Context) ([]NArtist, error) {
+func (r *SQLiteArtistRepository) All(ctx context.Context) ([]Artist, error) {
 	rows, err := r.db(ctx).GetArtists(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	artists := make([]NArtist, 0, len(rows))
+	artists := make([]Artist, 0, len(rows))
 	for _, row := range rows {
-		artists = append(artists, NArtist{
+		artists = append(artists, Artist{
 			ID:       ArtistID(row.ID),
 			Name:     ArtistName(row.DisplayName),
 			FolderID: FolderID(db.FromNullString(row.FolderID)).FromDB(r.rootID),
@@ -241,7 +241,7 @@ func (r *SQLiteArtistRepository) All(ctx context.Context) ([]NArtist, error) {
 	return artists, nil
 }
 
-func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a NArtist) error {
+func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a Artist) error {
 	return r.db(ctx).UpdateArtist(ctx, store.UpdateArtistParams{
 		OldID:       string(id),
 		NewID:       string(a.ID),

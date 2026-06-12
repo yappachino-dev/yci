@@ -22,7 +22,7 @@ type (
 	TrackPath string
 )
 
-type NTrack struct {
+type Track struct {
 	ID           TrackID
 	Title        string
 	Album        string
@@ -62,12 +62,12 @@ type TrackMetadata struct {
 }
 
 type TrackRepository interface {
-	Create(ctx context.Context, t NTrack) error
-	ByID(ctx context.Context, id TrackID) (NTrack, error)
-	ByArtistID(ctx context.Context, artistID ArtistID) ([]NTrack, error)
-	ByPathPattern(ctx context.Context, pattern string) ([]NTrack, error)
+	Create(ctx context.Context, t Track) error
+	ByID(ctx context.Context, id TrackID) (Track, error)
+	ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error)
+	ByPathPattern(ctx context.Context, pattern string) ([]Track, error)
 	ExistsBySourceID(ctx context.Context, sourceID string) (bool, error)
-	Update(ctx context.Context, id TrackID, t NTrack) error
+	Update(ctx context.Context, id TrackID, t Track) error
 	Delete(ctx context.Context, id TrackID) error
 	UpdatePathsByPrefix(ctx context.Context, oldPrefix, newPrefix string) error
 	UpdatePathsBatch(ctx context.Context, moves []TrackPathMove) error
@@ -131,9 +131,9 @@ func NewTrackService(
 	}
 }
 
-func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (NTrack, error) {
+func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (Track, error) {
 	if strings.TrimSpace(params.Title) == "" {
-		return NTrack{}, fmt.Errorf("create track: title cannot be empty")
+		return Track{}, fmt.Errorf("create track: title cannot be empty")
 	}
 
 	id := params.ID
@@ -141,7 +141,7 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (NT
 		id = TrackID(uuid.New().String())
 	}
 
-	t := NTrack{
+	t := Track{
 		ID:           id,
 		Title:        strings.TrimSpace(params.Title),
 		Album:        strings.TrimSpace(params.Album),
@@ -151,7 +151,7 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (NT
 	}
 
 	if err := s.repo.Create(ctx, t); err != nil {
-		return NTrack{}, fmt.Errorf("create track %q: %w", t.Title, err)
+		return Track{}, fmt.Errorf("create track %q: %w", t.Title, err)
 	}
 
 	return t, nil
@@ -223,7 +223,7 @@ func (s *TrackService) MoveByArtist(ctx context.Context, id ArtistID, oldFolder,
 	return nil
 }
 
-func (s *TrackService) All(ctx context.Context) ([]NTrack, error) {
+func (s *TrackService) All(ctx context.Context) ([]Track, error) {
 	return s.repo.ByPathPattern(ctx, "%")
 }
 
@@ -231,11 +231,11 @@ func (s *TrackService) ExistsBySourceID(ctx context.Context, sourceID string) (b
 	return s.repo.ExistsBySourceID(ctx, sourceID)
 }
 
-func (s *TrackService) ByArtistID(ctx context.Context, artistID ArtistID) ([]NTrack, error) {
+func (s *TrackService) ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error) {
 	return s.repo.ByArtistID(ctx, artistID)
 }
 
-func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursive bool) ([]NTrack, error) {
+func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursive bool) ([]Track, error) {
 	folderPath, err := s.folderResolver.ResolvePath(ctx, folderID)
 	if err != nil {
 		return nil, err
@@ -255,7 +255,7 @@ func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursiv
 		return tracks, nil
 	}
 
-	var exactMatches []NTrack
+	var exactMatches []Track
 	for _, t := range tracks {
 		if path.Clean(path.Dir(string(t.RelativePath))) == path.Clean(folderPath) {
 			exactMatches = append(exactMatches, t)
@@ -401,7 +401,7 @@ func NewSQLiteTrackRepository(q *store.Queries) *SQLiteTrackRepository {
 	return &SQLiteTrackRepository{q: q}
 }
 
-func (r *SQLiteTrackRepository) Create(ctx context.Context, t NTrack) error {
+func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 	return r.db(ctx).CreateTrack(ctx, store.CreateTrackParams{
 		ID:           string(t.ID),
 		Title:        t.Title,
@@ -412,13 +412,13 @@ func (r *SQLiteTrackRepository) Create(ctx context.Context, t NTrack) error {
 	})
 }
 
-func (r *SQLiteTrackRepository) ByID(ctx context.Context, id TrackID) (NTrack, error) {
+func (r *SQLiteTrackRepository) ByID(ctx context.Context, id TrackID) (Track, error) {
 	row, err := r.db(ctx).GetTrack(ctx, string(id))
 	if err != nil {
-		return NTrack{}, err
+		return Track{}, err
 	}
 
-	return NTrack{
+	return Track{
 		ID:           TrackID(row.ID),
 		Title:        row.Title,
 		Album:        db.FromNullString(row.Album),
@@ -428,15 +428,15 @@ func (r *SQLiteTrackRepository) ByID(ctx context.Context, id TrackID) (NTrack, e
 	}, nil
 }
 
-func (r *SQLiteTrackRepository) ByArtistID(ctx context.Context, artistID ArtistID) ([]NTrack, error) {
+func (r *SQLiteTrackRepository) ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error) {
 	rows, err := r.db(ctx).GetTracksByArtist(ctx, db.ToNullString(string(artistID)))
 	if err != nil {
 		return nil, err
 	}
 
-	tracks := make([]NTrack, 0, len(rows))
+	tracks := make([]Track, 0, len(rows))
 	for _, row := range rows {
-		tracks = append(tracks, NTrack{
+		tracks = append(tracks, Track{
 			ID:           TrackID(row.ID),
 			Title:        row.Title,
 			Album:        db.FromNullString(row.Album),
@@ -448,15 +448,15 @@ func (r *SQLiteTrackRepository) ByArtistID(ctx context.Context, artistID ArtistI
 	return tracks, nil
 }
 
-func (r *SQLiteTrackRepository) ByPathPattern(ctx context.Context, pattern string) ([]NTrack, error) {
+func (r *SQLiteTrackRepository) ByPathPattern(ctx context.Context, pattern string) ([]Track, error) {
 	rows, err := r.db(ctx).GetTracksByPath(ctx, pattern)
 	if err != nil {
 		return nil, err
 	}
 
-	tracks := make([]NTrack, 0, len(rows))
+	tracks := make([]Track, 0, len(rows))
 	for _, row := range rows {
-		tracks = append(tracks, NTrack{
+		tracks = append(tracks, Track{
 			ID:           TrackID(row.ID),
 			Title:        row.Title,
 			Album:        db.FromNullString(row.Album),
@@ -472,7 +472,7 @@ func (r *SQLiteTrackRepository) ExistsBySourceID(ctx context.Context, sourceID s
 	return r.db(ctx).CheckTracksBySourceID(ctx, db.ToNullString(sourceID))
 }
 
-func (r *SQLiteTrackRepository) Update(ctx context.Context, id TrackID, t NTrack) error {
+func (r *SQLiteTrackRepository) Update(ctx context.Context, id TrackID, t Track) error {
 	return r.db(ctx).UpdateTrack(ctx, store.UpdateTrackParams{
 		OldID:        string(id),
 		NewID:        string(t.ID),

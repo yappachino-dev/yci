@@ -38,7 +38,7 @@ var syncCmd = &cobra.Command{
 		}
 		minSleep, maxSleep := delayParts[0], delayParts[1]
 
-		var tracks []library.NTrack
+		var tracks []library.Track
 		var err error
 
 		if artist != "" {
@@ -56,7 +56,7 @@ var syncCmd = &cobra.Command{
 			return fmt.Errorf("database query failed: %w", err)
 		}
 
-		var missing []library.NTrack
+		var missing []library.Track
 		for _, t := range tracks {
 			if t.SourceID == "" {
 				continue

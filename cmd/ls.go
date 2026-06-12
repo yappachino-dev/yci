@@ -82,7 +82,7 @@ func listFolders(ctx context.Context) {
 	fmt.Fprintln(w, "ID\tNAME\tPARENT")
 	fmt.Fprintln(w, "--\t----\t------")
 
-	childrenOf := make(map[library.FolderID][]library.NFolder)
+	childrenOf := make(map[library.FolderID][]library.Folder)
 	for _, f := range folders {
 		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
 	}

@@ -45,17 +45,17 @@ func (id FolderID) ToDB(rootID FolderID) string {
 	return string(id)
 }
 
-type NFolder struct {
+type Folder struct {
 	ID       FolderID
 	Name     FolderName
 	ParentID FolderID
 }
 
 type FolderRepository interface {
-	Create(ctx context.Context, f NFolder) error
-	ByID(ctx context.Context, id FolderID) (NFolder, error)
-	All(ctx context.Context) ([]NFolder, error)
-	Update(ctx context.Context, oldID FolderID, a NFolder) error
+	Create(ctx context.Context, f Folder) error
+	ByID(ctx context.Context, id FolderID) (Folder, error)
+	All(ctx context.Context) ([]Folder, error)
+	Update(ctx context.Context, oldID FolderID, a Folder) error
 	Delete(ctx context.Context, id FolderID) error
 
 	Ancestors(ctx context.Context, id FolderID) ([]string, error)
@@ -104,7 +104,7 @@ func (s *FolderService) Create(ctx context.Context, id FolderID, parentID Folder
 		parentID = s.rootFolder
 	}
 
-	f := NFolder{
+	f := Folder{
 		ID:       id,
 		Name:     name,
 		ParentID: parentID,
@@ -117,16 +117,16 @@ func (s *FolderService) Create(ctx context.Context, id FolderID, parentID Folder
 	return nil
 }
 
-func (s *FolderService) ByID(ctx context.Context, id FolderID) (NFolder, error) {
+func (s *FolderService) ByID(ctx context.Context, id FolderID) (Folder, error) {
 	f, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return NFolder{}, fmt.Errorf("get folder by id %q: %w", id, err)
+		return Folder{}, fmt.Errorf("get folder by id %q: %w", id, err)
 	}
 
 	return f, nil
 }
 
-func (s *FolderService) All(ctx context.Context) ([]NFolder, error) {
+func (s *FolderService) All(ctx context.Context) ([]Folder, error) {
 	f, err := s.repo.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get all folders: %w", err)
@@ -159,7 +159,7 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 	newName := newIfPresent(params.Name, oldFolder.Name)
 	newParent := newIfPresent(params.Parent, oldFolder.ParentID)
 
-	newFolder := NFolder{
+	newFolder := Folder{
 		ID:       newID,
 		Name:     newName,
 		ParentID: newParent,
@@ -262,7 +262,7 @@ func NewSQLiteFolderRepository(q *store.Queries, rootID FolderID) *SQLiteFolderR
 	}
 }
 
-func (r *SQLiteFolderRepository) Create(ctx context.Context, a NFolder) error {
+func (r *SQLiteFolderRepository) Create(ctx context.Context, a Folder) error {
 	return r.db(ctx).CreateFolder(ctx, store.CreateFolderParams{
 		ID:          string(a.ID),
 		DisplayName: string(a.Name),
@@ -270,28 +270,28 @@ func (r *SQLiteFolderRepository) Create(ctx context.Context, a NFolder) error {
 	})
 }
 
-func (r *SQLiteFolderRepository) ByID(ctx context.Context, id FolderID) (NFolder, error) {
+func (r *SQLiteFolderRepository) ByID(ctx context.Context, id FolderID) (Folder, error) {
 	row, err := r.db(ctx).GetFolder(ctx, string(id))
 	if err != nil {
-		return NFolder{}, err
+		return Folder{}, err
 	}
 
-	return NFolder{
+	return Folder{
 		ID:       FolderID(row.ID),
 		Name:     FolderName(row.DisplayName),
 		ParentID: FolderID(db.FromNullString(row.ParentID)).FromDB(r.rootID),
 	}, nil
 }
 
-func (r *SQLiteFolderRepository) All(ctx context.Context) ([]NFolder, error) {
+func (r *SQLiteFolderRepository) All(ctx context.Context) ([]Folder, error) {
 	rows, err := r.db(ctx).GetFolders(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	folders := make([]NFolder, 0, len(rows))
+	folders := make([]Folder, 0, len(rows))
 	for _, row := range rows {
-		folders = append(folders, NFolder{
+		folders = append(folders, Folder{
 			ID:       FolderID(row.ID),
 			Name:     FolderName(row.DisplayName),
 			ParentID: FolderID(db.FromNullString(row.ParentID)).FromDB(r.rootID),
@@ -309,7 +309,7 @@ func (r *SQLiteFolderRepository) HasChildren(ctx context.Context, id FolderID) (
 	return r.db(ctx).CheckFolderHasChildren(ctx, db.ToNullString(id.ToDB(r.rootID)))
 }
 
-func (r *SQLiteFolderRepository) Update(ctx context.Context, id FolderID, a NFolder) error {
+func (r *SQLiteFolderRepository) Update(ctx context.Context, id FolderID, a Folder) error {
 	return r.db(ctx).UpdateFolder(ctx, store.UpdateFolderParams{
 		OldID:       string(id),
 		NewID:       string(a.ID),
