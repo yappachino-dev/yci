@@ -13,6 +13,8 @@ import (
 	"playlist-manager/internal/app"
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/library"
+
+	_ "modernc.org/sqlite"
 )
 
 var appl *app.Container

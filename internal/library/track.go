@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -17,10 +18,24 @@ import (
 	"github.com/google/uuid"
 )
 
+var ErrProcessAborted = errors.New("processing aborted by user")
+
 type (
-	TrackID   string
-	TrackPath string
+	TrackID       string
+	TrackPath     string
+	StagingAction int
 )
+
+const (
+	ActionImport StagingAction = iota
+	ActionSkip
+	ActionAbort
+)
+
+type StagingResult struct {
+	Action StagingAction
+	Artist ArtistID
+}
 
 type Track struct {
 	ID           TrackID
@@ -99,7 +114,7 @@ type StagingConfig interface {
 	LibraryDir() string
 }
 
-type LinkHandler func(channelName string, title string) (artistID string, err error)
+type LinkHandler func(channelName string, title string) (StagingResult, error)
 
 type TrackService struct {
 	repo           TrackRepository
@@ -267,6 +282,7 @@ func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursiv
 
 func (s *TrackService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {
 	stagingDir := s.config.StagingDir()
+
 	files, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("could not read staging directory: %w", err)
@@ -278,6 +294,10 @@ func (s *TrackService) ProcessStaging(ctx context.Context, onUnknown LinkHandler
 		}
 
 		if err := s.processSingleStagingFile(ctx, file.Name(), onUnknown); err != nil {
+			if errors.Is(err, ErrProcessAborted) {
+				return err
+			}
+
 			fmt.Printf("Error processing staging file %s: %v\n", file.Name(), err)
 			continue
 		}
@@ -309,10 +329,13 @@ func (s *TrackService) processSingleStagingFile(ctx context.Context, fileName st
 			return err
 		}
 
-		artistID = ArtistID(res)
-
-		if artistID == "skip" || artistID == "" {
+		switch res.Action {
+		case ActionSkip:
 			return nil
+		case ActionAbort:
+			return ErrProcessAborted
+		case ActionImport:
+			artistID = res.Artist
 		}
 
 		if err := s.linker.LinkChannelToArtist(ctx, artistID, channelName); err != nil {

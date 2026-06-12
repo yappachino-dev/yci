@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -57,15 +58,15 @@ func runProcessStaging(ctx context.Context) error {
 		}
 	}
 
-	handler := func(channelName string, title string) (string, error) {
+	handler := func(channelName string, title string) (library.StagingResult, error) {
 		if skipUnknown {
-			return "skip", nil
+			return library.StagingResult{Action: library.ActionSkip}, nil
 		}
 		if skipCollabArtists && strings.Contains(channelName, ",") {
-			return "skip", nil
+			return library.StagingResult{Action: library.ActionSkip}, nil
 		}
 		if fallbackArtist != "" {
-			return fallbackArtist, nil
+			return library.StagingResult{Action: library.ActionImport, Artist: library.ArtistID(fallbackArtist)}, nil
 		}
 
 		reader := bufio.NewReader(os.Stdin)
@@ -76,22 +77,30 @@ func runProcessStaging(ctx context.Context) error {
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			return "", fmt.Errorf("failed to read terminal input: %w", err)
+			return library.StagingResult{}, fmt.Errorf("failed to read terminal input: %w", err)
 		}
 
 		input = strings.TrimSpace(input)
 
 		if input == "exit" || input == "quit" {
-			fmt.Println("    Aborting process loop...")
-			os.Exit(0)
+			return library.StagingResult{Action: library.ActionAbort}, nil
 		}
 
-		return input, nil
+		if input == "skip" || input == "" {
+			return library.StagingResult{Action: library.ActionSkip}, nil
+		}
+
+		return library.StagingResult{Action: library.ActionImport, Artist: library.ArtistID(input)}, nil
 	}
 
 	fmt.Println("Processing staging directory...")
 
 	if err := appl.TrackService.ProcessStaging(ctx, handler); err != nil {
+		if errors.Is(err, library.ErrProcessAborted) {
+			fmt.Println("\nProcessing loop aborted by user.")
+			return nil
+		}
+
 		return err
 	}
 
