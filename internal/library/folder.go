@@ -80,15 +80,23 @@ type FolderService struct {
 	config      StagingConfig
 }
 
-func NewFolderService(r FolderRepository, tm TracksPathWriter, dm PhysicalMover, t Transactor, root FolderID, cfg StagingConfig) *FolderService {
-	return &FolderService{
-		repo:        r,
-		trackWriter: tm,
-		diskMover:   dm,
-		transactor:  t,
-		rootFolder:  root,
+type FolderServiceConfig struct {
+	FolderRepo  FolderRepository
+	TrackWriter TracksPathWriter
+	DiskMover   PhysicalMover
+	Transactor  Transactor
+	RootFolder  FolderID
+	Config      StagingConfig
+}
 
-		config: cfg,
+func NewFolderService(cfg FolderServiceConfig) *FolderService {
+	return &FolderService{
+		repo:        cfg.FolderRepo,
+		trackWriter: cfg.TrackWriter,
+		diskMover:   cfg.DiskMover,
+		transactor:  cfg.Transactor,
+		rootFolder:  cfg.RootFolder,
+		config:      cfg.Config,
 	}
 }
 

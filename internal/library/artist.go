@@ -62,13 +62,21 @@ type ArtistService struct {
 	rootFolder    FolderID
 }
 
-func NewArtistService(r ArtistRepository, fc FolderChecker, tm ArtistTracksMover, t Transactor, root FolderID) *ArtistService {
+type ArtistServiceConfig struct {
+	ArtistRepo    ArtistRepository
+	FolderChecker FolderChecker
+	TrackMover    ArtistTracksMover
+	Transactor    Transactor
+	RootFolder    FolderID
+}
+
+func NewArtistService(cfg ArtistServiceConfig) *ArtistService {
 	return &ArtistService{
-		repo:          r,
-		folderChecker: fc,
-		trackMover:    tm,
-		transactor:    t,
-		rootFolder:    root,
+		repo:          cfg.ArtistRepo,
+		folderChecker: cfg.FolderChecker,
+		trackMover:    cfg.TrackMover,
+		transactor:    cfg.Transactor,
+		rootFolder:    cfg.RootFolder,
 	}
 }
 

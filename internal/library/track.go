@@ -94,19 +94,21 @@ type TrackService struct {
 	config         StagingConfig
 }
 
-func NewTrackService(
-	r TrackRepository,
-	fr FolderResolver,
-	dm PhysicalTrackMover,
-	t Transactor,
-	cfg StagingConfig,
-) *TrackService {
+type TrackServiceConfig struct {
+	TrackRepo      TrackRepository
+	FolderResolver FolderResolver
+	DiskMover      PhysicalTrackMover
+	Transactor     Transactor
+	Config         StagingConfig
+}
+
+func NewTrackService(cfg TrackServiceConfig) *TrackService {
 	return &TrackService{
-		repo:           r,
-		folderResolver: fr,
-		diskMover:      dm,
-		transactor:     t,
-		config:         cfg,
+		repo:           cfg.TrackRepo,
+		folderResolver: cfg.FolderResolver,
+		diskMover:      cfg.DiskMover,
+		transactor:     cfg.Transactor,
+		config:         cfg.Config,
 	}
 }
 

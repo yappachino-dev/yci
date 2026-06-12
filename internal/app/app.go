@@ -38,24 +38,31 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (
 	metaReader := library.NewTagMetadataReader()
 
 	channelService := library.NewChannelService(channelRepo)
-	folderService := library.NewFolderService(
-		folderRepo,
-		trackRepo,
-		diskMover,
-		transactor,
-		rootID,
-		paths,
-	)
 
-	trackService := library.NewTrackService(
-		trackRepo,
-		folderService,
-		diskMover,
-		transactor,
-		paths,
-	)
+	folderService := library.NewFolderService(library.FolderServiceConfig{
+		FolderRepo:  folderRepo,
+		TrackWriter: trackRepo,
+		DiskMover:   diskMover,
+		Transactor:  transactor,
+		RootFolder:  rootID,
+		Config:      paths,
+	})
 
-	artistService := library.NewArtistService(artistRepo, folderRepo, trackService, transactor, rootID)
+	trackService := library.NewTrackService(library.TrackServiceConfig{
+		TrackRepo:      trackRepo,
+		FolderResolver: folderService,
+		DiskMover:      diskMover,
+		Transactor:     transactor,
+		Config:         paths,
+	})
+
+	artistService := library.NewArtistService(library.ArtistServiceConfig{
+		ArtistRepo:    artistRepo,
+		FolderChecker: folderRepo,
+		TrackMover:    trackService,
+		Transactor:    transactor,
+		RootFolder:    rootID,
+	})
 
 	stagingService := library.NewStagingService(library.StagingServiceConfig{
 		TrackCreator:   trackService,
