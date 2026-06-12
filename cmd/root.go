@@ -15,8 +15,6 @@ import (
 	"playlist-manager/internal/library"
 )
 
-// var lib *library.Library
-
 var appl *app.Container
 
 var rootCmd = &cobra.Command{
@@ -30,7 +28,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to retrieve system configurations: %w", err)
 		}
 
-		if err := os.MkdirAll(paths.Config, 0o755); err != nil {
+		if err = os.MkdirAll(paths.Config, 0o755); err != nil {
 			return fmt.Errorf("failed creating application configuration directory: %w", err)
 		}
 
@@ -39,17 +37,21 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed opening SQLite storage engine: %w", err)
 		}
 
-		if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		if _, err = dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 			dbConn.Close()
 			return fmt.Errorf("failed enabling foreign key constraints: %w", err)
 		}
 
-		if err := db.RunMigrations(ctx, dbConn); err != nil {
+		if err = db.RunMigrations(ctx, dbConn); err != nil {
 			dbConn.Close()
 			return fmt.Errorf("database migration failed: %w", err)
 		}
 
-		appl = app.NewContainer(dbConn, paths)
+		appl, err = app.NewContainer(ctx, dbConn, paths)
+		if err != nil {
+			dbConn.Close()
+			return fmt.Errorf("failed to bootstrap database prepared cache mapping: %w", err)
+		}
 
 		return nil
 	},

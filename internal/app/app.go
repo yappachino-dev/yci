@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/library"
@@ -17,8 +19,12 @@ type Container struct {
 	Paths         library.AppPaths
 }
 
-func NewContainer(dbConn *sql.DB, paths library.AppPaths) *Container {
-	queries := store.New(dbConn)
+func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (*Container, error) {
+	queries, err := store.Prepare(ctx, dbConn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare application sql statements: %w", err)
+	}
+
 	transactor := db.NewSQLiteTransactor(dbConn)
 	rootID := library.FolderID(library.RootID)
 
@@ -51,5 +57,5 @@ func NewContainer(dbConn *sql.DB, paths library.AppPaths) *Container {
 		TrackService:  trackService,
 		ChannelLinker: linker,
 		Paths:         paths,
-	}
+	}, nil
 }
