@@ -54,19 +54,13 @@ type TrackPathMove struct {
 	NewPath TrackPath
 }
 
-type TrackMetadata struct {
-	Title  string
-	Album  string
-	Artist string
-}
-
 type TrackRepository interface {
 	Create(ctx context.Context, t Track) error
 	ByID(ctx context.Context, id TrackID) (Track, error)
 	ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error)
 	ByPathPattern(ctx context.Context, pattern string) ([]Track, error)
 	ExistsBySourceID(ctx context.Context, sourceID string) (bool, error)
-	Update(ctx context.Context, id TrackID, t Track) error
+	// Update(ctx context.Context, id TrackID, t Track) error
 	Delete(ctx context.Context, id TrackID) error
 	UpdatePathsByPrefix(ctx context.Context, oldPrefix, newPrefix string) error
 	UpdatePathsBatch(ctx context.Context, moves []TrackPathMove) error

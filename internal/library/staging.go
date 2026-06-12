@@ -82,6 +82,12 @@ func NewStagingService(cfg StagingServiceConfig) *StagingService {
 	}
 }
 
+type TrackMetadata struct {
+	Title  string
+	Album  string
+	Artist string
+}
+
 type LinkHandler func(channelName string, title string) (StagingResult, error)
 
 func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {

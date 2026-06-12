@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"playlist-manager/internal/db"
+	"playlist-manager/internal/fs"
 	"playlist-manager/internal/library"
 	"playlist-manager/internal/store"
 )
@@ -34,7 +35,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (
 	trackRepo := library.NewSQLiteTrackRepository(queries)
 	channelRepo := library.NewSQLiteChannelRepository(queries)
 
-	diskMover := library.NewOSDiskMover()
+	diskMover := fs.NewOSDiskMover()
 	metaReader := library.NewTagMetadataReader()
 
 	channelService := library.NewChannelService(channelRepo)
