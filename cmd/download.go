@@ -125,7 +125,7 @@ func filterUniqueURLs(args []string, filePath string) ([]string, int, error) {
 
 	stagedIDs := make(map[string]bool)
 
-	if stagedFiles, err := os.ReadDir(appl.Paths.Staging); err != nil {
+	if stagedFiles, err := os.ReadDir(appl.Paths.StagingDir()); err != nil {
 		return nil, 0, fmt.Errorf("failed to read staged dir: %w", err)
 	} else {
 		for _, f := range stagedFiles {
@@ -158,7 +158,7 @@ type processResult struct {
 }
 
 func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep string) processResult {
-	targetPath := filepath.Join(appl.Paths.Staging, "%(id)s.opus")
+	targetPath := filepath.Join(appl.Paths.StagingDir(), "%(id)s.opus")
 
 	successCount := 0
 	dbSkippedCount := 0

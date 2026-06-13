@@ -1,4 +1,4 @@
-package library
+package fs
 
 import (
 	"fmt"
@@ -7,9 +7,9 @@ import (
 )
 
 type AppPaths struct {
-	Config  string
-	Library string
-	Staging string
+	config  string
+	library string
+	staging string
 }
 
 func GetPaths() (AppPaths, error) {
@@ -24,16 +24,20 @@ func GetPaths() (AppPaths, error) {
 	}
 
 	return AppPaths{
-		Config:  filepath.Join(conf, "yappachino", "playlist-manager"),
-		Library: filepath.Join(home, "Music", "Managed"),
-		Staging: filepath.Join(home, "Music", "Staging"),
+		config:  filepath.Join(conf, "yci"),
+		library: filepath.Join(home, "Music", "Managed"),
+		staging: filepath.Join(home, "Music", "Staging"),
 	}, nil
 }
 
+func (p AppPaths) ConfigDir() string {
+	return p.config
+}
+
 func (p AppPaths) StagingDir() string {
-	return p.Staging
+	return p.staging
 }
 
 func (p AppPaths) LibraryDir() string {
-	return p.Library
+	return p.library
 }

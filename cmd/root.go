@@ -13,7 +13,7 @@ import (
 
 	"playlist-manager/internal/app"
 	"playlist-manager/internal/db"
-	"playlist-manager/internal/library"
+	"playlist-manager/internal/fs"
 
 	_ "modernc.org/sqlite"
 )
@@ -35,16 +35,16 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		paths, err := library.GetPaths()
+		paths, err := fs.GetPaths()
 		if err != nil {
 			return fmt.Errorf("load application paths: %w", err)
 		}
 
-		if err = os.MkdirAll(paths.Config, 0o755); err != nil {
+		if err = os.MkdirAll(paths.ConfigDir(), 0o755); err != nil {
 			return fmt.Errorf("create config directory: %w", err)
 		}
 
-		dbConn, err := sql.Open("sqlite", filepath.Join(paths.Config, "data.db"))
+		dbConn, err := sql.Open("sqlite", filepath.Join(paths.ConfigDir(), "data.db"))
 		if err != nil {
 			return fmt.Errorf("open sqlite database: %w", err)
 		}

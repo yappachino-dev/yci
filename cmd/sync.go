@@ -64,7 +64,7 @@ var syncCmd = &cobra.Command{
 				continue
 			}
 
-			absPath := filepath.Join(appl.Paths.Library, filepath.FromSlash(string(t.RelativePath)))
+			absPath := filepath.Join(appl.Paths.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
 			if _, err := os.Stat(absPath); os.IsNotExist(err) {
 				missing = append(missing, t)
 			}
@@ -92,7 +92,7 @@ var syncCmd = &cobra.Command{
 			fmt.Printf("--- [Recovering %d / %d] ---\n", i+1, len(missing))
 			fmt.Printf("Track: %s\n", t.Title)
 
-			targetPath := filepath.Join(appl.Paths.Library, filepath.FromSlash(string(t.RelativePath)))
+			targetPath := filepath.Join(appl.Paths.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
 
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				fmt.Printf("Failed to create directory for %s: %v\n\n", t.Title, err)

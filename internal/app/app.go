@@ -18,10 +18,10 @@ type Container struct {
 	TrackService   *library.TrackService
 	ChannelService *library.ChannelService
 	StagingService *library.StagingService
-	Paths          library.AppPaths
+	Paths          fs.AppPaths
 }
 
-func NewContainer(ctx context.Context, dbConn *sql.DB, paths library.AppPaths) (*Container, error) {
+func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Container, error) {
 	queries, err := store.Prepare(ctx, dbConn)
 	if err != nil {
 		return nil, fmt.Errorf("prepare database statements: %w", err)
