@@ -42,7 +42,7 @@ var downloadCmd = &cobra.Command{
 		stats := processQueue(ctx, uniqueUrls, delayParts[0], delayParts[1])
 
 		fmt.Printf(
-			" Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
+			"Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
 			stats.success, stats.skipped, stats.failed,
 		)
 
@@ -167,9 +167,9 @@ func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep 
 		if sourceID := utils.ExtractSourceID(url); sourceID != "" {
 			exists, err := appl.TrackService.ExistsBySourceID(ctx, sourceID)
 			if err != nil {
-				fmt.Printf(" Warning: DB check failed for %s: %v\n", sourceID, err)
+				fmt.Printf("Warning: DB check failed for %s: %v\n", sourceID, err)
 			} else if exists {
-				fmt.Printf(" Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
+				fmt.Printf("Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
 				dbSkippedCount++
 				continue
 			}
@@ -178,7 +178,7 @@ func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep 
 		fmt.Printf("Target: %s\n", url)
 
 		if err := downloader.Download(targetPath, url, minSleep, maxSleep); err != nil {
-			fmt.Printf(" Error downloading %s: %v\n\n", url, err)
+			fmt.Printf("Error downloading %s: %v\n\n", url, err)
 			continue
 		}
 

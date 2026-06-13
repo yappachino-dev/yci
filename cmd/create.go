@@ -33,7 +33,7 @@ var createFolderCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf(" Created folder: %q (ID: %s) under parent: %s\n", name, id, parent)
+		fmt.Printf("Created folder: %q (ID: %s) under parent: %s\n", name, id, parent)
 		return nil
 	},
 }
@@ -54,7 +54,7 @@ var createArtistCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf(" Created artist: %q (ID: %s) in folder: %s\n", name, id, folder)
+		fmt.Printf("Created artist: %q (ID: %s) in folder: %s\n", name, id, folder)
 		return nil
 	},
 }
@@ -78,7 +78,7 @@ var createChannelCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf(" Linked channel %q to Artist: %s\n", channelName, artist.Name)
+		fmt.Printf("Linked channel %q to Artist: %s\n", channelName, artist.Name)
 		return nil
 	},
 }

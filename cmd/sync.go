@@ -41,13 +41,13 @@ var syncCmd = &cobra.Command{
 		var err error
 
 		if artist != "" {
-			fmt.Printf(" Scanning missing files for artist: %s...\n", artist)
+			fmt.Printf("Scanning missing files for artist: %s...\n", artist)
 			tracks, err = appl.TrackService.ByArtistID(ctx, library.ArtistID(artist))
 		} else if folder != "" {
-			fmt.Printf(" Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
+			fmt.Printf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
 			tracks, err = appl.TrackService.ByFolder(ctx, library.FolderID(folder), recursive)
 		} else {
-			fmt.Println(" Scanning entire library for missing files...")
+			fmt.Println("Scanning entire library for missing files...")
 			tracks, err = appl.TrackService.All(ctx)
 		}
 
@@ -68,11 +68,11 @@ var syncCmd = &cobra.Command{
 		}
 
 		if len(missing) == 0 {
-			fmt.Println(" Library is fully synced. No missing files detected.")
+			fmt.Println("Library is fully synced. No missing files detected.")
 			return nil
 		}
 
-		fmt.Printf(" Audit complete. Found %d missing files.\n\n", len(missing))
+		fmt.Printf("Audit complete. Found %d missing files.\n\n", len(missing))
 
 		if dryRun {
 			fmt.Println("--- DRY RUN: The following files would be downloaded ---")
@@ -82,7 +82,7 @@ var syncCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Println(" Starting recovery process...")
+		fmt.Println("Starting recovery process...")
 		successCount := 0
 
 		for i, t := range missing {
@@ -92,12 +92,12 @@ var syncCmd = &cobra.Command{
 			targetPath := filepath.Join(appl.Paths.Library, filepath.FromSlash(string(t.RelativePath)))
 
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				fmt.Printf(" Failed to create directory for %s: %v\n\n", t.Title, err)
+				fmt.Printf("Failed to create directory for %s: %v\n\n", t.Title, err)
 				continue
 			}
 
 			if err := downloader.Download(targetPath, t.SourceID, minSleep, maxSleep); err != nil {
-				fmt.Printf(" Error recovering %s: %v\n\n", t.Title, err)
+				fmt.Printf("Error recovering %s: %v\n\n", t.Title, err)
 				continue
 			}
 
@@ -105,7 +105,7 @@ var syncCmd = &cobra.Command{
 			fmt.Println()
 		}
 
-		fmt.Printf(" Sync complete! Successfully recovered %d/%d files.\n", successCount, len(missing))
+		fmt.Printf("Sync complete! Successfully recovered %d/%d files.\n", successCount, len(missing))
 		return nil
 	},
 }

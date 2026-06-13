@@ -42,7 +42,7 @@ var deleteFolderCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("  Deleted folder: %s\n", id)
+		fmt.Printf("Deleted folder: %s\n", id)
 		return nil
 	},
 }
@@ -58,7 +58,7 @@ var deleteArtistCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("  Deleted artist: %s\n", id)
+		fmt.Printf("Deleted artist: %s\n", id)
 		return nil
 	},
 }
@@ -77,7 +77,7 @@ var deleteChannelCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("  Unlinked channel %q from artist %q\n", channelName, artistID)
+		fmt.Printf("Unlinked channel %q from artist %q\n", channelName, artistID)
 		return nil
 	},
 }
@@ -93,7 +93,7 @@ var deleteTrackCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("  Deleted track and physical file for ID: %s\n", id)
+		fmt.Printf("Deleted track and physical file for ID: %s\n", id)
 		return nil
 	},
 }
