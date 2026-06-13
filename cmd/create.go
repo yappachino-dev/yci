@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Command Definitions ---
-
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new resource in the library",
@@ -21,9 +19,9 @@ var createFolderCmd = &cobra.Command{
 	Use:   "folder",
 	Short: "Create a new folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		name, _ := cmd.Flags().GetString("name")
-		parent, _ := cmd.Flags().GetString("parent")
+		id, _ := cmd.Flags().GetString(flagID)
+		name, _ := cmd.Flags().GetString(flagName)
+		parent, _ := cmd.Flags().GetString(flagParent)
 
 		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
@@ -42,9 +40,9 @@ var createArtistCmd = &cobra.Command{
 	Use:   "artist",
 	Short: "Create a new artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		name, _ := cmd.Flags().GetString("name")
-		folder, _ := cmd.Flags().GetString("folder")
+		id, _ := cmd.Flags().GetString(flagID)
+		name, _ := cmd.Flags().GetString(flagName)
+		folder, _ := cmd.Flags().GetString(flagFolder)
 
 		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
@@ -63,8 +61,8 @@ var createChannelCmd = &cobra.Command{
 	Use:   "channel",
 	Short: "Link a YouTube channel name to an existing artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		artistID, _ := cmd.Flags().GetString("artist")
-		channelName, _ := cmd.Flags().GetString("name")
+		artistID, _ := cmd.Flags().GetString(flagArtist)
+		channelName, _ := cmd.Flags().GetString(flagName)
 
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
@@ -83,8 +81,6 @@ var createChannelCmd = &cobra.Command{
 	},
 }
 
-// --- Initialization ---
-
 func init() {
 	rootCmd.AddCommand(createCmd)
 
@@ -92,26 +88,21 @@ func init() {
 	createCmd.AddCommand(createArtistCmd)
 	createCmd.AddCommand(createChannelCmd)
 
-	createFolderCmd.Flags().StringP("id", "i", "", "The unique slug ID for the folder")
-	createFolderCmd.Flags().StringP("name", "n", "", "Display name of the folder (Required)")
-	createFolderCmd.Flags().StringP("parent", "p", library.RootID, "Parent folder ID (defaults to root)")
-	createFolderCmd.MarkFlagRequired("name")
+	createFolderCmd.Flags().StringP(flagID, "i", "", "The unique slug ID for the folder")
+	createFolderCmd.Flags().StringP(flagName, "n", "", "Display name of the folder (Required)")
+	createFolderCmd.Flags().StringP(flagParent, "p", library.RootID, "Parent folder ID (defaults to root)")
+	createFolderCmd.MarkFlagRequired(flagName)
+	createFolderCmd.RegisterFlagCompletionFunc(flagParent, folderIDCompletion)
 
-	createArtistCmd.Flags().StringP("id", "i", "", "The unique slug ID for the artist")
-	createArtistCmd.Flags().StringP("name", "n", "", "Name of the artist (Required)")
-	createArtistCmd.Flags().StringP("folder", "f", "", "Parent folder ID (defaults to folder with same id; root)")
-	createArtistCmd.MarkFlagRequired("name")
+	createArtistCmd.Flags().StringP(flagID, "i", "", "The unique slug ID for the artist")
+	createArtistCmd.Flags().StringP(flagName, "n", "", "Name of the artist (Required)")
+	createArtistCmd.Flags().StringP(flagFolder, "f", "", "Parent folder ID (defaults to folder with same id; root)")
+	createArtistCmd.MarkFlagRequired(flagName)
+	createArtistCmd.RegisterFlagCompletionFunc(flagFolder, folderIDCompletion)
 
-	createChannelCmd.Flags().StringP("artist", "a", "", "The target Artist ID (Required)")
-	createChannelCmd.Flags().StringP("name", "n", "", "The YouTube channel name to link (Required)")
-	createChannelCmd.MarkFlagRequired("artist")
-	createChannelCmd.MarkFlagRequired("name")
-
-	// --- Dynamic Autocompletions ---
-
-	createFolderCmd.RegisterFlagCompletionFunc("parent", folderIDCompletion)
-
-	createArtistCmd.RegisterFlagCompletionFunc("folder", folderIDCompletion)
-
-	createChannelCmd.RegisterFlagCompletionFunc("artist", artistIDCompletion)
+	createChannelCmd.Flags().StringP(flagArtist, "a", "", "The target Artist ID (Required)")
+	createChannelCmd.Flags().StringP(flagName, "n", "", "The YouTube channel name to link (Required)")
+	createChannelCmd.MarkFlagRequired(flagArtist)
+	createChannelCmd.MarkFlagRequired(flagName)
+	createChannelCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)
 }

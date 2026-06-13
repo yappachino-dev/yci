@@ -18,6 +18,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	flagID     = "id"
+	flagName   = "name"
+	flagParent = "parent"
+	flagArtist = "artist"
+	flagFolder = "folder"
+	flagDelay  = "delay"
+)
+
 var appl *app.Container
 
 var rootCmd = &cobra.Command{

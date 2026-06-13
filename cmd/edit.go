@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Command Definitions ---
+const flagNewID = "new-id"
 
 var editCmd = &cobra.Command{
 	Use:   "edit",
@@ -21,21 +21,21 @@ var editFolderCmd = &cobra.Command{
 	Use:   "folder",
 	Short: "Rename or move a folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		oldID, _ := cmd.Flags().GetString("id")
+		oldID, _ := cmd.Flags().GetString(flagID)
 		oldID = strings.TrimSpace(oldID)
 
 		params := library.FolderUpdateParams{}
 
-		if cmd.Flags().Changed("name") {
-			n, _ := cmd.Flags().GetString("name")
+		if cmd.Flags().Changed(flagName) {
+			n, _ := cmd.Flags().GetString(flagName)
 			params.Name = library.FolderName(strings.TrimSpace(n))
 		}
-		if cmd.Flags().Changed("parent") {
-			p, _ := cmd.Flags().GetString("parent")
+		if cmd.Flags().Changed(flagParent) {
+			p, _ := cmd.Flags().GetString(flagParent)
 			params.Parent = library.FolderID(strings.TrimSpace(p))
 		}
-		if cmd.Flags().Changed("new-id") {
-			n, _ := cmd.Flags().GetString("new-id")
+		if cmd.Flags().Changed(flagNewID) {
+			n, _ := cmd.Flags().GetString(flagNewID)
 			params.NewID = library.FolderID(strings.TrimSpace(n))
 		}
 
@@ -52,21 +52,21 @@ var editArtistCmd = &cobra.Command{
 	Use:   "artist",
 	Short: "Rename or move an artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		oldID, _ := cmd.Flags().GetString("id")
+		oldID, _ := cmd.Flags().GetString(flagID)
 		oldID = strings.TrimSpace(oldID)
 
 		params := library.ArtistUpdateParams{}
 
-		if cmd.Flags().Changed("name") {
-			name, _ := cmd.Flags().GetString("name")
+		if cmd.Flags().Changed(flagName) {
+			name, _ := cmd.Flags().GetString(flagName)
 			params.Name = library.ArtistName(strings.TrimSpace(name))
 		}
-		if cmd.Flags().Changed("folder") {
-			folder, _ := cmd.Flags().GetString("folder")
+		if cmd.Flags().Changed(flagFolder) {
+			folder, _ := cmd.Flags().GetString(flagFolder)
 			params.Folder = library.FolderID(strings.TrimSpace(folder))
 		}
-		if cmd.Flags().Changed("new-id") {
-			newID, _ := cmd.Flags().GetString("new-id")
+		if cmd.Flags().Changed(flagNewID) {
+			newID, _ := cmd.Flags().GetString(flagNewID)
 			params.NewID = library.ArtistID(strings.TrimSpace(newID))
 		}
 
@@ -79,31 +79,25 @@ var editArtistCmd = &cobra.Command{
 	},
 }
 
-// --- Initialization ---
-
 func init() {
 	rootCmd.AddCommand(editCmd)
 
 	editCmd.AddCommand(editFolderCmd)
 	editCmd.AddCommand(editArtistCmd)
 
-	editFolderCmd.Flags().StringP("id", "i", "", "The current ID of the folder to edit (Required)")
-	editFolderCmd.Flags().StringP("name", "n", "", "Set a new display name")
-	editFolderCmd.Flags().StringP("parent", "p", "", "Move to a new parent folder ID")
-	editFolderCmd.Flags().String("new-id", "", "Change the slug ID (cascades automatically)")
-	editFolderCmd.MarkFlagRequired("id")
+	editFolderCmd.Flags().StringP(flagID, "i", "", "The current ID of the folder to edit (Required)")
+	editFolderCmd.Flags().StringP(flagName, "n", "", "Set a new display name")
+	editFolderCmd.Flags().StringP(flagParent, "p", "", "Move to a new parent folder ID")
+	editFolderCmd.Flags().String(flagNewID, "", "Change the slug ID (cascades automatically)")
+	editFolderCmd.MarkFlagRequired(flagID)
+	editFolderCmd.RegisterFlagCompletionFunc(flagID, folderIDCompletion)
+	editFolderCmd.RegisterFlagCompletionFunc(flagParent, folderIDCompletion)
 
-	editArtistCmd.Flags().StringP("id", "i", "", "The current ID of the artist to edit (Required)")
-	editArtistCmd.Flags().StringP("name", "n", "", "Set a new artist name")
-	editArtistCmd.Flags().StringP("folder", "f", "", "Move to a new folder ID")
-	editArtistCmd.Flags().String("new-id", "", "Change the slug ID (cascades automatically)")
-	editArtistCmd.MarkFlagRequired("id")
-
-	// --- Dynamic Autocompletions ---
-
-	editFolderCmd.RegisterFlagCompletionFunc("id", folderIDCompletion)
-	editFolderCmd.RegisterFlagCompletionFunc("parent", folderIDCompletion)
-
-	editArtistCmd.RegisterFlagCompletionFunc("id", artistIDCompletion)
-	editArtistCmd.RegisterFlagCompletionFunc("folder", folderIDCompletion)
+	editArtistCmd.Flags().StringP(flagID, "i", "", "The current ID of the artist to edit (Required)")
+	editArtistCmd.Flags().StringP(flagName, "n", "", "Set a new artist name")
+	editArtistCmd.Flags().StringP(flagFolder, "f", "", "Move to a new folder ID")
+	editArtistCmd.Flags().String(flagNewID, "", "Change the slug ID (cascades automatically)")
+	editArtistCmd.MarkFlagRequired(flagID)
+	editArtistCmd.RegisterFlagCompletionFunc(flagID, artistIDCompletion)
+	editArtistCmd.RegisterFlagCompletionFunc(flagFolder, folderIDCompletion)
 }

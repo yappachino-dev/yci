@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Command Definitions ---
-
 var lsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List library entities (defaults to folders)",
@@ -54,8 +52,6 @@ var lsTracksCmd = &cobra.Command{
 	},
 }
 
-// --- Initialization ---
-
 func init() {
 	rootCmd.AddCommand(lsCmd)
 
@@ -64,8 +60,6 @@ func init() {
 	lsCmd.AddCommand(lsChannelsCmd)
 	lsCmd.AddCommand(lsTracksCmd)
 }
-
-// --- Helper Functions ---
 
 func newTabWriter() *tabwriter.Writer {
 	return tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)

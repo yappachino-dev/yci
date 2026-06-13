@@ -13,7 +13,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Command Definitions ---
+const (
+	flagRecursive = "recursive"
+	flagDryRun    = "dry-run"
+)
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
@@ -25,12 +28,12 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		artist, _ := cmd.Flags().GetString("artist")
-		folder, _ := cmd.Flags().GetString("folder")
-		recursive, _ := cmd.Flags().GetBool("recursive")
-		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		artist, _ := cmd.Flags().GetString(flagArtist)
+		folder, _ := cmd.Flags().GetString(flagFolder)
+		recursive, _ := cmd.Flags().GetBool(flagRecursive)
+		dryRun, _ := cmd.Flags().GetBool(flagDryRun)
 
-		delayFlag, _ := cmd.Flags().GetString("delay")
+		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 		delayParts := strings.Split(delayFlag, ":")
 		if len(delayParts) != 2 {
 			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:15)")
@@ -110,22 +113,15 @@ var syncCmd = &cobra.Command{
 	},
 }
 
-// --- Initialization ---
-
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
-	syncCmd.Flags().StringP("artist", "a", "", "Target a specific artist ID to sync")
-	syncCmd.Flags().StringP("folder", "f", "", "Target a specific folder ID to sync")
-	syncCmd.Flags().BoolP("recursive", "r", true, "When syncing a folder, include all sub-folders")
-	syncCmd.Flags().Bool("dry-run", false, "Print missing files without downloading them")
-
-	syncCmd.Flags().StringP("delay", "d", "5:30", "Randomized delay between downloads in seconds (format min:max)")
-
-	syncCmd.MarkFlagsMutuallyExclusive("artist", "folder")
-
-	// --- Dynamic Autocompletions ---
-
-	syncCmd.RegisterFlagCompletionFunc("artist", artistIDCompletion)
-	syncCmd.RegisterFlagCompletionFunc("folder", folderIDCompletion)
+	syncCmd.Flags().StringP(flagArtist, "a", "", "Target a specific artist ID to sync")
+	syncCmd.Flags().StringP(flagFolder, "f", "", "Target a specific folder ID to sync")
+	syncCmd.Flags().BoolP(flagRecursive, "r", true, "When syncing a folder, include all sub-folders")
+	syncCmd.Flags().Bool(flagDryRun, false, "Print missing files without downloading them")
+	syncCmd.Flags().StringP(flagDelay, "d", "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	syncCmd.MarkFlagsMutuallyExclusive(flagArtist, flagFolder)
+	syncCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)
+	syncCmd.RegisterFlagCompletionFunc(flagFolder, folderIDCompletion)
 }

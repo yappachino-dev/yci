@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Command Definitions ---
+const flagForce = "force"
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
@@ -23,8 +23,8 @@ var deleteFolderCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		id, _ := cmd.Flags().GetString("id")
-		force, _ := cmd.Flags().GetBool("force")
+		id, _ := cmd.Flags().GetString(flagID)
+		force, _ := cmd.Flags().GetBool(flagForce)
 
 		id = strings.TrimSpace(id)
 
@@ -51,7 +51,7 @@ var deleteArtistCmd = &cobra.Command{
 	Use:   "artist",
 	Short: "Delete an artist (WARNING: channels cascade, tracks become orphaned)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
+		id, _ := cmd.Flags().GetString(flagID)
 		id = strings.TrimSpace(id)
 
 		if err := appl.ArtistService.Delete(cmd.Context(), library.ArtistID(id)); err != nil {
@@ -67,8 +67,8 @@ var deleteChannelCmd = &cobra.Command{
 	Use:   "channel",
 	Short: "Unlink a YouTube channel from an artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		artistID, _ := cmd.Flags().GetString("artist")
-		channelName, _ := cmd.Flags().GetString("name")
+		artistID, _ := cmd.Flags().GetString(flagArtist)
+		channelName, _ := cmd.Flags().GetString(flagName)
 
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
@@ -86,7 +86,7 @@ var deleteTrackCmd = &cobra.Command{
 	Use:   "track",
 	Short: "Delete a track from the database AND remove the physical file",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
+		id, _ := cmd.Flags().GetString(flagID)
 		id = strings.TrimSpace(id)
 
 		if err := appl.TrackService.Delete(cmd.Context(), library.TrackID(id)); err != nil {
@@ -98,8 +98,6 @@ var deleteTrackCmd = &cobra.Command{
 	},
 }
 
-// --- Initialization ---
-
 func init() {
 	rootCmd.AddCommand(deleteCmd)
 
@@ -108,29 +106,23 @@ func init() {
 	deleteCmd.AddCommand(deleteChannelCmd)
 	deleteCmd.AddCommand(deleteTrackCmd)
 
-	deleteFolderCmd.Flags().StringP("id", "i", "", "The ID of the folder to delete (Required)")
-	deleteFolderCmd.Flags().BoolP("force", "f", false, "Force delete a folder even if it contains artists or sub-folders")
-	deleteFolderCmd.MarkFlagRequired("id")
+	deleteFolderCmd.Flags().StringP(flagID, "i", "", "The ID of the folder to delete (Required)")
+	deleteFolderCmd.Flags().BoolP(flagForce, "f", false, "Force delete a folder even if it contains artists or sub-folders")
+	deleteFolderCmd.MarkFlagRequired(flagID)
+	deleteFolderCmd.RegisterFlagCompletionFunc(flagID, folderIDCompletion)
 
-	deleteArtistCmd.Flags().StringP("id", "i", "", "The ID of the artist to delete (Required)")
-	deleteArtistCmd.MarkFlagRequired("id")
+	deleteArtistCmd.Flags().StringP(flagID, "i", "", "The ID of the artist to delete (Required)")
+	deleteArtistCmd.MarkFlagRequired(flagID)
+	deleteArtistCmd.RegisterFlagCompletionFunc(flagID, artistIDCompletion)
 
-	deleteChannelCmd.Flags().StringP("artist", "a", "", "The target Artist ID (Required)")
-	deleteChannelCmd.Flags().StringP("name", "n", "", "The YouTube channel name to unlink (Required)")
-	deleteChannelCmd.MarkFlagRequired("artist")
-	deleteChannelCmd.MarkFlagRequired("name")
+	deleteChannelCmd.Flags().StringP(flagArtist, "a", "", "The target Artist ID (Required)")
+	deleteChannelCmd.Flags().StringP(flagName, "n", "", "The YouTube channel name to unlink (Required)")
+	deleteChannelCmd.MarkFlagRequired(flagArtist)
+	deleteChannelCmd.MarkFlagRequired(flagName)
+	deleteChannelCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)
+	deleteChannelCmd.RegisterFlagCompletionFunc(flagName, channelNameCompletion)
 
-	deleteTrackCmd.Flags().StringP("id", "i", "", "The UUID of the track to delete (Required)")
-	deleteTrackCmd.MarkFlagRequired("id")
-
-	// --- Dynamic Autocompletions ---
-
-	deleteFolderCmd.RegisterFlagCompletionFunc("id", folderIDCompletion)
-
-	deleteArtistCmd.RegisterFlagCompletionFunc("id", artistIDCompletion)
-
-	deleteChannelCmd.RegisterFlagCompletionFunc("artist", artistIDCompletion)
-	deleteChannelCmd.RegisterFlagCompletionFunc("name", channelNameCompletion)
-
-	deleteTrackCmd.RegisterFlagCompletionFunc("id", trackIDCompletion)
+	deleteTrackCmd.Flags().StringP(flagID, "i", "", "The UUID of the track to delete (Required)")
+	deleteTrackCmd.MarkFlagRequired(flagID)
+	deleteTrackCmd.RegisterFlagCompletionFunc(flagID, trackIDCompletion)
 }

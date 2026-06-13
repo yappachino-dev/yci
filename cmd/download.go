@@ -15,6 +15,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	flagFile = "file"
+)
+
 var downloadCmd = &cobra.Command{
 	Use:   "download [urls...]",
 	Short: "Download YouTube audio directly to the staging area",
@@ -25,12 +29,12 @@ var downloadCmd = &cobra.Command{
 			return err
 		}
 
-		delayFlag, _ := cmd.Flags().GetString("delay")
+		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 		delayParts := strings.Split(delayFlag, ":")
 		if len(delayParts) != 2 {
 			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
 		}
-		filePath, _ := cmd.Flags().GetString("file")
+		filePath, _ := cmd.Flags().GetString(flagFile)
 
 		uniqueUrls, queueSkipped, err := filterUniqueURLs(args, filePath)
 		if err != nil {
@@ -57,11 +61,9 @@ var downloadCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(downloadCmd)
 
-	downloadCmd.Flags().StringP("file", "f", "", "Read a list of URLs from a text file (one per line)")
-	downloadCmd.Flags().StringP("delay", "d", "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadCmd.Flags().StringP(flagFile, "f", "", "Read a list of URLs from a text file (one per line)")
+	downloadCmd.Flags().StringP(flagDelay, "d", "5:30", "Randomized delay between downloads in seconds (format min:max)")
 }
-
-// --- Helper Functions ---
 
 func readUrlsFromFile(path string) ([]string, error) {
 	file, err := os.Open(path)
