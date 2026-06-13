@@ -17,40 +17,40 @@ var lsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List library entities (defaults to folders)",
 	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		listFolders(cmd.Context())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listFolders(cmd.Context())
 	},
 }
 
 var lsFoldersCmd = &cobra.Command{
 	Use:   "folders",
 	Short: "List all folders in a visual tree hierarchy",
-	Run: func(cmd *cobra.Command, args []string) {
-		listFolders(cmd.Context())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listFolders(cmd.Context())
 	},
 }
 
 var lsArtistsCmd = &cobra.Command{
 	Use:   "artists",
 	Short: "List all managed artists",
-	Run: func(cmd *cobra.Command, args []string) {
-		listArtists(cmd.Context())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listArtists(cmd.Context())
 	},
 }
 
 var lsChannelsCmd = &cobra.Command{
 	Use:   "channels",
 	Short: "List all YouTube channel aliases linked to artists",
-	Run: func(cmd *cobra.Command, args []string) {
-		listChannels(cmd.Context())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listChannels(cmd.Context())
 	},
 }
 
 var lsTracksCmd = &cobra.Command{
 	Use:   "tracks",
 	Short: "List all tracks in the library",
-	Run: func(cmd *cobra.Command, args []string) {
-		listTracks(cmd.Context())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listTracks(cmd.Context())
 	},
 }
 
@@ -71,11 +71,10 @@ func newTabWriter() *tabwriter.Writer {
 	return tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 }
 
-func listFolders(ctx context.Context) {
+func listFolders(ctx context.Context) error {
 	folders, err := appl.FolderService.All(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching folders: %v\n", err)
-		return
+		return fmt.Errorf("fetch folders: %w", err)
 	}
 
 	w := newTabWriter()
@@ -114,13 +113,14 @@ func listFolders(ctx context.Context) {
 
 	w.Flush()
 	fmt.Println()
+
+	return nil
 }
 
-func listArtists(ctx context.Context) {
+func listArtists(ctx context.Context) error {
 	artists, err := appl.ArtistService.All(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching artists: %v\n", err)
-		return
+		return fmt.Errorf("fetch artists: %w", err)
 	}
 
 	w := newTabWriter()
@@ -133,13 +133,14 @@ func listArtists(ctx context.Context) {
 
 	w.Flush()
 	fmt.Println()
+
+	return nil
 }
 
-func listChannels(ctx context.Context) {
+func listChannels(ctx context.Context) error {
 	channels, err := appl.ChannelService.All(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching channels: %v\n", err)
-		return
+		return fmt.Errorf("fetch channels: %w", err)
 	}
 
 	w := newTabWriter()
@@ -152,13 +153,14 @@ func listChannels(ctx context.Context) {
 
 	w.Flush()
 	fmt.Println()
+
+	return nil
 }
 
-func listTracks(ctx context.Context) {
+func listTracks(ctx context.Context) error {
 	tracks, err := appl.TrackService.All(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching tracks: %v\n", err)
-		return
+		return fmt.Errorf("fetch tracks: %w", err)
 	}
 
 	w := newTabWriter()
@@ -176,4 +178,6 @@ func listTracks(ctx context.Context) {
 
 	w.Flush()
 	fmt.Println()
+
+	return nil
 }
