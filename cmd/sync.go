@@ -99,7 +99,14 @@ var syncCmd = &cobra.Command{
 				continue
 			}
 
-			if err := downloader.Download(targetPath, t.SourceID, minSleep, maxSleep); err != nil {
+			cfg := downloader.Config{
+				AbsoluteOutputPath: targetPath,
+				URL:                t.SourceID,
+				MinSleep:           minSleep,
+				MaxSleep:           maxSleep,
+			}
+
+			if err := downloader.Download(cfg); err != nil {
 				fmt.Printf("Error recovering %s: %v\n\n", t.Title, err)
 				continue
 			}

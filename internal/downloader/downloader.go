@@ -7,7 +7,14 @@ import (
 	"os/exec"
 )
 
-func Download(exactOutputPath string, url string, minSleep string, maxSleep string) error {
+type Config struct {
+	AbsoluteOutputPath string
+	URL                string
+	MinSleep           string
+	MaxSleep           string
+}
+
+func Download(cfg Config) error {
 	args := []string{
 		"--ignore-config",
 		"--no-cookies",
@@ -22,12 +29,12 @@ func Download(exactOutputPath string, url string, minSleep string, maxSleep stri
 		"--convert-thumbnails", "jpg",
 
 		"--no-playlist",
-		"--sleep-interval", minSleep,
-		"--max-sleep-interval", maxSleep,
+		"--sleep-interval", cfg.MinSleep,
+		"--max-sleep-interval", cfg.MaxSleep,
 
 		// "--sponsorblock-remove music_off,intro,outro"
-		"--output", exactOutputPath,
-		url,
+		"--output", cfg.AbsoluteOutputPath,
+		cfg.URL,
 	}
 
 	cmd := exec.Command("yt-dlp", args...)

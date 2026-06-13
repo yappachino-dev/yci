@@ -170,6 +170,7 @@ func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep 
 			exists, err := appl.TrackService.ExistsBySourceID(ctx, sourceID)
 			if err != nil {
 				fmt.Printf("Warning: DB check failed for %s: %v\n", sourceID, err)
+				continue
 			} else if exists {
 				fmt.Printf("Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
 				dbSkippedCount++
@@ -179,7 +180,14 @@ func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep 
 
 		fmt.Printf("Target: %s\n", url)
 
-		if err := downloader.Download(targetPath, url, minSleep, maxSleep); err != nil {
+		cfg := downloader.Config{
+			AbsoluteOutputPath: targetPath,
+			URL:                url,
+			MinSleep:           minSleep,
+			MaxSleep:           maxSleep,
+		}
+
+		if err := downloader.Download(cfg); err != nil {
 			fmt.Printf("Error downloading %s: %v\n\n", url, err)
 			continue
 		}
