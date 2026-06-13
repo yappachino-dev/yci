@@ -2,6 +2,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,7 +15,7 @@ type Config struct {
 	MaxSleep           string
 }
 
-func Download(cfg Config) error {
+func Download(ctx context.Context, cfg Config) error {
 	args := []string{
 		"--ignore-config",
 		"--no-cookies",
@@ -37,7 +38,7 @@ func Download(cfg Config) error {
 		cfg.URL,
 	}
 
-	cmd := exec.Command("yt-dlp", args...)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

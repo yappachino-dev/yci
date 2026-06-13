@@ -106,7 +106,7 @@ var syncCmd = &cobra.Command{
 				MaxSleep:           maxSleep,
 			}
 
-			if err := downloader.Download(cfg); err != nil {
+			if err := downloader.Download(ctx, cfg); err != nil {
 				fmt.Printf("Error recovering %s: %v\n\n", t.Title, err)
 				continue
 			}

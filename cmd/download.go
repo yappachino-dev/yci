@@ -187,7 +187,7 @@ func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep 
 			MaxSleep:           maxSleep,
 		}
 
-		if err := downloader.Download(cfg); err != nil {
+		if err := downloader.Download(ctx, cfg); err != nil {
 			fmt.Printf("Error downloading %s: %v\n\n", url, err)
 			continue
 		}
