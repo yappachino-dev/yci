@@ -61,8 +61,8 @@ var downloadCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(downloadCmd)
 
-	downloadCmd.Flags().StringP(flagFile, "f", "", "Read a list of URLs from a text file (one per line)")
-	downloadCmd.Flags().StringP(flagDelay, "d", "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
+	downloadCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 }
 
 func readUrlsFromFile(path string) ([]string, error) {

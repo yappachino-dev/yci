@@ -97,5 +97,5 @@ func init() {
 
 	processStagingCmd.Flags().Bool(flagSkipUnknown, false, "Automatically skip tracks with unknown channels")
 	processStagingCmd.Flags().Bool(flagSkipCollabArtists, false, "Automatically skip tracks multiple channels as artist")
-	processStagingCmd.Flags().StringP(flagFallbackArtist, "f", "", "Automatically link unknown channels to this Artist ID")
+	processStagingCmd.Flags().String(flagFallbackArtist, "", "Automatically link unknown channels to this Artist ID")
 }

@@ -90,7 +90,7 @@ func init() {
 
 	createFolderCmd.Flags().StringP(flagID, "i", "", "The unique slug ID for the folder")
 	createFolderCmd.Flags().StringP(flagName, "n", "", "Display name of the folder (Required)")
-	createFolderCmd.Flags().StringP(flagParent, "p", library.RootID, "Parent folder ID (defaults to root)")
+	createFolderCmd.Flags().StringP(flagParent, "p", "", "Parent folder ID (defaults to root)")
 	createFolderCmd.MarkFlagRequired(flagName)
 	createFolderCmd.RegisterFlagCompletionFunc(flagParent, folderIDCompletion)
 

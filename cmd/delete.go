@@ -107,7 +107,7 @@ func init() {
 	deleteCmd.AddCommand(deleteTrackCmd)
 
 	deleteFolderCmd.Flags().StringP(flagID, "i", "", "The ID of the folder to delete (Required)")
-	deleteFolderCmd.Flags().BoolP(flagForce, "f", false, "Force delete a folder even if it contains artists or sub-folders")
+	deleteFolderCmd.Flags().Bool(flagForce, false, "Force delete a folder even if it contains artists or sub-folders")
 	deleteFolderCmd.MarkFlagRequired(flagID)
 	deleteFolderCmd.RegisterFlagCompletionFunc(flagID, folderIDCompletion)
 
