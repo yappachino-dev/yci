@@ -101,67 +101,9 @@ func init() {
 
 	// --- Dynamic Autocompletions ---
 
-	editFolderCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := appl.FolderService.All(cmd.Context())
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
+	editFolderCmd.RegisterFlagCompletionFunc("id", folderIDCompletion)
+	editFolderCmd.RegisterFlagCompletionFunc("parent", folderIDCompletion)
 
-		var comps []string
-		for _, f := range folders {
-			if strings.HasPrefix(string(f.ID), toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
-			}
-		}
-
-		return comps, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	editFolderCmd.RegisterFlagCompletionFunc("parent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := appl.FolderService.All(cmd.Context())
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-
-		var comps []string
-		for _, f := range folders {
-			if strings.HasPrefix(string(f.ID), toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
-			}
-		}
-
-		return comps, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	editArtistCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		artists, err := appl.ArtistService.All(cmd.Context())
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-
-		var comps []string
-		for _, a := range artists {
-			if strings.HasPrefix(string(a.ID), toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
-			}
-		}
-
-		return comps, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	editArtistCmd.RegisterFlagCompletionFunc("folder", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		folders, err := appl.FolderService.All(cmd.Context())
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-
-		var comps []string
-		for _, f := range folders {
-			if strings.HasPrefix(string(f.ID), toComplete) {
-				comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
-			}
-		}
-
-		return comps, cobra.ShellCompDirectiveNoFileComp
-	})
+	editArtistCmd.RegisterFlagCompletionFunc("id", artistIDCompletion)
+	editArtistCmd.RegisterFlagCompletionFunc("folder", folderIDCompletion)
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -71,4 +72,68 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func artistIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	artists, err := appl.ArtistService.All(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, a := range artists {
+		if strings.HasPrefix(string(a.ID), toComplete) {
+			comps = append(comps, fmt.Sprintf("%s\t%s", a.ID, a.Name))
+		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
+}
+
+func folderIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	folders, err := appl.FolderService.All(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, f := range folders {
+		if strings.HasPrefix(string(f.ID), toComplete) {
+			comps = append(comps, fmt.Sprintf("%s\t%s", f.ID, f.Name))
+		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
+}
+
+func trackIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	tracks, err := appl.TrackService.All(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, t := range tracks {
+		if strings.HasPrefix(string(t.ID), toComplete) {
+			comps = append(comps, fmt.Sprintf("%s\t%s", t.ID, t.Title))
+		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
+}
+
+func channelNameCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	channels, err := appl.ChannelService.All(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, c := range channels {
+		if strings.HasPrefix(string(c.Name), toComplete) {
+			comps = append(comps, fmt.Sprintf("%s\tLinked to: %s", c.Name, c.ArtistID))
+		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
 }
