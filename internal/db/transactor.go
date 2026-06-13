@@ -22,11 +22,13 @@ func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx co
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	var commited bool
+
 	defer func() {
 		if p := recover(); p != nil {
 			_ = tx.Rollback()
 			panic(p)
-		} else if err != nil {
+		} else if !commited && err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				err = fmt.Errorf("rollback transaction (original error: %v): %w", err, rbErr)
 			}
@@ -44,6 +46,8 @@ func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx co
 	if err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
+
+	commited = true
 
 	return nil
 }
