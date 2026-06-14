@@ -1,5 +1,5 @@
 // Package cmd provides entry point for cli tool
-package cmd
+package cli
 
 import (
 	"database/sql"
