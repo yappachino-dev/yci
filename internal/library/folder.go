@@ -11,7 +11,6 @@ import (
 	"playlist-manager/internal/appctx"
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/store"
-	"playlist-manager/internal/utils"
 )
 
 const RootID string = "root"
@@ -22,7 +21,7 @@ type (
 )
 
 func (n FolderName) ToSlugID() FolderID {
-	return FolderID(utils.NameToSlug(string(n)))
+	return FolderID(nameToSlug(string(n)))
 }
 
 func (n FolderName) Validate() error {

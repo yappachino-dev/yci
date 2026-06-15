@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"playlist-manager/internal/utils"
+	"playlist-manager/internal/fs"
 
 	"github.com/google/uuid"
 )
@@ -163,7 +163,7 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 		return fmt.Errorf("failed resolving destination path: %w", err)
 	}
 
-	safeTitle := utils.SanitizeFilename(title)
+	safeTitle := fs.SanitizeFilename(title)
 	newFilename := safeTitle + ".opus"
 
 	var relPath string

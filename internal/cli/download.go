@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"playlist-manager/internal/downloader"
-	"playlist-manager/internal/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -25,7 +24,7 @@ var downloadCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if err := utils.CheckDependencies(); err != nil {
+		if err := downloader.CheckDependencies(); err != nil {
 			return err
 		}
 
@@ -140,7 +139,7 @@ func filterUniqueURLs(args []string, filePath string) ([]string, int, error) {
 		if !seenUrls[u] {
 			seenUrls[u] = true
 
-			if stagedIDs[utils.ExtractSourceID(u)] {
+			if stagedIDs[downloader.ExtractSourceID(u)] {
 				continue
 			}
 
@@ -166,7 +165,7 @@ func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep 
 	for i, url := range urls {
 		fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(urls))
 
-		if sourceID := utils.ExtractSourceID(url); sourceID != "" {
+		if sourceID := downloader.ExtractSourceID(url); sourceID != "" {
 			exists, err := appl.TrackService.ExistsBySourceID(ctx, sourceID)
 			if err != nil {
 				fmt.Printf("Warning: DB check failed for %s: %v\n", sourceID, err)

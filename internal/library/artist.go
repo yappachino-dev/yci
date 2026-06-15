@@ -9,7 +9,6 @@ import (
 	"playlist-manager/internal/appctx"
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/store"
-	"playlist-manager/internal/utils"
 )
 
 type (
@@ -18,7 +17,7 @@ type (
 )
 
 func (n ArtistName) ToSlugID() ArtistID {
-	return ArtistID(utils.NameToSlug(string(n)))
+	return ArtistID(nameToSlug(string(n)))
 }
 
 func (n ArtistName) Validate() error {

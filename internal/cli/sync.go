@@ -8,7 +8,6 @@ import (
 
 	"playlist-manager/internal/downloader"
 	"playlist-manager/internal/library"
-	"playlist-manager/internal/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -24,7 +23,7 @@ var syncCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if err := utils.CheckDependencies(); err != nil {
+		if err := downloader.CheckDependencies(); err != nil {
 			return err
 		}
 
