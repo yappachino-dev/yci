@@ -2,11 +2,9 @@ package cli
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"playlist-manager/internal/downloader"
@@ -19,8 +17,82 @@ const (
 )
 
 var downloadCmd = &cobra.Command{
-	Use:   "download [urls...]",
+	Use:   "download",
 	Short: "Download YouTube audio directly to the staging area",
+	Args:  cobra.NoArgs,
+}
+
+type EnqueueReporter struct{}
+
+func (r *EnqueueReporter) OnHybridURL(url string) {
+	fmt.Printf("[!] Extracting video from hybrid URL: %s\n", url)
+}
+
+func (r *EnqueueReporter) OnPlaylistURL(url string) {
+	fmt.Printf("[!] Extracting every video from playlist URL: %s\n", url)
+}
+
+func (r *EnqueueReporter) OnEnqueueSkipped(id string, reason string) {
+	fmt.Printf("[-] Skipped %s: %s\n", id, reason)
+}
+
+var enqueueCmd = &cobra.Command{
+	Use:   "enqueue [urls...]",
+	Short: "Enqueue YouTube videos for download",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
+		if err := downloader.CheckDependencies(); err != nil {
+			return err
+		}
+
+		urls := args
+
+		filePath, _ := cmd.Flags().GetString(flagFile)
+		if filePath != "" {
+			fileUrls, err := readUrlsFromFile(filePath)
+			if err != nil {
+				return fmt.Errorf("read urls from file: %w", err)
+			}
+			urls = append(urls, fileUrls...)
+		}
+
+		if len(urls) == 0 {
+			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
+		}
+
+		result, err := appl.DownloadService.Enqueue(ctx, urls, &EnqueueReporter{})
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
+			result.Enqueued, result.Skipped, result.Failed)
+
+		return nil
+	},
+}
+
+type ProcessReporter struct{}
+
+func (r *ProcessReporter) OnQueueStart(totalTracks int) {}
+
+func (r *ProcessReporter) OnTrackStart(index int, total int, sourceID string) {
+	fmt.Printf("--- [Track %d / %d] ---\n", index, total)
+	fmt.Printf("[!] Target: %s\n", sourceID)
+}
+
+func (r *ProcessReporter) OnTrackSuccess(_ string) {
+	fmt.Printf("[+] Success!\n\n")
+}
+
+func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
+	fmt.Printf("[-] Failed: %v\n\n", err)
+}
+
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Process all enqueued downloads",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
@@ -33,23 +105,15 @@ var downloadCmd = &cobra.Command{
 		if len(delayParts) != 2 {
 			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
 		}
-		filePath, _ := cmd.Flags().GetString(flagFile)
 
-		uniqueUrls, queueSkipped, err := filterUniqueURLs(args, filePath)
+		result, err := appl.DownloadService.ProcessQueue(ctx, delayParts[0], delayParts[1], &ProcessReporter{})
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Starting queue for %d unique tracks... (Skipped %d duplicates in input)\n\n", len(uniqueUrls), queueSkipped)
+		fmt.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
 
-		stats := processQueue(ctx, uniqueUrls, delayParts[0], delayParts[1])
-
-		fmt.Printf(
-			"Queue complete! Downloaded: %d | DB Skipped: %d | Failed: %d\n",
-			stats.success, stats.skipped, stats.failed,
-		)
-
-		if stats.success > 0 {
+		if result.Success > 0 {
 			fmt.Println("▶ Run `yci process staging` to import them into your library.")
 		}
 
@@ -60,8 +124,12 @@ var downloadCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(downloadCmd)
 
-	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
-	downloadCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadCmd.AddCommand(enqueueCmd)
+	downloadCmd.AddCommand(startCmd)
+
+	enqueueCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
+
+	startCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 }
 
 func readUrlsFromFile(path string) ([]string, error) {
@@ -100,104 +168,4 @@ func readUrlsFromFile(path string) ([]string, error) {
 	}
 
 	return urls, nil
-}
-
-func filterUniqueURLs(args []string, filePath string) ([]string, int, error) {
-	var rawUrls []string
-	for _, arg := range args {
-		if cleanArg := strings.TrimSpace(arg); cleanArg != "" {
-			rawUrls = append(rawUrls, cleanArg)
-		}
-	}
-
-	if filePath != "" {
-		fileUrls, err := readUrlsFromFile(filePath)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to read urls from file: %w", err)
-		}
-		rawUrls = append(rawUrls, fileUrls...)
-	}
-
-	if len(rawUrls) == 0 {
-		return nil, 0, fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
-	}
-
-	stagedIDs := make(map[string]bool)
-
-	if stagedFiles, err := os.ReadDir(appl.Paths.StagingDir()); err != nil {
-		return nil, 0, fmt.Errorf("failed to read staged dir: %w", err)
-	} else {
-		for _, f := range stagedFiles {
-			stagedIDs[strings.TrimSuffix(f.Name(), ".opus")] = true
-		}
-	}
-
-	seenUrls := make(map[string]bool)
-	var uniqueUrls []string
-
-	for _, u := range rawUrls {
-		if !seenUrls[u] {
-			seenUrls[u] = true
-
-			if stagedIDs[downloader.ExtractSourceID(u)] {
-				continue
-			}
-
-			uniqueUrls = append(uniqueUrls, u)
-		}
-	}
-
-	return uniqueUrls, len(rawUrls) - len(uniqueUrls), nil
-}
-
-type processResult struct {
-	success int
-	skipped int
-	failed  int
-}
-
-func processQueue(ctx context.Context, urls []string, minSleep string, maxSleep string) processResult {
-	targetPath := filepath.Join(appl.Paths.StagingDir(), "%(id)s.opus")
-
-	successCount := 0
-	dbSkippedCount := 0
-
-	for i, url := range urls {
-		fmt.Printf("--- [Track %d / %d] ---\n", i+1, len(urls))
-
-		if sourceID := downloader.ExtractSourceID(url); sourceID != "" {
-			exists, err := appl.TrackService.ExistsBySourceID(ctx, sourceID)
-			if err != nil {
-				fmt.Printf("Warning: DB check failed for %s: %v\n", sourceID, err)
-				continue
-			} else if exists {
-				fmt.Printf("Skipped: Track already exists in library (ID: %s)\n\n", sourceID)
-				dbSkippedCount++
-				continue
-			}
-		}
-
-		fmt.Printf("Target: %s\n", url)
-
-		cfg := downloader.Config{
-			AbsoluteOutputPath: targetPath,
-			URL:                url,
-			MinSleep:           minSleep,
-			MaxSleep:           maxSleep,
-		}
-
-		if err := downloader.Download(ctx, cfg); err != nil {
-			fmt.Printf("Error downloading %s: %v\n\n", url, err)
-			continue
-		}
-
-		successCount++
-		fmt.Println()
-	}
-
-	return processResult{
-		success: successCount,
-		skipped: dbSkippedCount,
-		failed:  len(urls) - successCount - dbSkippedCount,
-	}
 }

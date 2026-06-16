@@ -33,6 +33,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.checkTracksBySourceIDStmt, err = db.PrepareContext(ctx, checkTracksBySourceID); err != nil {
 		return nil, fmt.Errorf("error preparing query CheckTracksBySourceID: %w", err)
 	}
+	if q.completeDownloadStmt, err = db.PrepareContext(ctx, completeDownload); err != nil {
+		return nil, fmt.Errorf("error preparing query CompleteDownload: %w", err)
+	}
 	if q.createArtistStmt, err = db.PrepareContext(ctx, createArtist); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateArtist: %w", err)
 	}
@@ -57,6 +60,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteTrackStmt, err = db.PrepareContext(ctx, deleteTrack); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteTrack: %w", err)
 	}
+	if q.enqueueDownloadStmt, err = db.PrepareContext(ctx, enqueueDownload); err != nil {
+		return nil, fmt.Errorf("error preparing query EnqueueDownload: %w", err)
+	}
+	if q.failDownloadStmt, err = db.PrepareContext(ctx, failDownload); err != nil {
+		return nil, fmt.Errorf("error preparing query FailDownload: %w", err)
+	}
 	if q.getArtistStmt, err = db.PrepareContext(ctx, getArtist); err != nil {
 		return nil, fmt.Errorf("error preparing query GetArtist: %w", err)
 	}
@@ -78,6 +87,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getFoldersStmt, err = db.PrepareContext(ctx, getFolders); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFolders: %w", err)
 	}
+	if q.getNextPendingDownloadStmt, err = db.PrepareContext(ctx, getNextPendingDownload); err != nil {
+		return nil, fmt.Errorf("error preparing query GetNextPendingDownload: %w", err)
+	}
+	if q.getQueueLengthStmt, err = db.PrepareContext(ctx, getQueueLength); err != nil {
+		return nil, fmt.Errorf("error preparing query GetQueueLength: %w", err)
+	}
 	if q.getTrackStmt, err = db.PrepareContext(ctx, getTrack); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTrack: %w", err)
 	}
@@ -86,6 +101,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getTracksByPathStmt, err = db.PrepareContext(ctx, getTracksByPath); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTracksByPath: %w", err)
+	}
+	if q.resetOrphanedDownloadsStmt, err = db.PrepareContext(ctx, resetOrphanedDownloads); err != nil {
+		return nil, fmt.Errorf("error preparing query ResetOrphanedDownloads: %w", err)
+	}
+	if q.startDownloadStmt, err = db.PrepareContext(ctx, startDownload); err != nil {
+		return nil, fmt.Errorf("error preparing query StartDownload: %w", err)
 	}
 	if q.updateArtistStmt, err = db.PrepareContext(ctx, updateArtist); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateArtist: %w", err)
@@ -120,6 +141,11 @@ func (q *Queries) Close() error {
 	if q.checkTracksBySourceIDStmt != nil {
 		if cerr := q.checkTracksBySourceIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing checkTracksBySourceIDStmt: %w", cerr)
+		}
+	}
+	if q.completeDownloadStmt != nil {
+		if cerr := q.completeDownloadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing completeDownloadStmt: %w", cerr)
 		}
 	}
 	if q.createArtistStmt != nil {
@@ -162,6 +188,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing deleteTrackStmt: %w", cerr)
 		}
 	}
+	if q.enqueueDownloadStmt != nil {
+		if cerr := q.enqueueDownloadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing enqueueDownloadStmt: %w", cerr)
+		}
+	}
+	if q.failDownloadStmt != nil {
+		if cerr := q.failDownloadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing failDownloadStmt: %w", cerr)
+		}
+	}
 	if q.getArtistStmt != nil {
 		if cerr := q.getArtistStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getArtistStmt: %w", cerr)
@@ -197,6 +233,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getFoldersStmt: %w", cerr)
 		}
 	}
+	if q.getNextPendingDownloadStmt != nil {
+		if cerr := q.getNextPendingDownloadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getNextPendingDownloadStmt: %w", cerr)
+		}
+	}
+	if q.getQueueLengthStmt != nil {
+		if cerr := q.getQueueLengthStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getQueueLengthStmt: %w", cerr)
+		}
+	}
 	if q.getTrackStmt != nil {
 		if cerr := q.getTrackStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getTrackStmt: %w", cerr)
@@ -210,6 +256,16 @@ func (q *Queries) Close() error {
 	if q.getTracksByPathStmt != nil {
 		if cerr := q.getTracksByPathStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getTracksByPathStmt: %w", cerr)
+		}
+	}
+	if q.resetOrphanedDownloadsStmt != nil {
+		if cerr := q.resetOrphanedDownloadsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing resetOrphanedDownloadsStmt: %w", cerr)
+		}
+	}
+	if q.startDownloadStmt != nil {
+		if cerr := q.startDownloadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing startDownloadStmt: %w", cerr)
 		}
 	}
 	if q.updateArtistStmt != nil {
@@ -279,6 +335,7 @@ type Queries struct {
 	checkFolderExistsStmt        *sql.Stmt
 	checkFolderHasChildrenStmt   *sql.Stmt
 	checkTracksBySourceIDStmt    *sql.Stmt
+	completeDownloadStmt         *sql.Stmt
 	createArtistStmt             *sql.Stmt
 	createChannelStmt            *sql.Stmt
 	createFolderStmt             *sql.Stmt
@@ -287,6 +344,8 @@ type Queries struct {
 	deleteChannelStmt            *sql.Stmt
 	deleteFolderStmt             *sql.Stmt
 	deleteTrackStmt              *sql.Stmt
+	enqueueDownloadStmt          *sql.Stmt
+	failDownloadStmt             *sql.Stmt
 	getArtistStmt                *sql.Stmt
 	getArtistIDByChannelStmt     *sql.Stmt
 	getArtistsStmt               *sql.Stmt
@@ -294,9 +353,13 @@ type Queries struct {
 	getFolderStmt                *sql.Stmt
 	getFolderAncestorsStmt       *sql.Stmt
 	getFoldersStmt               *sql.Stmt
+	getNextPendingDownloadStmt   *sql.Stmt
+	getQueueLengthStmt           *sql.Stmt
 	getTrackStmt                 *sql.Stmt
 	getTracksByArtistStmt        *sql.Stmt
 	getTracksByPathStmt          *sql.Stmt
+	resetOrphanedDownloadsStmt   *sql.Stmt
+	startDownloadStmt            *sql.Stmt
 	updateArtistStmt             *sql.Stmt
 	updateFolderStmt             *sql.Stmt
 	updateTrackStmt              *sql.Stmt
@@ -311,6 +374,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		checkFolderExistsStmt:        q.checkFolderExistsStmt,
 		checkFolderHasChildrenStmt:   q.checkFolderHasChildrenStmt,
 		checkTracksBySourceIDStmt:    q.checkTracksBySourceIDStmt,
+		completeDownloadStmt:         q.completeDownloadStmt,
 		createArtistStmt:             q.createArtistStmt,
 		createChannelStmt:            q.createChannelStmt,
 		createFolderStmt:             q.createFolderStmt,
@@ -319,6 +383,8 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteChannelStmt:            q.deleteChannelStmt,
 		deleteFolderStmt:             q.deleteFolderStmt,
 		deleteTrackStmt:              q.deleteTrackStmt,
+		enqueueDownloadStmt:          q.enqueueDownloadStmt,
+		failDownloadStmt:             q.failDownloadStmt,
 		getArtistStmt:                q.getArtistStmt,
 		getArtistIDByChannelStmt:     q.getArtistIDByChannelStmt,
 		getArtistsStmt:               q.getArtistsStmt,
@@ -326,9 +392,13 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getFolderStmt:                q.getFolderStmt,
 		getFolderAncestorsStmt:       q.getFolderAncestorsStmt,
 		getFoldersStmt:               q.getFoldersStmt,
+		getNextPendingDownloadStmt:   q.getNextPendingDownloadStmt,
+		getQueueLengthStmt:           q.getQueueLengthStmt,
 		getTrackStmt:                 q.getTrackStmt,
 		getTracksByArtistStmt:        q.getTracksByArtistStmt,
 		getTracksByPathStmt:          q.getTracksByPathStmt,
+		resetOrphanedDownloadsStmt:   q.resetOrphanedDownloadsStmt,
+		startDownloadStmt:            q.startDownloadStmt,
 		updateArtistStmt:             q.updateArtistStmt,
 		updateFolderStmt:             q.updateFolderStmt,
 		updateTrackStmt:              q.updateTrackStmt,

@@ -32,7 +32,6 @@ CREATE TABLE tracks (
     source_id     TEXT,
     FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
-
 -- +goose StatementEnd
 
 -- +goose Down

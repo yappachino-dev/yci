@@ -6,6 +6,7 @@ package store
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Artist struct {
@@ -18,6 +19,16 @@ type Channel struct {
 	ID          int64          `json:"id"`
 	ArtistID    string         `json:"artist_id"`
 	ChannelName sql.NullString `json:"channel_name"`
+}
+
+type DownloadQueue struct {
+	ID        int64          `json:"id"`
+	SourceID  string         `json:"source_id"`
+	Status    string         `json:"status"`
+	Attempts  int64          `json:"attempts"`
+	ErrorMsg  sql.NullString `json:"error_msg"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 type Folder struct {

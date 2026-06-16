@@ -13,6 +13,7 @@ type Querier interface {
 	CheckFolderExists(ctx context.Context, id string) (bool, error)
 	CheckFolderHasChildren(ctx context.Context, id sql.NullString) (bool, error)
 	CheckTracksBySourceID(ctx context.Context, sourceID sql.NullString) (bool, error)
+	CompleteDownload(ctx context.Context, id int64) error
 	CreateArtist(ctx context.Context, arg CreateArtistParams) error
 	CreateChannel(ctx context.Context, arg CreateChannelParams) error
 	CreateFolder(ctx context.Context, arg CreateFolderParams) error
@@ -21,6 +22,8 @@ type Querier interface {
 	DeleteChannel(ctx context.Context, arg DeleteChannelParams) error
 	DeleteFolder(ctx context.Context, id string) error
 	DeleteTrack(ctx context.Context, id string) error
+	EnqueueDownload(ctx context.Context, sourceID string) (int64, error)
+	FailDownload(ctx context.Context, arg FailDownloadParams) error
 	GetArtist(ctx context.Context, id string) (Artist, error)
 	GetArtistIDByChannel(ctx context.Context, channelName sql.NullString) (string, error)
 	GetArtists(ctx context.Context) ([]Artist, error)
@@ -28,9 +31,13 @@ type Querier interface {
 	GetFolder(ctx context.Context, id string) (Folder, error)
 	GetFolderAncestors(ctx context.Context, id string) ([]string, error)
 	GetFolders(ctx context.Context) ([]Folder, error)
+	GetNextPendingDownload(ctx context.Context) (GetNextPendingDownloadRow, error)
+	GetQueueLength(ctx context.Context) (int64, error)
 	GetTrack(ctx context.Context, id string) (Track, error)
 	GetTracksByArtist(ctx context.Context, artistID sql.NullString) ([]Track, error)
 	GetTracksByPath(ctx context.Context, path string) ([]Track, error)
+	ResetOrphanedDownloads(ctx context.Context) error
+	StartDownload(ctx context.Context, id int64) error
 	UpdateArtist(ctx context.Context, arg UpdateArtistParams) error
 	UpdateFolder(ctx context.Context, arg UpdateFolderParams) error
 	UpdateTrack(ctx context.Context, arg UpdateTrackParams) error
