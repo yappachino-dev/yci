@@ -17,7 +17,7 @@ SELECT EXISTS (
 `
 
 func (q *Queries) CheckTracksBySourceID(ctx context.Context, sourceID sql.NullString) (bool, error) {
-	row := q.queryRow(ctx, q.checkTracksBySourceIDStmt, checkTracksBySourceID, sourceID)
+	row := q.db.QueryRowContext(ctx, checkTracksBySourceID, sourceID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -29,17 +29,17 @@ VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
 `
 
 type CreateTrackParams struct {
-	ID           string         `json:"id"`
-	Title        string         `json:"title"`
-	Album        sql.NullString `json:"album"`
-	ArtistID     sql.NullString `json:"artist_id"`
-	DurationSec  sql.NullInt64  `json:"duration_sec"`
-	RelativePath string         `json:"relative_path"`
-	SourceID     sql.NullString `json:"source_id"`
+	ID           string
+	Title        string
+	Album        sql.NullString
+	ArtistID     sql.NullString
+	DurationSec  sql.NullInt64
+	RelativePath string
+	SourceID     sql.NullString
 }
 
 func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error {
-	_, err := q.exec(ctx, q.createTrackStmt, createTrack,
+	_, err := q.db.ExecContext(ctx, createTrack,
 		arg.ID,
 		arg.Title,
 		arg.Album,
@@ -57,7 +57,7 @@ WHERE id = ?1
 `
 
 func (q *Queries) DeleteTrack(ctx context.Context, id string) error {
-	_, err := q.exec(ctx, q.deleteTrackStmt, deleteTrack, id)
+	_, err := q.db.ExecContext(ctx, deleteTrack, id)
 	return err
 }
 
@@ -68,7 +68,7 @@ WHERE id = ?1
 `
 
 func (q *Queries) GetTrack(ctx context.Context, id string) (Track, error) {
-	row := q.queryRow(ctx, q.getTrackStmt, getTrack, id)
+	row := q.db.QueryRowContext(ctx, getTrack, id)
 	var i Track
 	err := row.Scan(
 		&i.ID,
@@ -89,7 +89,7 @@ WHERE artist_id = ?1
 `
 
 func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString) ([]Track, error) {
-	rows, err := q.query(ctx, q.getTracksByArtistStmt, getTracksByArtist, artistID)
+	rows, err := q.db.QueryContext(ctx, getTracksByArtist, artistID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ WHERE relative_path LIKE ?1
 `
 
 func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]Track, error) {
-	rows, err := q.query(ctx, q.getTracksByPathStmt, getTracksByPath, path)
+	rows, err := q.db.QueryContext(ctx, getTracksByPath, path)
 	if err != nil {
 		return nil, err
 	}
@@ -169,18 +169,18 @@ WHERE id = ?8
 `
 
 type UpdateTrackParams struct {
-	NewID        string         `json:"new_id"`
-	Title        string         `json:"title"`
-	Album        sql.NullString `json:"album"`
-	ArtistID     sql.NullString `json:"artist_id"`
-	DurationSec  sql.NullInt64  `json:"duration_sec"`
-	RelativePath string         `json:"relative_path"`
-	SourceID     sql.NullString `json:"source_id"`
-	OldID        string         `json:"old_id"`
+	NewID        string
+	Title        string
+	Album        sql.NullString
+	ArtistID     sql.NullString
+	DurationSec  sql.NullInt64
+	RelativePath string
+	SourceID     sql.NullString
+	OldID        string
 }
 
 func (q *Queries) UpdateTrack(ctx context.Context, arg UpdateTrackParams) error {
-	_, err := q.exec(ctx, q.updateTrackStmt, updateTrack,
+	_, err := q.db.ExecContext(ctx, updateTrack,
 		arg.NewID,
 		arg.Title,
 		arg.Album,
@@ -200,12 +200,12 @@ WHERE id = ?2
 `
 
 type UpdateTrackPathParams struct {
-	RelativePath string `json:"relative_path"`
-	ID           string `json:"id"`
+	RelativePath string
+	ID           string
 }
 
 func (q *Queries) UpdateTrackPath(ctx context.Context, arg UpdateTrackPathParams) error {
-	_, err := q.exec(ctx, q.updateTrackPathStmt, updateTrackPath, arg.RelativePath, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateTrackPath, arg.RelativePath, arg.ID)
 	return err
 }
 
@@ -216,12 +216,12 @@ WHERE relative_path LIKE ?3
 `
 
 type UpdateTrackPathsByPrefixParams struct {
-	OldPrefix   string `json:"old_prefix"`
-	NewPrefix   string `json:"new_prefix"`
-	MatchPrefix string `json:"match_prefix"`
+	OldPrefix   string
+	NewPrefix   string
+	MatchPrefix string
 }
 
 func (q *Queries) UpdateTrackPathsByPrefix(ctx context.Context, arg UpdateTrackPathsByPrefixParams) error {
-	_, err := q.exec(ctx, q.updateTrackPathsByPrefixStmt, updateTrackPathsByPrefix, arg.OldPrefix, arg.NewPrefix, arg.MatchPrefix)
+	_, err := q.db.ExecContext(ctx, updateTrackPathsByPrefix, arg.OldPrefix, arg.NewPrefix, arg.MatchPrefix)
 	return err
 }

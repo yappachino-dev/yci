@@ -17,7 +17,7 @@ SELECT EXISTS (
 `
 
 func (q *Queries) CheckFolderExists(ctx context.Context, id string) (bool, error) {
-	row := q.queryRow(ctx, q.checkFolderExistsStmt, checkFolderExists, id)
+	row := q.db.QueryRowContext(ctx, checkFolderExists, id)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -32,7 +32,7 @@ SELECT EXISTS (
 `
 
 func (q *Queries) CheckFolderHasChildren(ctx context.Context, id sql.NullString) (bool, error) {
-	row := q.queryRow(ctx, q.checkFolderHasChildrenStmt, checkFolderHasChildren, id)
+	row := q.db.QueryRowContext(ctx, checkFolderHasChildren, id)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -44,13 +44,13 @@ VALUES (?1, ?2, ?3)
 `
 
 type CreateFolderParams struct {
-	ID          string         `json:"id"`
-	DisplayName string         `json:"display_name"`
-	ParentID    sql.NullString `json:"parent_id"`
+	ID          string
+	DisplayName string
+	ParentID    sql.NullString
 }
 
 func (q *Queries) CreateFolder(ctx context.Context, arg CreateFolderParams) error {
-	_, err := q.exec(ctx, q.createFolderStmt, createFolder, arg.ID, arg.DisplayName, arg.ParentID)
+	_, err := q.db.ExecContext(ctx, createFolder, arg.ID, arg.DisplayName, arg.ParentID)
 	return err
 }
 
@@ -60,7 +60,7 @@ WHERE id = ?1
 `
 
 func (q *Queries) DeleteFolder(ctx context.Context, id string) error {
-	_, err := q.exec(ctx, q.deleteFolderStmt, deleteFolder, id)
+	_, err := q.db.ExecContext(ctx, deleteFolder, id)
 	return err
 }
 
@@ -70,7 +70,7 @@ FROM folders WHERE id = ?1
 `
 
 func (q *Queries) GetFolder(ctx context.Context, id string) (Folder, error) {
-	row := q.queryRow(ctx, q.getFolderStmt, getFolder, id)
+	row := q.db.QueryRowContext(ctx, getFolder, id)
 	var i Folder
 	err := row.Scan(&i.ID, &i.DisplayName, &i.ParentID)
 	return i, err
@@ -94,7 +94,7 @@ ORDER BY depth DESC
 `
 
 func (q *Queries) GetFolderAncestors(ctx context.Context, id string) ([]string, error) {
-	rows, err := q.query(ctx, q.getFolderAncestorsStmt, getFolderAncestors, id)
+	rows, err := q.db.QueryContext(ctx, getFolderAncestors, id)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ FROM folders
 `
 
 func (q *Queries) GetFolders(ctx context.Context) ([]Folder, error) {
-	rows, err := q.query(ctx, q.getFoldersStmt, getFolders)
+	rows, err := q.db.QueryContext(ctx, getFolders)
 	if err != nil {
 		return nil, err
 	}
@@ -151,14 +151,14 @@ WHERE id = ?4
 `
 
 type UpdateFolderParams struct {
-	NewID       string         `json:"new_id"`
-	DisplayName string         `json:"display_name"`
-	ParentID    sql.NullString `json:"parent_id"`
-	OldID       string         `json:"old_id"`
+	NewID       string
+	DisplayName string
+	ParentID    sql.NullString
+	OldID       string
 }
 
 func (q *Queries) UpdateFolder(ctx context.Context, arg UpdateFolderParams) error {
-	_, err := q.exec(ctx, q.updateFolderStmt, updateFolder,
+	_, err := q.db.ExecContext(ctx, updateFolder,
 		arg.NewID,
 		arg.DisplayName,
 		arg.ParentID,

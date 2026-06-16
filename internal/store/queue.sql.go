@@ -16,7 +16,7 @@ WHERE id = ?1
 `
 
 func (q *Queries) CompleteDownload(ctx context.Context, id int64) error {
-	_, err := q.exec(ctx, q.completeDownloadStmt, completeDownload, id)
+	_, err := q.db.ExecContext(ctx, completeDownload, id)
 	return err
 }
 
@@ -26,7 +26,7 @@ VALUES (?1, 'pending')
 `
 
 func (q *Queries) EnqueueDownload(ctx context.Context, sourceID string) (int64, error) {
-	result, err := q.exec(ctx, q.enqueueDownloadStmt, enqueueDownload, sourceID)
+	result, err := q.db.ExecContext(ctx, enqueueDownload, sourceID)
 	if err != nil {
 		return 0, err
 	}
@@ -40,12 +40,12 @@ WHERE id = ?2
 `
 
 type FailDownloadParams struct {
-	ErrorMsg sql.NullString `json:"error_msg"`
-	ID       int64          `json:"id"`
+	ErrorMsg sql.NullString
+	ID       int64
 }
 
 func (q *Queries) FailDownload(ctx context.Context, arg FailDownloadParams) error {
-	_, err := q.exec(ctx, q.failDownloadStmt, failDownload, arg.ErrorMsg, arg.ID)
+	_, err := q.db.ExecContext(ctx, failDownload, arg.ErrorMsg, arg.ID)
 	return err
 }
 
@@ -58,15 +58,15 @@ LIMIT 1
 `
 
 type GetNextPendingDownloadRow struct {
-	ID       int64          `json:"id"`
-	SourceID string         `json:"source_id"`
-	Status   string         `json:"status"`
-	Attempts int64          `json:"attempts"`
-	ErrorMsg sql.NullString `json:"error_msg"`
+	ID       int64
+	SourceID string
+	Status   string
+	Attempts int64
+	ErrorMsg sql.NullString
 }
 
 func (q *Queries) GetNextPendingDownload(ctx context.Context) (GetNextPendingDownloadRow, error) {
-	row := q.queryRow(ctx, q.getNextPendingDownloadStmt, getNextPendingDownload)
+	row := q.db.QueryRowContext(ctx, getNextPendingDownload)
 	var i GetNextPendingDownloadRow
 	err := row.Scan(
 		&i.ID,
@@ -83,7 +83,7 @@ SELECT COUNT(*) FROM download_queue
 `
 
 func (q *Queries) GetQueueLength(ctx context.Context) (int64, error) {
-	row := q.queryRow(ctx, q.getQueueLengthStmt, getQueueLength)
+	row := q.db.QueryRowContext(ctx, getQueueLength)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -96,7 +96,7 @@ WHERE status = 'processing'
 `
 
 func (q *Queries) ResetOrphanedDownloads(ctx context.Context) error {
-	_, err := q.exec(ctx, q.resetOrphanedDownloadsStmt, resetOrphanedDownloads)
+	_, err := q.db.ExecContext(ctx, resetOrphanedDownloads)
 	return err
 }
 
@@ -107,6 +107,6 @@ WHERE id = ?1
 `
 
 func (q *Queries) StartDownload(ctx context.Context, id int64) error {
-	_, err := q.exec(ctx, q.startDownloadStmt, startDownload, id)
+	_, err := q.db.ExecContext(ctx, startDownload, id)
 	return err
 }

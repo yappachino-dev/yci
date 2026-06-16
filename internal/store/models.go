@@ -10,39 +10,39 @@ import (
 )
 
 type Artist struct {
-	ID          string         `json:"id"`
-	DisplayName string         `json:"display_name"`
-	FolderID    sql.NullString `json:"folder_id"`
+	ID          string
+	DisplayName string
+	FolderID    sql.NullString
 }
 
 type Channel struct {
-	ID          int64          `json:"id"`
-	ArtistID    string         `json:"artist_id"`
-	ChannelName sql.NullString `json:"channel_name"`
+	ID          int64
+	ArtistID    string
+	ChannelName sql.NullString
 }
 
 type DownloadQueue struct {
-	ID        int64          `json:"id"`
-	SourceID  string         `json:"source_id"`
-	Status    string         `json:"status"`
-	Attempts  int64          `json:"attempts"`
-	ErrorMsg  sql.NullString `json:"error_msg"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	ID        int64
+	SourceID  string
+	Status    string
+	Attempts  int64
+	ErrorMsg  sql.NullString
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Folder struct {
-	ID          string         `json:"id"`
-	DisplayName string         `json:"display_name"`
-	ParentID    sql.NullString `json:"parent_id"`
+	ID          string
+	DisplayName string
+	ParentID    sql.NullString
 }
 
 type Track struct {
-	ID           string         `json:"id"`
-	Title        string         `json:"title"`
-	Album        sql.NullString `json:"album"`
-	ArtistID     sql.NullString `json:"artist_id"`
-	DurationSec  sql.NullInt64  `json:"duration_sec"`
-	RelativePath string         `json:"relative_path"`
-	SourceID     sql.NullString `json:"source_id"`
+	ID           string
+	Title        string
+	Album        sql.NullString
+	ArtistID     sql.NullString
+	DurationSec  sql.NullInt64
+	RelativePath string
+	SourceID     sql.NullString
 }

@@ -16,13 +16,13 @@ VALUES (?1, ?2, ?3)
 `
 
 type CreateArtistParams struct {
-	ID          string         `json:"id"`
-	DisplayName string         `json:"display_name"`
-	FolderID    sql.NullString `json:"folder_id"`
+	ID          string
+	DisplayName string
+	FolderID    sql.NullString
 }
 
 func (q *Queries) CreateArtist(ctx context.Context, arg CreateArtistParams) error {
-	_, err := q.exec(ctx, q.createArtistStmt, createArtist, arg.ID, arg.DisplayName, arg.FolderID)
+	_, err := q.db.ExecContext(ctx, createArtist, arg.ID, arg.DisplayName, arg.FolderID)
 	return err
 }
 
@@ -32,7 +32,7 @@ WHERE id = ?1
 `
 
 func (q *Queries) DeleteArtist(ctx context.Context, id string) error {
-	_, err := q.exec(ctx, q.deleteArtistStmt, deleteArtist, id)
+	_, err := q.db.ExecContext(ctx, deleteArtist, id)
 	return err
 }
 
@@ -42,7 +42,7 @@ FROM artists WHERE id = ?1
 `
 
 func (q *Queries) GetArtist(ctx context.Context, id string) (Artist, error) {
-	row := q.queryRow(ctx, q.getArtistStmt, getArtist, id)
+	row := q.db.QueryRowContext(ctx, getArtist, id)
 	var i Artist
 	err := row.Scan(&i.ID, &i.DisplayName, &i.FolderID)
 	return i, err
@@ -54,7 +54,7 @@ FROM artists
 `
 
 func (q *Queries) GetArtists(ctx context.Context) ([]Artist, error) {
-	rows, err := q.query(ctx, q.getArtistsStmt, getArtists)
+	rows, err := q.db.QueryContext(ctx, getArtists)
 	if err != nil {
 		return nil, err
 	}
@@ -83,14 +83,14 @@ WHERE id = ?4
 `
 
 type UpdateArtistParams struct {
-	NewID       string         `json:"new_id"`
-	DisplayName string         `json:"display_name"`
-	FolderID    sql.NullString `json:"folder_id"`
-	OldID       string         `json:"old_id"`
+	NewID       string
+	DisplayName string
+	FolderID    sql.NullString
+	OldID       string
 }
 
 func (q *Queries) UpdateArtist(ctx context.Context, arg UpdateArtistParams) error {
-	_, err := q.exec(ctx, q.updateArtistStmt, updateArtist,
+	_, err := q.db.ExecContext(ctx, updateArtist,
 		arg.NewID,
 		arg.DisplayName,
 		arg.FolderID,

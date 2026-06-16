@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/downloader"
@@ -24,10 +23,7 @@ type Container struct {
 }
 
 func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Container, error) {
-	queries, err := store.Prepare(ctx, dbConn)
-	if err != nil {
-		return nil, fmt.Errorf("prepare database statements: %w", err)
-	}
+	queries := store.New(dbConn)
 
 	transactor := db.NewSQLiteTransactor(dbConn)
 	rootID := library.FolderID(library.RootID)

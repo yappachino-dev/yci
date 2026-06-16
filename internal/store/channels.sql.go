@@ -16,12 +16,12 @@ VALUES (?1, ?2)
 `
 
 type CreateChannelParams struct {
-	ArtistID    string         `json:"artist_id"`
-	ChannelName sql.NullString `json:"channel_name"`
+	ArtistID    string
+	ChannelName sql.NullString
 }
 
 func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) error {
-	_, err := q.exec(ctx, q.createChannelStmt, createChannel, arg.ArtistID, arg.ChannelName)
+	_, err := q.db.ExecContext(ctx, createChannel, arg.ArtistID, arg.ChannelName)
 	return err
 }
 
@@ -31,12 +31,12 @@ WHERE artist_id = ?1 and channel_name = ?2
 `
 
 type DeleteChannelParams struct {
-	ArtistID    string         `json:"artist_id"`
-	ChannelName sql.NullString `json:"channel_name"`
+	ArtistID    string
+	ChannelName sql.NullString
 }
 
 func (q *Queries) DeleteChannel(ctx context.Context, arg DeleteChannelParams) error {
-	_, err := q.exec(ctx, q.deleteChannelStmt, deleteChannel, arg.ArtistID, arg.ChannelName)
+	_, err := q.db.ExecContext(ctx, deleteChannel, arg.ArtistID, arg.ChannelName)
 	return err
 }
 
@@ -47,7 +47,7 @@ WHERE channel_name = ?1
 `
 
 func (q *Queries) GetArtistIDByChannel(ctx context.Context, channelName sql.NullString) (string, error) {
-	row := q.queryRow(ctx, q.getArtistIDByChannelStmt, getArtistIDByChannel, channelName)
+	row := q.db.QueryRowContext(ctx, getArtistIDByChannel, channelName)
 	var artist_id string
 	err := row.Scan(&artist_id)
 	return artist_id, err
@@ -59,7 +59,7 @@ FROM channels
 `
 
 func (q *Queries) GetChannels(ctx context.Context) ([]Channel, error) {
-	rows, err := q.query(ctx, q.getChannelsStmt, getChannels)
+	rows, err := q.db.QueryContext(ctx, getChannels)
 	if err != nil {
 		return nil, err
 	}
