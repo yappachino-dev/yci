@@ -133,9 +133,10 @@ func (s *ArtistService) All(ctx context.Context) ([]Artist, error) {
 }
 
 type ArtistUpdateParams struct {
-	NewID  ArtistID
-	Name   ArtistName
-	Folder FolderID
+	NewID            ArtistID
+	Name             ArtistName
+	Folder           FolderID
+	RegenerateSlugID bool
 }
 
 func (s *ArtistService) Update(ctx context.Context, oldID ArtistID, params ArtistUpdateParams) error {
@@ -147,6 +148,10 @@ func (s *ArtistService) Update(ctx context.Context, oldID ArtistID, params Artis
 	newID := newIfPresent(params.NewID, oldID)
 	newName := newIfPresent(params.Name, oldArtist.Name)
 	newFolder := newIfPresent(params.Folder, oldArtist.FolderID)
+
+	if params.RegenerateSlugID {
+		newID = ArtistID(nameToSlug(string(newName)))
+	}
 
 	newArtist := Artist{
 		ID:       newID,

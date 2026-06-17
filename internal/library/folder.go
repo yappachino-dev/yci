@@ -152,9 +152,10 @@ func (s *FolderService) IsEmpty(ctx context.Context, id FolderID) (bool, error) 
 }
 
 type FolderUpdateParams struct {
-	NewID  FolderID
-	Name   FolderName
-	Parent FolderID
+	NewID            FolderID
+	Name             FolderName
+	Parent           FolderID
+	RegenerateSlugID bool
 }
 
 func (s *FolderService) Update(ctx context.Context, oldID FolderID, params FolderUpdateParams) error {
