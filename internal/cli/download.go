@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,13 +14,55 @@ import (
 )
 
 const (
-	flagFile = "file"
+	flagFile      = "file"
+	flagQueueOnly = "queue-only"
 )
 
 var downloadCmd = &cobra.Command{
-	Use:   "download",
+	Use:   "download [urls...]",
 	Short: "Download YouTube audio directly to the staging area",
-	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
+		if err := downloader.CheckDependencies(); err != nil {
+			return err
+		}
+
+		urls := args
+
+		filePath, _ := cmd.Flags().GetString(flagFile)
+		if filePath != "" {
+			fileUrls, err := readUrlsFromFile(filePath)
+			if err != nil {
+				return fmt.Errorf("read urls from file: %w", err)
+			}
+
+			urls = append(urls, fileUrls...)
+		}
+
+		if len(urls) == 0 {
+			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
+		}
+
+		result, err := appl.DownloadService.Enqueue(ctx, urls, &EnqueueReporter{})
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
+			result.Enqueued, result.Skipped, result.Failed)
+
+		queueOnly, _ := cmd.Flags().GetBool(flagQueueOnly)
+		if queueOnly {
+			fmt.Println("\n[!] Flag --queue-only detected. Items enqueued but download paused")
+			return nil
+		}
+
+		delayFlag, _ := cmd.Flags().GetString(flagDelay)
+
+		fmt.Print("\nProcessing queue...\n")
+		return executeDownloadLoop(ctx, delayFlag)
+	},
 }
 
 type EnqueueReporter struct{}
@@ -36,100 +79,29 @@ func (r *EnqueueReporter) OnEnqueueSkipped(id string, reason string) {
 	fmt.Printf("[-] Skipped %s: %s\n", id, reason)
 }
 
-var enqueueCmd = &cobra.Command{
-	Use:   "enqueue [urls...]",
-	Short: "Enqueue YouTube videos for download",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-
-		if err := downloader.CheckDependencies(); err != nil {
-			return err
-		}
-
-		urls := args
-
-		filePath, _ := cmd.Flags().GetString(flagFile)
-		if filePath != "" {
-			fileUrls, err := readUrlsFromFile(filePath)
-			if err != nil {
-				return fmt.Errorf("read urls from file: %w", err)
-			}
-			urls = append(urls, fileUrls...)
-		}
-
-		if len(urls) == 0 {
-			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
-		}
-
-		result, err := appl.DownloadService.Enqueue(ctx, urls, &EnqueueReporter{})
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
-			result.Enqueued, result.Skipped, result.Failed)
-
-		return nil
-	},
-}
-
-type ProcessReporter struct{}
-
-func (r *ProcessReporter) OnQueueStart(totalTracks int) {}
-
-func (r *ProcessReporter) OnTrackStart(index int, total int, sourceID string) {
-	fmt.Printf("--- [Track %d / %d] ---\n", index, total)
-	fmt.Printf("[!] Target: %s\n", sourceID)
-}
-
-func (r *ProcessReporter) OnTrackSuccess(_ string) {
-	fmt.Printf("[+] Success!\n\n")
-}
-
-func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
-	fmt.Printf("[-] Failed: %v\n\n", err)
-}
-
-var startCmd = &cobra.Command{
-	Use:   "start",
+var downloadResumeCmd = &cobra.Command{
+	Use:   "resume",
 	Short: "Process all enqueued downloads",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-
-		if err := downloader.CheckDependencies(); err != nil {
-			return err
-		}
 
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
-		delayParts := strings.Split(delayFlag, ":")
-		if len(delayParts) != 2 {
-			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
-		}
 
-		result, err := appl.DownloadService.ProcessQueue(ctx, delayParts[0], delayParts[1], &ProcessReporter{})
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
-
-		if result.Success > 0 {
-			fmt.Println("▶ Run `yci process staging` to import them into your library.")
-		}
-
-		return nil
+		fmt.Print("\nResuming queue...\n")
+		return executeDownloadLoop(ctx, delayFlag)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(downloadCmd)
 
-	downloadCmd.AddCommand(enqueueCmd)
-	downloadCmd.AddCommand(startCmd)
+	downloadCmd.AddCommand(downloadResumeCmd)
+	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
+	downloadCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
 
-	enqueueCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
-
-	startCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadResumeCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 }
 
 func readUrlsFromFile(path string) ([]string, error) {
@@ -168,4 +140,45 @@ func readUrlsFromFile(path string) ([]string, error) {
 	}
 
 	return urls, nil
+}
+
+type ProcessReporter struct{}
+
+func (r *ProcessReporter) OnQueueStart(totalTracks int) {}
+
+func (r *ProcessReporter) OnTrackStart(index int, total int, sourceID string) {
+	fmt.Printf("--- [Track %d / %d] ---\n", index, total)
+	fmt.Printf("[!] Target: %s\n", sourceID)
+}
+
+func (r *ProcessReporter) OnTrackSuccess(_ string) {
+	fmt.Printf("[+] Success!\n\n")
+}
+
+func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
+	fmt.Printf("[-] Failed: %v\n\n", err)
+}
+
+func executeDownloadLoop(ctx context.Context, delayFlag string) error {
+	if err := downloader.CheckDependencies(); err != nil {
+		return err
+	}
+
+	delayParts := strings.Split(delayFlag, ":")
+	if len(delayParts) != 2 {
+		return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
+	}
+
+	result, err := appl.DownloadService.ProcessQueue(ctx, delayParts[0], delayParts[1], &ProcessReporter{})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
+
+	if result.Success > 0 {
+		fmt.Println("▶ Run `yci process staging` to import them into your library.")
+	}
+
+	return nil
 }

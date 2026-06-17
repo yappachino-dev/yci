@@ -270,7 +270,7 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 			reporter.OnTrackFailure(entry.sourceID, err)
 			result.Failed++
 
-			if err := s.repo.Fail(ctx, entry.id, err); err != nil {
+			if err = s.repo.Fail(ctx, entry.id, err); err != nil {
 				return result, err
 			}
 
