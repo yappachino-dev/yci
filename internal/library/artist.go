@@ -132,6 +132,20 @@ func (s *ArtistService) All(ctx context.Context) ([]Artist, error) {
 	return a, nil
 }
 
+func (s *ArtistService) AllIDs(ctx context.Context) ([]ArtistID, error) {
+	a, err := s.repo.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("all artists: %w", err)
+	}
+
+	ids := make([]ArtistID, 0, len(a))
+	for _, i := range a {
+		ids = append(ids, i.ID)
+	}
+
+	return ids, nil
+}
+
 type ArtistUpdateParams struct {
 	NewID            ArtistID
 	Name             ArtistName
