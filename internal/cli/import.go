@@ -18,12 +18,12 @@ const (
 	flagFallbackArtist    = "fallback-artist"
 )
 
-var processCmd = &cobra.Command{
-	Use:   "process",
+var importCmd = &cobra.Command{
+	Use:   "import",
 	Short: "Process and import downloaded files",
 }
 
-var processStagingCmd = &cobra.Command{
+var importStagingCmd = &cobra.Command{
 	Use:   "staging",
 	Short: "Process the staging directory and import .opus files",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -91,11 +91,11 @@ var processStagingCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(processCmd)
+	rootCmd.AddCommand(importCmd)
 
-	processCmd.AddCommand(processStagingCmd)
+	importCmd.AddCommand(importStagingCmd)
 
-	processStagingCmd.Flags().Bool(flagSkipUnknown, false, "Automatically skip tracks with unknown channels")
-	processStagingCmd.Flags().Bool(flagSkipCollabArtists, false, "Automatically skip tracks multiple channels as artist")
-	processStagingCmd.Flags().String(flagFallbackArtist, "", "Automatically link unknown channels to this Artist ID")
+	importStagingCmd.Flags().Bool(flagSkipUnknown, false, "Automatically skip tracks with unknown channels")
+	importStagingCmd.Flags().Bool(flagSkipCollabArtists, false, "Automatically skip tracks multiple channels as artist")
+	importStagingCmd.Flags().String(flagFallbackArtist, "", "Automatically link unknown channels to this Artist ID")
 }
