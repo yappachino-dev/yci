@@ -75,7 +75,7 @@ type QueueRepo interface {
 	Enqueue(ctx context.Context, sourceID string) (bool, error)
 	QueueLength(ctx context.Context) (int, error)
 	ResetPending(ctx context.Context) error
-	NextPending(ctx context.Context) (QueueEntry, bool, error)
+	Next(ctx context.Context) (QueueEntry, bool, error)
 	Start(ctx context.Context, id int) error
 	Complete(ctx context.Context, id int) error
 	Fail(ctx context.Context, id int, err error) error
@@ -320,7 +320,7 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 		}
 		current++
 
-		entry, ok, err := s.repo.NextPending(ctx)
+		entry, ok, err := s.repo.Next(ctx)
 		if err != nil {
 			return result, err
 		}

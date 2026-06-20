@@ -49,15 +49,15 @@ func (q *Queries) FailDownload(ctx context.Context, arg FailDownloadParams) erro
 	return err
 }
 
-const getNextPendingDownload = `-- name: GetNextPendingDownload :one
+const getNextActionableDownload = `-- name: GetNextActionableDownload :one
 SELECT id, source_id, status, attempts, error_msg
 FROM download_queue
-WHERE status = 'pending' AND attempts < 3
-ORDER BY created_at ASC
+WHERE status IN ('pending', 'failed') AND attempts < 3
+ORDER BY COALESCE(updated_at, created_at) ASC
 LIMIT 1
 `
 
-type GetNextPendingDownloadRow struct {
+type GetNextActionableDownloadRow struct {
 	ID       int64
 	SourceID string
 	Status   string
@@ -65,9 +65,9 @@ type GetNextPendingDownloadRow struct {
 	ErrorMsg sql.NullString
 }
 
-func (q *Queries) GetNextPendingDownload(ctx context.Context) (GetNextPendingDownloadRow, error) {
-	row := q.db.QueryRowContext(ctx, getNextPendingDownload)
-	var i GetNextPendingDownloadRow
+func (q *Queries) GetNextActionableDownload(ctx context.Context) (GetNextActionableDownloadRow, error) {
+	row := q.db.QueryRowContext(ctx, getNextActionableDownload)
+	var i GetNextActionableDownloadRow
 	err := row.Scan(
 		&i.ID,
 		&i.SourceID,
@@ -129,6 +129,17 @@ func (q *Queries) GetQueueLength(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const resetHardFailedDownloads = `-- name: ResetHardFailedDownloads :exec
+UPDATE download_queue
+SET status = 'pending', attempts = 0, error_msg = NULL, updated_at = CURRENT_TIMESTAMP
+WHERE status = 'failed' AND attempts >= 3
+`
+
+func (q *Queries) ResetHardFailedDownloads(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, resetHardFailedDownloads)
+	return err
 }
 
 const resetOrphanedDownloads = `-- name: ResetOrphanedDownloads :exec

@@ -9,11 +9,11 @@ FROM download_queue;
 -- name: GetQueueLength :one
 SELECT COUNT(*) FROM download_queue;
 
--- name: GetNextPendingDownload :one
+-- name: GetNextActionableDownload :one
 SELECT id, source_id, status, attempts, error_msg
 FROM download_queue
-WHERE status = 'pending' AND attempts < 3
-ORDER BY created_at ASC
+WHERE status IN ('pending', 'failed') AND attempts < 3
+ORDER BY COALESCE(updated_at, created_at) ASC
 LIMIT 1;
 
 -- name: StartDownload :exec
@@ -34,3 +34,8 @@ WHERE id = :id;
 UPDATE download_queue
 SET status = 'pending', updated_at = CURRENT_TIMESTAMP
 WHERE status = 'processing';
+
+-- name: ResetHardFailedDownloads :exec
+UPDATE download_queue
+SET status = 'pending', attempts = 0, error_msg = NULL, updated_at = CURRENT_TIMESTAMP
+WHERE status = 'failed' AND attempts >= 3;

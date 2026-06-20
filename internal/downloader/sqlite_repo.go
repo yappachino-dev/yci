@@ -59,8 +59,8 @@ func (r *SQLiteQueueRepo) ResetPending(ctx context.Context) error {
 	return r.db(ctx).ResetOrphanedDownloads(ctx)
 }
 
-func (r *SQLiteQueueRepo) NextPending(ctx context.Context) (QueueEntry, bool, error) {
-	entry, err := r.db(ctx).GetNextPendingDownload(ctx)
+func (r *SQLiteQueueRepo) Next(ctx context.Context) (QueueEntry, bool, error) {
+	entry, err := r.db(ctx).GetNextActionableDownload(ctx)
 	if err == sql.ErrNoRows {
 		return QueueEntry{}, false, nil
 	}
