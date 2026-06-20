@@ -78,6 +78,48 @@ func (q *Queries) GetNextPendingDownload(ctx context.Context) (GetNextPendingDow
 	return i, err
 }
 
+const getQueue = `-- name: GetQueue :many
+SELECT id, source_id, status, attempts, error_msg
+FROM download_queue
+`
+
+type GetQueueRow struct {
+	ID       int64
+	SourceID string
+	Status   string
+	Attempts int64
+	ErrorMsg sql.NullString
+}
+
+func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
+	rows, err := q.db.QueryContext(ctx, getQueue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetQueueRow
+	for rows.Next() {
+		var i GetQueueRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceID,
+			&i.Status,
+			&i.Attempts,
+			&i.ErrorMsg,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getQueueLength = `-- name: GetQueueLength :one
 SELECT COUNT(*) FROM download_queue
 `

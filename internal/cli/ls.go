@@ -52,6 +52,14 @@ var lsTracksCmd = &cobra.Command{
 	},
 }
 
+var lsQueueCmd = &cobra.Command{
+	Use:   "queue",
+	Short: "List all queued for download tracks",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listQueue(cmd.Context())
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(lsCmd)
 
@@ -59,6 +67,7 @@ func init() {
 	lsCmd.AddCommand(lsArtistsCmd)
 	lsCmd.AddCommand(lsChannelsCmd)
 	lsCmd.AddCommand(lsTracksCmd)
+	lsCmd.AddCommand(lsQueueCmd)
 }
 
 func newTabWriter() *tabwriter.Writer {
@@ -168,6 +177,26 @@ func listTracks(ctx context.Context) error {
 		}
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", shortID, t.ArtistID, t.SourceID, t.Title)
+	}
+
+	w.Flush()
+	fmt.Println()
+
+	return nil
+}
+
+func listQueue(ctx context.Context) error {
+	queue, err := appl.DownloadService.All(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch queue: %w", err)
+	}
+
+	w := newTabWriter()
+	fmt.Fprintln(w, "ID\tSOURCE_ID\tSTATUS\tATTEMPTS\tERROR_MSG")
+	fmt.Fprintln(w, "--\t---------\t------\t--------\t---------")
+
+	for _, q := range queue {
+		fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\n", q.ID, q.SourceID, q.Status, q.Attempts, q.ErrorMsg)
 	}
 
 	w.Flush()

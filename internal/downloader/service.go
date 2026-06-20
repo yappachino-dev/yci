@@ -47,19 +47,20 @@ type DirReader interface {
 	ReadDir(path string) ([]string, error)
 }
 
-type queueEntry struct {
-	id       int
-	sourceID string
-	status   string
-	attempts int
-	errorMsg string
+type QueueEntry struct {
+	ID       int
+	SourceID string
+	Status   string
+	Attempts int
+	ErrorMsg string
 }
 
 type QueueRepo interface {
+	All(ctx context.Context) ([]QueueEntry, error)
 	Enqueue(ctx context.Context, sourceID string) (bool, error)
 	QueueLength(ctx context.Context) (int, error)
 	ResetPending(ctx context.Context) error
-	NextPending(ctx context.Context) (queueEntry, bool, error)
+	NextPending(ctx context.Context) (QueueEntry, bool, error)
 	Start(ctx context.Context, id int) error
 	Complete(ctx context.Context, id int) error
 	Fail(ctx context.Context, id int, err error) error
@@ -103,6 +104,15 @@ type EnqueueResult struct {
 	Enqueued int
 	Skipped  int
 	Failed   int
+}
+
+func (s *Service) All(ctx context.Context) ([]QueueEntry, error) {
+	q, err := s.repo.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("all queue entries: %w", err)
+	}
+
+	return q, nil
 }
 
 func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueReporter) (EnqueueResult, error) {
@@ -253,35 +263,35 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 			break
 		}
 
-		reporter.OnTrackStart(current, total, entry.sourceID)
+		reporter.OnTrackStart(current, total, entry.SourceID)
 
 		cfg := Config{
 			AbsoluteOutputPath: targetPath,
-			URL:                entry.sourceID,
+			URL:                entry.SourceID,
 			MinSleep:           minSleep,
 			MaxSleep:           maxSleep,
 		}
 
-		if err := s.repo.Start(ctx, entry.id); err != nil {
+		if err := s.repo.Start(ctx, entry.ID); err != nil {
 			return result, err
 		}
 
 		if err := Download(ctx, cfg); err != nil {
-			reporter.OnTrackFailure(entry.sourceID, err)
+			reporter.OnTrackFailure(entry.SourceID, err)
 			result.Failed++
 
-			if err = s.repo.Fail(ctx, entry.id, err); err != nil {
+			if err = s.repo.Fail(ctx, entry.ID, err); err != nil {
 				return result, err
 			}
 
 			continue
 		}
 
-		if err := s.repo.Complete(ctx, entry.id); err != nil {
+		if err := s.repo.Complete(ctx, entry.ID); err != nil {
 			return result, err
 		}
 
-		reporter.OnTrackSuccess(entry.sourceID)
+		reporter.OnTrackSuccess(entry.SourceID)
 		result.Success++
 	}
 

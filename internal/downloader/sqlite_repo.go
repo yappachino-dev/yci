@@ -17,6 +17,26 @@ func NewSQLiteQueueRepo(q *store.Queries) *SQLiteQueueRepo {
 	return &SQLiteQueueRepo{q: q}
 }
 
+func (r *SQLiteQueueRepo) All(ctx context.Context) ([]QueueEntry, error) {
+	rows, err := r.db(ctx).GetQueue(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]QueueEntry, 0, len(rows))
+	for _, r := range rows {
+		entries = append(entries, QueueEntry{
+			ID:       int(r.ID),
+			SourceID: r.SourceID,
+			Status:   r.Status,
+			Attempts: int(r.Attempts),
+			ErrorMsg: db.FromNullString(r.ErrorMsg),
+		})
+	}
+
+	return entries, nil
+}
+
 func (r *SQLiteQueueRepo) Enqueue(ctx context.Context, sourceID string) (bool, error) {
 	rows, err := r.db(ctx).EnqueueDownload(ctx, sourceID)
 	if err != nil {
@@ -39,21 +59,21 @@ func (r *SQLiteQueueRepo) ResetPending(ctx context.Context) error {
 	return r.db(ctx).ResetOrphanedDownloads(ctx)
 }
 
-func (r *SQLiteQueueRepo) NextPending(ctx context.Context) (queueEntry, bool, error) {
+func (r *SQLiteQueueRepo) NextPending(ctx context.Context) (QueueEntry, bool, error) {
 	entry, err := r.db(ctx).GetNextPendingDownload(ctx)
 	if err == sql.ErrNoRows {
-		return queueEntry{}, false, nil
+		return QueueEntry{}, false, nil
 	}
 	if err != nil {
-		return queueEntry{}, false, err
+		return QueueEntry{}, false, err
 	}
 
-	return queueEntry{
-		id:       int(entry.ID),
-		sourceID: entry.SourceID,
-		status:   entry.Status,
-		attempts: int(entry.Attempts),
-		errorMsg: db.FromNullString(entry.ErrorMsg),
+	return QueueEntry{
+		ID:       int(entry.ID),
+		SourceID: entry.SourceID,
+		Status:   entry.Status,
+		Attempts: int(entry.Attempts),
+		ErrorMsg: db.FromNullString(entry.ErrorMsg),
 	}, true, nil
 }
 

@@ -2,6 +2,10 @@
 INSERT OR IGNORE INTO download_queue (source_id, status)
 VALUES (:source_id, 'pending');
 
+-- name: GetQueue :many
+SELECT id, source_id, status, attempts, error_msg
+FROM download_queue;
+
 -- name: GetQueueLength :one
 SELECT COUNT(*) FROM download_queue;
 
