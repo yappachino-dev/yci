@@ -38,7 +38,7 @@ var editFolderCmd = &cobra.Command{
 		oldID = strings.TrimSpace(oldID)
 
 		name, _ := cmd.Flags().GetString(flagName)
-		folder, _ := cmd.Flags().GetString(flagFolder)
+		folder, _ := cmd.Flags().GetString(flagParent)
 		newID, _ := cmd.Flags().GetString(flagNewID)
 		newSlug, _ := cmd.Flags().GetBool(flagUpdateIDSlug)
 
@@ -102,9 +102,9 @@ func init() {
 	editCmd.AddCommand(editFolderCmd)
 	editCmd.AddCommand(editArtistCmd)
 
-	editFolderCmd.Flags().StringP(flagID, "i", "", "The current ID of the folder to edit (Required)")
-	editFolderCmd.Flags().StringP(flagName, "n", "", "Set a new display name")
-	editFolderCmd.Flags().StringP(flagParent, "p", "", "Move to a new parent folder ID")
+	editFolderCmd.Flags().String(flagID, "", "The current ID of the folder to edit (Required)")
+	editFolderCmd.Flags().String(flagName, "", "Set a new display name")
+	editFolderCmd.Flags().String(flagParent, "", "Move to a new parent folder ID")
 	editFolderCmd.Flags().String(flagNewID, "", "Change the slug ID (cascades automatically)")
 	editFolderCmd.Flags().Bool(flagUpdateIDSlug, false, "Update the slug ID on name change")
 	editFolderCmd.MarkFlagRequired(flagID)
@@ -112,9 +112,9 @@ func init() {
 	editFolderCmd.RegisterFlagCompletionFunc(flagID, folderIDCompletion)
 	editFolderCmd.RegisterFlagCompletionFunc(flagParent, folderIDCompletion)
 
-	editArtistCmd.Flags().StringP(flagID, "i", "", "The current ID of the artist to edit (Required)")
-	editArtistCmd.Flags().StringP(flagName, "n", "", "Set a new artist name")
-	editArtistCmd.Flags().StringP(flagFolder, "f", "", "Move to a new folder ID")
+	editArtistCmd.Flags().String(flagID, "", "The current ID of the artist to edit (Required)")
+	editArtistCmd.Flags().String(flagName, "", "Set a new artist name")
+	editArtistCmd.Flags().String(flagFolder, "", "Move to a new folder ID")
 	editArtistCmd.Flags().String(flagNewID, "", "Change the slug ID (cascades automatically)")
 	editArtistCmd.Flags().Bool(flagUpdateIDSlug, false, "Update the slug ID on name change")
 	editArtistCmd.MarkFlagRequired(flagID)

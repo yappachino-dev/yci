@@ -1,4 +1,4 @@
-// Package cmd provides entry point for cli tool
+// Package cli provides entry point for cli tool
 package cli
 
 import (
@@ -26,6 +26,14 @@ const (
 	flagArtist = "artist"
 	flagFolder = "folder"
 	flagDelay  = "delay"
+)
+
+const (
+	defaultDelay = "5:30"
+)
+
+const (
+	flagDelayComment = "Randomized delay between downloads in seconds (format min:max)"
 )
 
 var appl *app.Container

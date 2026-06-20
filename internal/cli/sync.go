@@ -88,11 +88,11 @@ var syncCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
-	syncCmd.Flags().StringP(flagArtist, "a", "", "Target a specific artist ID to sync")
-	syncCmd.Flags().StringP(flagFolder, "f", "", "Target a specific folder ID to sync")
-	syncCmd.Flags().BoolP(flagRecursive, "r", true, "When syncing a folder, include all sub-folders")
+	syncCmd.Flags().String(flagArtist, "", "Target a specific artist ID to sync")
+	syncCmd.Flags().String(flagFolder, "", "Target a specific folder ID to sync")
+	syncCmd.Flags().Bool(flagRecursive, true, "When syncing a folder, include all sub-folders")
 	syncCmd.Flags().Bool(flagDryRun, false, "Print missing files without downloading them")
-	syncCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	syncCmd.Flags().String(flagDelay, defaultDelay, flagDelayComment)
 	syncCmd.MarkFlagsMutuallyExclusive(flagArtist, flagFolder)
 	syncCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)
 	syncCmd.RegisterFlagCompletionFunc(flagFolder, folderIDCompletion)

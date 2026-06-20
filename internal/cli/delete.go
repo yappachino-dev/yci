@@ -115,8 +115,8 @@ func init() {
 	deleteArtistCmd.MarkFlagRequired(flagID)
 	deleteArtistCmd.RegisterFlagCompletionFunc(flagID, artistIDCompletion)
 
-	deleteChannelCmd.Flags().StringP(flagArtist, "a", "", "The target Artist ID (Required)")
-	deleteChannelCmd.Flags().StringP(flagName, "n", "", "The YouTube channel name to unlink (Required)")
+	deleteChannelCmd.Flags().String(flagArtist, "", "The target Artist ID (Required)")
+	deleteChannelCmd.Flags().String(flagName, "", "The YouTube channel name to unlink (Required)")
 	deleteChannelCmd.MarkFlagRequired(flagArtist)
 	deleteChannelCmd.MarkFlagRequired(flagName)
 	deleteChannelCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)

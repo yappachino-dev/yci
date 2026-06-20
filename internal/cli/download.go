@@ -150,7 +150,7 @@ func init() {
 	rootCmd.AddCommand(downloadCmd)
 
 	downloadCmd.AddCommand(downloadResumeCmd)
-	downloadCmd.PersistentFlags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadCmd.PersistentFlags().String(flagDelay, defaultDelay, flagDelayComment)
 	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
 	downloadCmd.Flags().Bool(flagInteractive, false, "Dynamically select channels upon downloading playlist")
