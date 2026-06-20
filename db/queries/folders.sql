@@ -28,9 +28,9 @@ ORDER BY depth DESC;
 
 -- name: CheckFolderHasChildren :one
 SELECT EXISTS (
-    SELECT 1 FROM folders WHERE parent_id = :id
+    SELECT 1 FROM folders WHERE (parent_id = :id OR (:id IS NULL AND parent_id IS NULL))
     UNION ALL
-    SELECT 1 FROM artists WHERE folder_id = :id
+    SELECT 1 FROM artists WHERE (folder_id = :id OR (:id IS NULL AND folder_id IS NULL))
 );
 
 -- name: CheckFolderExists :one

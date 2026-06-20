@@ -25,9 +25,9 @@ func (q *Queries) CheckFolderExists(ctx context.Context, id string) (bool, error
 
 const checkFolderHasChildren = `-- name: CheckFolderHasChildren :one
 SELECT EXISTS (
-    SELECT 1 FROM folders WHERE parent_id = ?1
+    SELECT 1 FROM folders WHERE (parent_id = ?1 OR (?1 IS NULL AND parent_id IS NULL))
     UNION ALL
-    SELECT 1 FROM artists WHERE folder_id = ?1
+    SELECT 1 FROM artists WHERE (folder_id = ?1 OR (?1 IS NULL AND folder_id IS NULL))
 )
 `
 
