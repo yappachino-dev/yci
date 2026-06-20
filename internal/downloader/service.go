@@ -7,18 +7,18 @@ import (
 	"strings"
 )
 
-type EnqueueReporter interface {
-	OnHybridURL(url string)
-	OnPlaylistURL(url string)
-	OnEnqueueSkipped(id string, reason string)
-}
-
 const (
 	SkipReasonStaged         = "already in staging directory"
 	SkipReasonExists         = "already exists in database"
 	SkipReasonDuplicate      = "duplicate in current request"
 	SkipReasonAlreadyInQueue = "already in download queue"
 )
+
+type EnqueueReporter interface {
+	OnHybridURL(url string)
+	OnPlaylistURL(url string)
+	OnEnqueueSkipped(id string, reason string)
+}
 
 type ProgressReporter interface {
 	OnQueueStart(totalTracks int)
@@ -38,6 +38,16 @@ func (r *noOpReporter) OnTrackStart(index int, total int, url string) {}
 func (r *noOpReporter) OnTrackSkipped(sourceID string, reason string) {}
 func (r *noOpReporter) OnTrackSuccess(url string)                     {}
 func (r *noOpReporter) OnTrackFailure(url string, err error)          {}
+
+type PlaylistSelector interface {
+	SelectChannels(ctx context.Context, channels []string) ([]string, error)
+}
+
+type noOpSelector struct{}
+
+func (s *noOpSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
+	return channels, nil
+}
 
 type TrackChecker interface {
 	ExistsBySourceID(ctx context.Context, id string) (bool, error)
@@ -115,9 +125,12 @@ func (s *Service) All(ctx context.Context) ([]QueueEntry, error) {
 	return q, nil
 }
 
-func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueReporter) (EnqueueResult, error) {
+func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueReporter, selector PlaylistSelector) (EnqueueResult, error) {
 	if reporter == nil {
 		reporter = &noOpReporter{}
+	}
+	if selector == nil {
+		selector = &noOpSelector{}
 	}
 
 	var result EnqueueResult
@@ -186,7 +199,21 @@ func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueRe
 				return result, fmt.Errorf("parse url: %w", err)
 			}
 
-			for _, video := range output {
+			channels, err := selector.SelectChannels(ctx, output.Channels)
+			if err != nil {
+				return result, fmt.Errorf("select channels: %w", err)
+			}
+
+			channelsSet := make(map[string]struct{}, len(channels))
+			for _, ch := range channels {
+				channelsSet[ch] = struct{}{}
+			}
+
+			for _, video := range output.Videos {
+				if _, selected := channelsSet[video.Channel]; !selected {
+					continue
+				}
+
 				if err := addIDIfUnique(video.ID); err != nil {
 					return result, err
 				}

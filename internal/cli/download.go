@@ -10,12 +10,14 @@ import (
 
 	"playlist-manager/internal/downloader"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
 
 const (
-	flagFile      = "file"
-	flagQueueOnly = "queue-only"
+	flagFile        = "file"
+	flagQueueOnly   = "queue-only"
+	flagInteractive = "interactive"
 )
 
 var downloadCmd = &cobra.Command{
@@ -44,7 +46,12 @@ var downloadCmd = &cobra.Command{
 			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
 		}
 
-		result, err := appl.DownloadService.Enqueue(ctx, urls, &EnqueueReporter{})
+		var selector downloader.PlaylistSelector
+		if interactive, _ := cmd.Flags().GetBool(flagInteractive); interactive {
+			selector = &EnqueueSelector{}
+		}
+
+		result, err := appl.DownloadService.Enqueue(ctx, urls, &EnqueueReporter{}, selector)
 		if err != nil {
 			return err
 		}
@@ -79,6 +86,27 @@ func (r *EnqueueReporter) OnEnqueueSkipped(id string, reason string) {
 	fmt.Printf("[-] Skipped %s: %s\n", id, reason)
 }
 
+type EnqueueSelector struct{}
+
+func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
+	var selected []string
+
+	options := huh.NewOptions(channels...)
+
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewNote().Title("Select channels that will be downloaded"),
+		huh.NewMultiSelect[string]().
+			Options(options...).
+			Value(&selected),
+	)).WithTheme(huh.ThemeBase())
+
+	if err := form.Run(); err != nil {
+		return nil, fmt.Errorf("failed to read terminal input: %w", err)
+	}
+
+	return selected, nil
+}
+
 var downloadResumeCmd = &cobra.Command{
 	Use:   "resume",
 	Short: "Process all enqueued downloads",
@@ -100,6 +128,7 @@ func init() {
 	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
 	downloadCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
+	downloadCmd.Flags().Bool(flagInteractive, false, "Dynamically select channels upon downloading playlist")
 
 	downloadResumeCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 }

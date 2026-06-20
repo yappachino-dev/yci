@@ -7,12 +7,18 @@ import (
 	"os/exec"
 )
 
-type VideoMetadata struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+type PlaylistMetadata struct {
+	Channels []string
+	Videos   []VideoMetadata
 }
 
-func parsePlaylist(ctx context.Context, url string) ([]VideoMetadata, error) {
+type VideoMetadata struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Channel string `json:"channel"`
+}
+
+func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
 	args := []string{
 		"--ignore-config",
 		"--no-cookies",
@@ -29,11 +35,11 @@ func parsePlaylist(ctx context.Context, url string) ([]VideoMetadata, error) {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, err
+		return PlaylistMetadata{}, err
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return PlaylistMetadata{}, err
 	}
 
 	defer func() {
@@ -41,19 +47,30 @@ func parsePlaylist(ctx context.Context, url string) ([]VideoMetadata, error) {
 	}()
 
 	var videos []VideoMetadata
-	decoder := json.NewDecoder(stdoutPipe)
+	var channels []string
+	seenChannels := make(map[string]struct{})
 
+	decoder := json.NewDecoder(stdoutPipe)
 	for decoder.More() {
 		var video VideoMetadata
 		if err := decoder.Decode(&video); err != nil {
-			return nil, err
+			return PlaylistMetadata{}, err
 		}
+
+		if _, seen := seenChannels[video.Channel]; !seen {
+			seenChannels[video.Channel] = struct{}{}
+			channels = append(channels, video.Channel)
+		}
+
 		videos = append(videos, video)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, err
+		return PlaylistMetadata{}, err
 	}
 
-	return videos, nil
+	return PlaylistMetadata{
+		Channels: channels,
+		Videos:   videos,
+	}, nil
 }
