@@ -229,19 +229,20 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 		return result, nil
 	}
 
+	var txEnqueued, txSkipped int
+
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		for _, id := range uniqueIDs {
 			enqueued, err := s.repo.Enqueue(txCtx, id)
 			if err != nil {
-				result.Failed++
 				return err
 			}
 
 			if enqueued {
-				result.Enqueued++
+				txEnqueued++
 			} else {
 				reporter.OnEnqueueSkipped(id, SkipReasonAlreadyInQueue)
-				result.Skipped++
+				txSkipped++
 			}
 		}
 
@@ -249,8 +250,12 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 	})
 
 	if txErr != nil {
+		result.Failed = len(uniqueIDs)
 		return result, fmt.Errorf("enqueue downloads: %w", txErr)
 	}
+
+	result.Enqueued = txEnqueued
+	result.Skipped = txSkipped
 
 	return result, nil
 }
