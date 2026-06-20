@@ -2,9 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"playlist-manager/internal/download"
 	"playlist-manager/internal/library"
@@ -20,53 +17,35 @@ const (
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Scan the database and download missing physical files",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return download.CheckDependencies()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-
-		if err := download.CheckDependencies(); err != nil {
-			return err
-		}
 
 		artist, _ := cmd.Flags().GetString(flagArtist)
 		folder, _ := cmd.Flags().GetString(flagFolder)
 		recursive, _ := cmd.Flags().GetBool(flagRecursive)
 		dryRun, _ := cmd.Flags().GetBool(flagDryRun)
-
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
-		delayParts := strings.Split(delayFlag, ":")
-		if len(delayParts) != 2 {
-			return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:15)")
-		}
-		minSleep, maxSleep := delayParts[0], delayParts[1]
 
-		var tracks []library.Track
+		var missing []library.Track
 		var err error
 
-		if artist != "" {
+		switch {
+		case artist != "":
 			fmt.Printf("Scanning missing files for artist: %s...\n", artist)
-			tracks, err = appl.TrackService.ByArtistID(ctx, library.ArtistID(artist))
-		} else if folder != "" {
+			missing, err = appl.AuditService.MissingByArtist(ctx, library.ArtistID(artist))
+		case folder != "":
 			fmt.Printf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
-			tracks, err = appl.TrackService.ByFolder(ctx, library.FolderID(folder), recursive)
-		} else {
+			missing, err = appl.AuditService.MissingByFolder(ctx, library.FolderID(folder), recursive)
+		default:
 			fmt.Println("Scanning entire library for missing files...")
-			tracks, err = appl.TrackService.All(ctx)
+			missing, err = appl.AuditService.MissingAll(ctx)
 		}
 
 		if err != nil {
-			return fmt.Errorf("database query failed: %w", err)
-		}
-
-		var missing []library.Track
-		for _, t := range tracks {
-			if t.SourceID == "" {
-				continue
-			}
-
-			absPath := filepath.Join(appl.Paths.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
-			if _, err := os.Stat(absPath); os.IsNotExist(err) {
-				missing = append(missing, t)
-			}
+			return err
 		}
 
 		if len(missing) == 0 {
@@ -77,45 +56,32 @@ var syncCmd = &cobra.Command{
 		fmt.Printf("Audit complete. Found %d missing files.\n\n", len(missing))
 
 		if dryRun {
-			fmt.Println("--- DRY RUN: The following files would be downloaded ---")
+			fmt.Println("--- DRY RUN: The following files would be enqueued and downloaded ---")
 			for _, t := range missing {
 				fmt.Printf("- %s (Target: %s)\n", t.Title, t.RelativePath)
 			}
+
 			return nil
 		}
 
-		fmt.Println("Starting recovery process...")
-		successCount := 0
-
-		for i, t := range missing {
-			fmt.Printf("--- [Recovering %d / %d] ---\n", i+1, len(missing))
-			fmt.Printf("Track: %s\n", t.Title)
-
-			targetPath := filepath.Join(appl.Paths.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
-
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				fmt.Printf("Failed to create directory for %s: %v\n\n", t.Title, err)
-				continue
-			}
-
-			cfg := download.Config{
-				AbsoluteOutputPath: targetPath,
-				URL:                t.SourceID,
-				MinSleep:           minSleep,
-				MaxSleep:           maxSleep,
-			}
-
-			if err := download.Download(ctx, cfg); err != nil {
-				fmt.Printf("Error recovering %s: %v\n\n", t.Title, err)
-				continue
-			}
-
-			successCount++
-			fmt.Println()
+		ids := make([]string, 0, len(missing))
+		for _, t := range missing {
+			ids = append(ids, t.SourceID)
 		}
 
-		fmt.Printf("Sync complete! Successfully recovered %d/%d files.\n", successCount, len(missing))
-		return nil
+		result, err := appl.DownloadService.Enqueue(ctx, download.EnqueueParams{
+			URLs:     ids,
+			Reporter: &EnqueueReporter{},
+		})
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
+			result.Enqueued, result.Skipped, result.Failed)
+
+		fmt.Print("\nProcessing queue...\n")
+		return executeDownloadLoop(ctx, delayFlag)
 	},
 }
 

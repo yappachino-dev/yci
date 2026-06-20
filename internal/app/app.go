@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"playlist-manager/internal/audit"
 	"playlist-manager/internal/db"
 	"playlist-manager/internal/download"
 	"playlist-manager/internal/fs"
@@ -19,6 +20,7 @@ type Container struct {
 	ChannelService  *library.ChannelService
 	StagingService  *library.StagingService
 	DownloadService *download.Service
+	AuditService    *audit.Service
 	Paths           fs.AppPaths
 }
 
@@ -84,6 +86,11 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 		Config:       paths,
 	})
 
+	auditService := audit.NewService(audit.Config{
+		TrackProvider: trackService,
+		Config:        paths,
+	})
+
 	return &Container{
 		DB:              dbConn,
 		FolderService:   folderService,
@@ -92,6 +99,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 		ChannelService:  channelService,
 		StagingService:  stagingService,
 		DownloadService: downloadService,
+		AuditService:    auditService,
 		Paths:           paths,
 	}, nil
 }
