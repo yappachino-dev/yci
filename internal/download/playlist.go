@@ -1,4 +1,4 @@
-package downloader
+package download
 
 import (
 	"context"
@@ -26,7 +26,7 @@ func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
 
 		"--flat-playlist",
 		"--dump-json",
-		url,
+		"--", url,
 	}
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)

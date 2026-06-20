@@ -1,5 +1,5 @@
-// Package downloader uses yt-dlp to download music from youtube
-package downloader
+// Package download uses yt-dlp to download music from youtube
+package download
 
 import (
 	"context"

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"playlist-manager/internal/db"
-	"playlist-manager/internal/downloader"
+	"playlist-manager/internal/download"
 	"playlist-manager/internal/fs"
 	"playlist-manager/internal/library"
 	"playlist-manager/internal/store"
@@ -18,7 +18,7 @@ type Container struct {
 	TrackService    *library.TrackService
 	ChannelService  *library.ChannelService
 	StagingService  *library.StagingService
-	DownloadService *downloader.Service
+	DownloadService *download.Service
 	Paths           fs.AppPaths
 }
 
@@ -32,7 +32,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 	artistRepo := library.NewSQLiteArtistRepository(queries, rootID)
 	trackRepo := library.NewSQLiteTrackRepository(queries)
 	channelRepo := library.NewSQLiteChannelRepository(queries)
-	queueRepo := downloader.NewSQLiteQueueRepo(queries)
+	queueRepo := download.NewSQLiteQueueRepo(queries)
 
 	diskMover := fs.NewOSDiskMover()
 	diskReader := fs.NewOSDiskReader()
@@ -76,7 +76,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 		Config:         paths,
 	})
 
-	downloadService := downloader.NewService(downloader.ServiceConfig{
+	downloadService := download.NewService(download.ServiceConfig{
 		QueueRepo:    queueRepo,
 		TrackChecker: trackService,
 		DirReader:    diskReader,

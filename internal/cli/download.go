@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"playlist-manager/internal/downloader"
+	"playlist-manager/internal/download"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -30,7 +30,7 @@ var downloadCmd = &cobra.Command{
 			return err
 		}
 
-		if err := downloader.CheckDependencies(); err != nil {
+		if err := download.CheckDependencies(); err != nil {
 			return err
 		}
 
@@ -54,14 +54,14 @@ var downloadCmd = &cobra.Command{
 			return fmt.Errorf("no URLs provided. Pass links as arguments or use the --file flag")
 		}
 
-		var selector downloader.PlaylistSelector
+		var selector download.PlaylistSelector
 		if interactive, _ := cmd.Flags().GetBool(flagInteractive); interactive {
 			selector = &EnqueueSelector{}
 		}
 
 		forcePlaylist, _ := cmd.Flags().GetBool(flagForcePlaylist)
 
-		result, err := appl.DownloadService.Enqueue(ctx, downloader.EnqueueParams{
+		result, err := appl.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:          urls,
 			Reporter:      &EnqueueReporter{},
 			Selector:      selector,

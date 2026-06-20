@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"playlist-manager/internal/downloader"
+	"playlist-manager/internal/download"
 	"playlist-manager/internal/library"
 
 	"github.com/spf13/cobra"
@@ -23,7 +23,7 @@ var syncCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if err := downloader.CheckDependencies(); err != nil {
+		if err := download.CheckDependencies(); err != nil {
 			return err
 		}
 
@@ -98,14 +98,14 @@ var syncCmd = &cobra.Command{
 				continue
 			}
 
-			cfg := downloader.Config{
+			cfg := download.Config{
 				AbsoluteOutputPath: targetPath,
 				URL:                t.SourceID,
 				MinSleep:           minSleep,
 				MaxSleep:           maxSleep,
 			}
 
-			if err := downloader.Download(ctx, cfg); err != nil {
+			if err := download.Download(ctx, cfg); err != nil {
 				fmt.Printf("Error recovering %s: %v\n\n", t.Title, err)
 				continue
 			}

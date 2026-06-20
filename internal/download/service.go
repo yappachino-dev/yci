@@ -1,4 +1,4 @@
-package downloader
+package download
 
 import (
 	"context"
@@ -13,6 +13,14 @@ const (
 	SkipReasonDuplicate      = "duplicate in current request"
 	SkipReasonAlreadyInQueue = "already in download queue"
 )
+
+type QueueEntry struct {
+	ID       int
+	SourceID string
+	Status   string
+	Attempts int
+	ErrorMsg string
+}
 
 type EnqueueReporter interface {
 	OnHybridURL(url string, forcePlaylist bool)
@@ -60,14 +68,6 @@ type TrackChecker interface {
 
 type DirReader interface {
 	ReadDir(path string) ([]string, error)
-}
-
-type QueueEntry struct {
-	ID       int
-	SourceID string
-	Status   string
-	Attempts int
-	ErrorMsg string
 }
 
 type QueueRepo interface {
