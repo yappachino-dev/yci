@@ -35,7 +35,7 @@ func Download(ctx context.Context, cfg Config) error {
 
 		// "--sponsorblock-remove music_off,intro,outro"
 		"--output", cfg.AbsoluteOutputPath,
-		cfg.URL,
+		"--", cfg.URL,
 	}
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
