@@ -15,7 +15,7 @@ const (
 )
 
 type EnqueueReporter interface {
-	OnHybridURL(url string)
+	OnHybridURL(url string, forcePlaylist bool)
 	OnPlaylistURL(url string)
 	OnEnqueueSkipped(id string, reason string)
 }
@@ -29,9 +29,9 @@ type ProgressReporter interface {
 
 type noOpReporter struct{}
 
-func (r *noOpReporter) OnHybridURL(url string)                    {}
-func (r *noOpReporter) OnPlaylistURL(url string)                  {}
-func (r *noOpReporter) OnEnqueueSkipped(id string, reason string) {}
+func (r *noOpReporter) OnHybridURL(url string, forcePlaylist bool) {}
+func (r *noOpReporter) OnPlaylistURL(url string)                   {}
+func (r *noOpReporter) OnEnqueueSkipped(id string, reason string)  {}
 
 func (r *noOpReporter) OnQueueStart(totalTracks int)                  {}
 func (r *noOpReporter) OnTrackStart(index int, total int, url string) {}
@@ -48,6 +48,11 @@ type noOpSelector struct{}
 func (s *noOpSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
 	return channels, nil
 }
+
+var (
+	defaultNoOpRepoter  = &noOpReporter{}
+	defaultNoOpSelector = &noOpSelector{}
+)
 
 type TrackChecker interface {
 	ExistsBySourceID(ctx context.Context, id string) (bool, error)
@@ -125,12 +130,22 @@ func (s *Service) All(ctx context.Context) ([]QueueEntry, error) {
 	return q, nil
 }
 
-func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueReporter, selector PlaylistSelector) (EnqueueResult, error) {
+type EnqueueParams struct {
+	URLs          []string
+	Reporter      EnqueueReporter
+	Selector      PlaylistSelector
+	ForcePlaylist bool
+}
+
+func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueResult, error) {
+	reporter := params.Reporter
 	if reporter == nil {
-		reporter = &noOpReporter{}
+		reporter = defaultNoOpRepoter
 	}
+
+	selector := params.Selector
 	if selector == nil {
-		selector = &noOpSelector{}
+		selector = defaultNoOpSelector
 	}
 
 	var result EnqueueResult
@@ -145,7 +160,7 @@ func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueRe
 		seenIDs[strings.TrimSuffix(f, ".opus")] = SkipReasonStaged
 	}
 
-	uniqueIDs := make([]string, 0, len(urls))
+	uniqueIDs := make([]string, 0, len(params.URLs))
 
 	addIDIfUnique := func(id string) error {
 		if reason, ok := seenIDs[id]; ok {
@@ -172,7 +187,7 @@ func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueRe
 		return nil
 	}
 
-	for _, u := range urls {
+	for _, u := range params.URLs {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
@@ -187,36 +202,25 @@ func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueRe
 			if err := addIDIfUnique(p.VideoID); err != nil {
 				return result, err
 			}
-		case URLTypeHybrid:
-			reporter.OnHybridURL(u)
-			if err := addIDIfUnique(p.VideoID); err != nil {
-				return result, err
-			}
 		case URLTypePlaylist:
 			reporter.OnPlaylistURL(u)
-			output, err := parsePlaylist(ctx, p.CleanURL)
-			if err != nil {
-				return result, fmt.Errorf("parse url: %w", err)
+
+			if err := processPlaylist(ctx, p.CleanURL(true), selector, addIDIfUnique); err != nil {
+				return result, err
 			}
+		case URLTypeHybrid:
+			reporter.OnHybridURL(u, params.ForcePlaylist)
 
-			channels, err := selector.SelectChannels(ctx, output.Channels)
-			if err != nil {
-				return result, fmt.Errorf("select channels: %w", err)
-			}
-
-			channelsSet := make(map[string]struct{}, len(channels))
-			for _, ch := range channels {
-				channelsSet[ch] = struct{}{}
-			}
-
-			for _, video := range output.Videos {
-				if _, selected := channelsSet[video.Channel]; !selected {
-					continue
-				}
-
-				if err := addIDIfUnique(video.ID); err != nil {
+			if params.ForcePlaylist {
+				if err := processPlaylist(ctx, p.CleanURL(true), selector, addIDIfUnique); err != nil {
 					return result, err
 				}
+
+				break
+			}
+
+			if err := addIDIfUnique(p.VideoID); err != nil {
+				return result, err
 			}
 		}
 	}
@@ -249,6 +253,35 @@ func (s *Service) Enqueue(ctx context.Context, urls []string, reporter EnqueueRe
 	}
 
 	return result, nil
+}
+
+func processPlaylist(ctx context.Context, url string, selector PlaylistSelector, addFn func(string) error) error {
+	output, err := parsePlaylist(ctx, url)
+	if err != nil {
+		return fmt.Errorf("parse url: %w", err)
+	}
+
+	channels, err := selector.SelectChannels(ctx, output.Channels)
+	if err != nil {
+		return fmt.Errorf("select channels: %w", err)
+	}
+
+	channelsSet := make(map[string]struct{}, len(channels))
+	for _, ch := range channels {
+		channelsSet[ch] = struct{}{}
+	}
+
+	for _, video := range output.Videos {
+		if _, selected := channelsSet[video.Channel]; !selected {
+			continue
+		}
+
+		if err := addFn(video.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type ProcessResult struct {

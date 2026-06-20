@@ -19,7 +19,23 @@ type ParsedURL struct {
 	Type       URLType
 	VideoID    string
 	PlaylistID string
-	CleanURL   string
+}
+
+func (p ParsedURL) CleanURL(forcePlaylist bool) string {
+	switch p.Type {
+	case URLTypeVideo:
+		return "https://www.youtube.com/watch?v=" + p.VideoID
+	case URLTypePlaylist:
+		return "https://www.youtube.com/playlist?list=" + p.PlaylistID
+	case URLTypeHybrid:
+		if forcePlaylist {
+			return "https://www.youtube.com/playlist?list=" + p.PlaylistID
+		}
+
+		return "https://www.youtube.com/watch?v=" + p.VideoID
+	default:
+		return ""
+	}
 }
 
 func ParseURL(rawURL string) (ParsedURL, error) {
@@ -41,13 +57,10 @@ func ParseURL(rawURL string) (ParsedURL, error) {
 	switch {
 	case result.VideoID != "" && result.PlaylistID != "":
 		result.Type = URLTypeHybrid
-		result.CleanURL = "https://www.youtube.com/watch?v=" + result.VideoID
 	case result.VideoID != "":
 		result.Type = URLTypeVideo
-		result.CleanURL = "https://www.youtube.com/watch?v=" + result.VideoID
 	case result.PlaylistID != "":
 		result.Type = URLTypePlaylist
-		result.CleanURL = "https://www.youtube.com/playlist?list=" + result.PlaylistID
 	}
 
 	return result, nil

@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -15,21 +16,28 @@ import (
 )
 
 const (
-	flagFile        = "file"
-	flagQueueOnly   = "queue-only"
-	flagInteractive = "interactive"
+	flagFile          = "file"
+	flagQueueOnly     = "queue-only"
+	flagInteractive   = "interactive"
+	flagForcePlaylist = "force-playlist"
 )
 
 var downloadCmd = &cobra.Command{
 	Use:   "download [urls...]",
 	Short: "Download YouTube audio directly to the staging area",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := initApplication(cmd.Context()); err != nil {
+			return err
+		}
 
 		if err := downloader.CheckDependencies(); err != nil {
 			return err
 		}
 
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		urls := args
 
 		filePath, _ := cmd.Flags().GetString(flagFile)
@@ -51,8 +59,20 @@ var downloadCmd = &cobra.Command{
 			selector = &EnqueueSelector{}
 		}
 
-		result, err := appl.DownloadService.Enqueue(ctx, urls, &EnqueueReporter{}, selector)
+		forcePlaylist, _ := cmd.Flags().GetBool(flagForcePlaylist)
+
+		result, err := appl.DownloadService.Enqueue(ctx, downloader.EnqueueParams{
+			URLs:          urls,
+			Reporter:      &EnqueueReporter{},
+			Selector:      selector,
+			ForcePlaylist: forcePlaylist,
+		})
 		if err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				fmt.Println("\n[!] Operation cancelled by user.")
+				return nil
+			}
+
 			return err
 		}
 
@@ -74,7 +94,12 @@ var downloadCmd = &cobra.Command{
 
 type EnqueueReporter struct{}
 
-func (r *EnqueueReporter) OnHybridURL(url string) {
+func (r *EnqueueReporter) OnHybridURL(url string, forcePlaylist bool) {
+	if forcePlaylist {
+		fmt.Printf("[!] Extracting every video from hybrid-playlist URL: %s\n", url)
+		return
+	}
+
 	fmt.Printf("[!] Extracting video from hybrid URL: %s\n", url)
 }
 
@@ -125,12 +150,11 @@ func init() {
 	rootCmd.AddCommand(downloadCmd)
 
 	downloadCmd.AddCommand(downloadResumeCmd)
+	downloadCmd.PersistentFlags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
-	downloadCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
 	downloadCmd.Flags().Bool(flagInteractive, false, "Dynamically select channels upon downloading playlist")
-
-	downloadResumeCmd.Flags().String(flagDelay, "5:30", "Randomized delay between downloads in seconds (format min:max)")
+	downloadCmd.Flags().Bool(flagForcePlaylist, false, "Extract playlist ID instead of video ID from hybrid URLs")
 }
 
 func readUrlsFromFile(path string) ([]string, error) {
@@ -189,10 +213,6 @@ func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
 }
 
 func executeDownloadLoop(ctx context.Context, delayFlag string) error {
-	if err := downloader.CheckDependencies(); err != nil {
-		return err
-	}
-
 	delayParts := strings.Split(delayFlag, ":")
 	if len(delayParts) != 2 {
 		return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
