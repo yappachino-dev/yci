@@ -141,7 +141,7 @@ var downloadResumeCmd = &cobra.Command{
 
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
-		fmt.Print("\nResuming queue...\n")
+		fmt.Print("Resuming queue...\n")
 		return executeDownloadLoop(ctx, delayFlag)
 	},
 }

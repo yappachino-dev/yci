@@ -99,9 +99,9 @@ func NewFolderService(cfg FolderServiceConfig) *FolderService {
 	}
 }
 
-func (s *FolderService) Create(ctx context.Context, id FolderID, parentID FolderID, name FolderName) error {
+func (s *FolderService) Create(ctx context.Context, id FolderID, parentID FolderID, name FolderName) (Folder, error) {
 	if err := name.Validate(); err != nil {
-		return fmt.Errorf("create folder: %w", err)
+		return Folder{}, fmt.Errorf("create folder: %w", err)
 	}
 
 	if id == "" {
@@ -119,10 +119,10 @@ func (s *FolderService) Create(ctx context.Context, id FolderID, parentID Folder
 	}
 
 	if err := s.repo.Create(ctx, f); err != nil {
-		return fmt.Errorf("create folder %q: %w", f.ID, err)
+		return Folder{}, fmt.Errorf("create folder %q: %w", f.ID, err)
 	}
 
-	return nil
+	return f, nil
 }
 
 func (s *FolderService) ByID(ctx context.Context, id FolderID) (Folder, error) {

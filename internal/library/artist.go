@@ -79,9 +79,9 @@ func NewArtistService(cfg ArtistServiceConfig) *ArtistService {
 	}
 }
 
-func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID FolderID, name ArtistName) error {
+func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID FolderID, name ArtistName) (Artist, error) {
 	if err := name.Validate(); err != nil {
-		return fmt.Errorf("create artist: %w", err)
+		return Artist{}, fmt.Errorf("create artist: %w", err)
 	}
 
 	if id == "" {
@@ -91,7 +91,7 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 	if folderID == "" {
 		exists, err := s.folderChecker.Exists(ctx, FolderID(id))
 		if err != nil {
-			return fmt.Errorf("folder fallback for artist %q: %w", id, err)
+			return Artist{}, fmt.Errorf("folder fallback for artist %q: %w", id, err)
 		}
 
 		if exists {
@@ -108,10 +108,10 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 	}
 
 	if err := s.repo.Create(ctx, a); err != nil {
-		return fmt.Errorf("create artist %q: %w", a.ID, err)
+		return Artist{}, fmt.Errorf("create artist %q: %w", a.ID, err)
 	}
 
-	return nil
+	return a, nil
 }
 
 func (s *ArtistService) ByID(ctx context.Context, id ArtistID) (Artist, error) {

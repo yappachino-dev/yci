@@ -27,11 +27,12 @@ var createFolderCmd = &cobra.Command{
 		name = strings.TrimSpace(name)
 		parent = strings.TrimSpace(parent)
 
-		if err := appl.FolderService.Create(cmd.Context(), library.FolderID(id), library.FolderID(parent), library.FolderName(name)); err != nil {
+		f, err := appl.FolderService.Create(cmd.Context(), library.FolderID(id), library.FolderID(parent), library.FolderName(name))
+		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Created folder: %q (ID: %s) under parent: %s\n", name, id, parent)
+		fmt.Printf("Created folder: %q (ID: %s) under parent: %s\n", f.Name, f.ID, f.ParentID)
 		return nil
 	},
 }
@@ -48,11 +49,12 @@ var createArtistCmd = &cobra.Command{
 		name = strings.TrimSpace(name)
 		folder = strings.TrimSpace(folder)
 
-		if err := appl.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name)); err != nil {
+		a, err := appl.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name))
+		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Created artist: %q (ID: %s) in folder: %s\n", name, id, folder)
+		fmt.Printf("Created artist: %q (ID: %s) in folder: %s\n", a.Name, a.ID, a.FolderID)
 		return nil
 	},
 }
