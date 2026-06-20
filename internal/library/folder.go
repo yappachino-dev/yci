@@ -168,6 +168,10 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 	newName := newIfPresent(params.Name, oldFolder.Name)
 	newParent := newIfPresent(params.Parent, oldFolder.ParentID)
 
+	if params.RegenerateSlugID {
+		newID = FolderID(nameToSlug(string(newName)))
+	}
+
 	ancestors, err := s.repo.Ancestors(ctx, newParent)
 	if err != nil {
 		return fmt.Errorf("update folder %q: %w", oldID, err)
