@@ -42,7 +42,8 @@ var rootCmd = &cobra.Command{
 	Use:   "yci",
 	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		return initApplication(cmd.Context())
+		autoMigrate := !strings.HasPrefix(cmd.CommandPath(), "yci debug migration")
+		return initApplication(cmd.Context(), autoMigrate)
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		if appl != nil && appl.DB != nil {
@@ -59,7 +60,7 @@ func Execute() {
 	}
 }
 
-func initApplication(ctx context.Context) error {
+func initApplication(ctx context.Context, autoMigrate bool) error {
 	paths, err := fs.GetPaths()
 	if err != nil {
 		return fmt.Errorf("load application paths: %w", err)
@@ -79,9 +80,15 @@ func initApplication(ctx context.Context) error {
 		return fmt.Errorf("enable foreign key constraints: %w", err)
 	}
 
-	if err = db.RunMigrations(ctx, dbConn); err != nil {
-		dbConn.Close()
-		return fmt.Errorf("execute database migration: %w", err)
+	if err = db.SetUpMigrationContext(); err != nil {
+		return fmt.Errorf("setup database migrations: %w", err)
+	}
+
+	if autoMigrate {
+		if err = db.RunMigrations(ctx, dbConn); err != nil {
+			dbConn.Close()
+			return fmt.Errorf("execute database migration: %w", err)
+		}
 	}
 
 	appl, err = app.NewContainer(ctx, dbConn, paths)

@@ -26,7 +26,7 @@ var downloadCmd = &cobra.Command{
 	Use:   "download [urls...]",
 	Short: "Download YouTube audio directly to the staging area",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := initApplication(cmd.Context()); err != nil {
+		if err := initApplication(cmd.Context(), true); err != nil {
 			return err
 		}
 
