@@ -39,15 +39,6 @@ type TrackCreateParams struct {
 	SourceID     string
 }
 
-type TrackUpdateParams struct {
-	ID           TrackID
-	Title        string
-	Album        string
-	ArtistID     ArtistID
-	RelativePath TrackPath
-	SourceID     string
-}
-
 type TrackPathMove struct {
 	ID      TrackID
 	OldPath TrackPath
@@ -60,7 +51,6 @@ type TrackRepository interface {
 	ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error)
 	ByPathPattern(ctx context.Context, pattern string) ([]Track, error)
 	ExistsBySourceID(ctx context.Context, sourceID string) (bool, error)
-	// Update(ctx context.Context, id TrackID, t Track) error
 	Delete(ctx context.Context, id TrackID) error
 	UpdatePathsByPrefix(ctx context.Context, oldPrefix, newPrefix string) error
 	UpdatePathsBatch(ctx context.Context, moves []TrackPathMove) error
@@ -344,18 +334,6 @@ func (r *SQLiteTrackRepository) ByPathPattern(ctx context.Context, pattern strin
 
 func (r *SQLiteTrackRepository) ExistsBySourceID(ctx context.Context, sourceID string) (bool, error) {
 	return r.db(ctx).CheckTracksBySourceID(ctx, db.ToNullString(sourceID))
-}
-
-func (r *SQLiteTrackRepository) Update(ctx context.Context, id TrackID, t Track) error {
-	return r.db(ctx).UpdateTrack(ctx, store.UpdateTrackParams{
-		OldID:        string(id),
-		NewID:        string(t.ID),
-		Title:        t.Title,
-		Album:        db.ToNullString(t.Album),
-		ArtistID:     db.ToNullString(string(t.ArtistID)),
-		RelativePath: string(t.RelativePath),
-		SourceID:     db.ToNullString(t.SourceID),
-	})
 }
 
 func (r *SQLiteTrackRepository) Delete(ctx context.Context, id TrackID) error {
