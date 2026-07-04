@@ -31,20 +31,6 @@ func (n FolderName) Validate() error {
 	return nil
 }
 
-func (id FolderID) FromDB(rootID FolderID) FolderID {
-	if string(id) == "" {
-		return rootID
-	}
-	return id
-}
-
-func (id FolderID) ToDB(rootID FolderID) string {
-	if id == rootID {
-		return ""
-	}
-	return string(id)
-}
-
 type Folder struct {
 	ID       FolderID
 	Name     FolderName
@@ -288,7 +274,7 @@ func (r *SQLiteFolderRepository) Create(ctx context.Context, a Folder) error {
 	return r.db(ctx).CreateFolder(ctx, store.CreateFolderParams{
 		ID:          string(a.ID),
 		DisplayName: string(a.Name),
-		ParentID:    db.ToNullString(a.ParentID.ToDB(r.rootID)),
+		ParentID:    db.ToNullString(string(a.ParentID)),
 	})
 }
 
@@ -301,7 +287,7 @@ func (r *SQLiteFolderRepository) ByID(ctx context.Context, id FolderID) (Folder,
 	return Folder{
 		ID:       FolderID(row.ID),
 		Name:     FolderName(row.DisplayName),
-		ParentID: FolderID(db.FromNullString(row.ParentID)).FromDB(r.rootID),
+		ParentID: FolderID(db.FromNullString(row.ParentID)),
 	}, nil
 }
 
@@ -316,7 +302,7 @@ func (r *SQLiteFolderRepository) All(ctx context.Context) ([]Folder, error) {
 		folders = append(folders, Folder{
 			ID:       FolderID(row.ID),
 			Name:     FolderName(row.DisplayName),
-			ParentID: FolderID(db.FromNullString(row.ParentID)).FromDB(r.rootID),
+			ParentID: FolderID(db.FromNullString(row.ParentID)),
 		})
 	}
 
@@ -328,7 +314,7 @@ func (r *SQLiteFolderRepository) Ancestors(ctx context.Context, id FolderID) ([]
 }
 
 func (r *SQLiteFolderRepository) HasChildren(ctx context.Context, id FolderID) (bool, error) {
-	return r.db(ctx).CheckFolderHasChildren(ctx, db.ToNullString(id.ToDB(r.rootID)))
+	return r.db(ctx).CheckFolderHasChildren(ctx, db.ToNullString(string(id)))
 }
 
 func (r *SQLiteFolderRepository) Update(ctx context.Context, id FolderID, a Folder) error {
@@ -336,7 +322,7 @@ func (r *SQLiteFolderRepository) Update(ctx context.Context, id FolderID, a Fold
 		OldID:       string(id),
 		NewID:       string(a.ID),
 		DisplayName: string(a.Name),
-		ParentID:    db.ToNullString(a.ParentID.ToDB(r.rootID)),
+		ParentID:    db.ToNullString(string(a.ParentID)),
 	})
 }
 

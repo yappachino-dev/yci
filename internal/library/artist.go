@@ -224,7 +224,7 @@ func (r *SQLiteArtistRepository) Create(ctx context.Context, a Artist) error {
 	return r.db(ctx).CreateArtist(ctx, store.CreateArtistParams{
 		ID:          string(a.ID),
 		DisplayName: string(a.Name),
-		FolderID:    db.ToNullString(a.FolderID.ToDB(r.rootID)),
+		FolderID:    db.ToNullString(string(a.FolderID)),
 	})
 }
 
@@ -237,7 +237,7 @@ func (r *SQLiteArtistRepository) ByID(ctx context.Context, id ArtistID) (Artist,
 	return Artist{
 		ID:       ArtistID(row.ID),
 		Name:     ArtistName(row.DisplayName),
-		FolderID: FolderID(db.FromNullString(row.FolderID)).FromDB(r.rootID),
+		FolderID: FolderID(db.FromNullString(row.FolderID)),
 	}, nil
 }
 
@@ -252,7 +252,7 @@ func (r *SQLiteArtistRepository) All(ctx context.Context) ([]Artist, error) {
 		artists = append(artists, Artist{
 			ID:       ArtistID(row.ID),
 			Name:     ArtistName(row.DisplayName),
-			FolderID: FolderID(db.FromNullString(row.FolderID)).FromDB(r.rootID),
+			FolderID: FolderID(db.FromNullString(row.FolderID)),
 		})
 	}
 
@@ -265,7 +265,7 @@ func (r *SQLiteArtistRepository) FolderID(ctx context.Context, id ArtistID) (Fol
 		return "", err
 	}
 
-	return FolderID(db.FromNullString(a.FolderID)).FromDB(r.rootID), nil
+	return FolderID(db.FromNullString(a.FolderID)), nil
 }
 
 func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a Artist) error {
@@ -273,7 +273,7 @@ func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a Arti
 		OldID:       string(id),
 		NewID:       string(a.ID),
 		DisplayName: string(a.Name),
-		FolderID:    db.ToNullString(a.FolderID.ToDB(r.rootID)),
+		FolderID:    db.ToNullString(string(a.FolderID)),
 	})
 }
 

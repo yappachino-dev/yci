@@ -24,6 +24,7 @@ WITH RECURSIVE ancestor_chain AS (
 )
 SELECT display_name 
 FROM ancestor_chain 
+WHERE id != 'root'
 ORDER BY depth DESC;
 
 -- name: CheckFolderHasChildren :one
