@@ -129,6 +129,20 @@ func (s *FolderService) All(ctx context.Context) ([]Folder, error) {
 	return f, nil
 }
 
+func (s *FolderService) AllIDs(ctx context.Context) ([]FolderID, error) {
+	a, err := s.repo.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("all artists: %w", err)
+	}
+
+	ids := make([]FolderID, 0, len(a))
+	for _, i := range a {
+		ids = append(ids, i.ID)
+	}
+
+	return ids, nil
+}
+
 func (s *FolderService) IsEmpty(ctx context.Context, id FolderID) (bool, error) {
 	hasChildren, err := s.repo.HasChildren(ctx, id)
 	if err != nil {

@@ -27,6 +27,7 @@ const (
 type StagingResult struct {
 	Action StagingAction
 	Artist ArtistID
+	Folder FolderID
 }
 
 type TrackCreator interface {
@@ -133,6 +134,8 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 		return err
 	}
 
+	var trackFolder FolderID
+
 	if !ok {
 		res, err := onUnknown(string(channelName), title)
 		if err != nil {
@@ -146,19 +149,31 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 			return ErrProcessAborted
 		case ActionImport:
 			artistID = res.Artist
+			trackFolder = res.Folder
 		}
 
-		if err := s.linker.Link(ctx, artistID, channelName); err != nil {
-			return fmt.Errorf("failed linking unknown channel to artist: %w", err)
+		if artistID != "" {
+			if err := s.linker.Link(ctx, artistID, channelName); err != nil {
+				return fmt.Errorf("failed linking unknown channel to artist: %w", err)
+			}
 		}
 	}
 
-	folderID, err := s.artistReader.FolderID(ctx, artistID)
-	if err != nil {
-		return fmt.Errorf("failed tracking artist folder target: %w", err)
+	var targetFolder FolderID
+
+	switch {
+	case trackFolder != "":
+		targetFolder = trackFolder
+	case artistID != "":
+		targetFolder, err = s.artistReader.FolderID(ctx, artistID)
+		if err != nil {
+			return fmt.Errorf("failed tracking artist folder target: %w", err)
+		}
+	default:
+		targetFolder = FolderID(RootID)
 	}
 
-	folderPath, err := s.folderResolver.ResolvePath(ctx, folderID)
+	folderPath, err := s.folderResolver.ResolvePath(ctx, targetFolder)
 	if err != nil {
 		return fmt.Errorf("failed resolving destination path: %w", err)
 	}
@@ -181,6 +196,7 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 			Title:        title,
 			Album:        m.Album,
 			ArtistID:     artistID,
+			FolderID:     targetFolder,
 			RelativePath: TrackPath(relPath),
 			SourceID:     sourceID,
 		}

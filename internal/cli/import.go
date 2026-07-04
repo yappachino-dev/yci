@@ -38,12 +38,17 @@ var importStagingCmd = &cobra.Command{
 			}
 		}
 
-		ids, err := appl.ArtistService.AllIDs(ctx)
+		artistIds, err := appl.ArtistService.AllIDs(ctx)
 		if err != nil {
 			return fmt.Errorf("fetch artist ids: %w", err)
 		}
+		artistSuggestions := StringSlice(artistIds)
 
-		suggestions := StringSlice(ids)
+		folderIds, err := appl.ArtistService.AllIDs(ctx)
+		if err != nil {
+			return fmt.Errorf("fetch folder ids: %w", err)
+		}
+		folderSuggestions := StringSlice(folderIds)
 
 		handler := func(channelName string, title string) (library.StagingResult, error) {
 			switch {
@@ -53,34 +58,92 @@ var importStagingCmd = &cobra.Command{
 				return library.StagingResult{Action: library.ActionImport, Artist: library.ArtistID(fallbackArtist)}, nil
 			}
 
-			var input string
+			var actionType string
 
-			form := huh.NewForm(huh.NewGroup(
+			choiceForm := huh.NewForm(huh.NewGroup(
 				huh.NewNote().Title(
 					fmt.Sprintf("Unknown Channel: %q\nTrack: %q", channelName, title),
 				),
-				huh.NewInput().
-					Description("Enter an existing Artist ID to link (or type 'skip'/'exit')").
-					Value(&input).
-					Suggestions(append([]string{"skip", "exit"}, suggestions...)),
-			)).WithTheme(huh.ThemeBase())
+				huh.NewSelect[string]().
+					Title("How would you like to handle this track?").
+					Options(
+						huh.NewOption("Link Channel to an Artist (Permanent)", "artist"),
+						huh.NewOption("Route straight to a Folder (One-off track)", "folder"),
+						huh.NewOption("Skip this track", "skip"),
+						huh.NewOption("Abort processing loop", "abort"),
+					).
+					Value(&actionType),
+			)).WithTheme(huhTheme)
 
-			if err := form.Run(); err != nil {
-				return library.StagingResult{}, fmt.Errorf("failed to read terminal input: %w", err)
+			if err := choiceForm.Run(); err != nil {
+				return library.StagingResult{}, fmt.Errorf("failed to read menu choice: %w", err)
 			}
 
-			input = strings.TrimSpace(input)
-
-			switch input {
-			case "exit", "quit":
-				return library.StagingResult{Action: library.ActionAbort}, nil
-			case "skip", "":
-				fmt.Printf("Skipped %q\n", channelName)
+			switch actionType {
+			case "skip":
+				fmt.Printf("Skipped track from %q\n", channelName)
 				return library.StagingResult{Action: library.ActionSkip}, nil
-			default:
-				fmt.Printf("Linked %q to %q\n", channelName, input)
-				return library.StagingResult{Action: library.ActionImport, Artist: library.ArtistID(input)}, nil
+			case "abort":
+				return library.StagingResult{Action: library.ActionAbort}, nil
+			case "artist":
+				var artistInput string
+				artistForm := huh.NewForm(huh.NewGroup(
+					huh.NewInput().
+						Title("Target Artist ID").
+						Description("Enter an existing Artist ID to bind this channel").
+						Value(&artistInput).
+						Suggestions(artistSuggestions).
+						Validate(func(str string) error {
+							if strings.TrimSpace(str) == "" {
+								return errors.New("artist ID cannot be empty")
+							}
+
+							return nil
+						}),
+				)).WithTheme(huhTheme)
+
+				if err := artistForm.Run(); err != nil {
+					return library.StagingResult{}, fmt.Errorf("failed to read artist input: %w", err)
+				}
+
+				artistInput = strings.TrimSpace(artistInput)
+				fmt.Printf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
+
+				return library.StagingResult{
+					Action: library.ActionImport,
+					Artist: library.ArtistID(artistInput),
+				}, nil
+			case "folder":
+				var folderInput string
+				folderForm := huh.NewForm(huh.NewGroup(
+					huh.NewInput().
+						Title("Target Folder ID").
+						Description("Enter a Folder ID (The channel will NOT be saved to the database)").
+						Value(&folderInput).
+						Suggestions(folderSuggestions).
+						Validate(func(str string) error {
+							if strings.TrimSpace(str) == "" {
+								return errors.New("folder ID cannot be empty")
+							}
+
+							return nil
+						}),
+				)).WithTheme(huhTheme)
+
+				if err := folderForm.Run(); err != nil {
+					return library.StagingResult{}, fmt.Errorf("failed to read folder input: %w", err)
+				}
+
+				folderInput = strings.TrimSpace(folderInput)
+				fmt.Printf("Routing track directly into folder %q\n", folderInput)
+
+				return library.StagingResult{
+					Action: library.ActionImport,
+					Folder: library.FolderID(folderInput),
+				}, nil
 			}
+
+			return library.StagingResult{Action: library.ActionSkip}, nil
 		}
 
 		fmt.Print("Processing staging directory...\n\n")

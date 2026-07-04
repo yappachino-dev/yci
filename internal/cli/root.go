@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"playlist-manager/internal/app"
@@ -35,6 +36,8 @@ const (
 const (
 	flagDelayComment = "Randomized delay between downloads in seconds (format min:max)"
 )
+
+var huhTheme = huh.ThemeBase()
 
 var appl *app.Container
 

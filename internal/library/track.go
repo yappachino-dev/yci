@@ -26,6 +26,7 @@ type Track struct {
 	Title        string
 	Album        string
 	ArtistID     ArtistID
+	FolderID     FolderID
 	RelativePath TrackPath
 	SourceID     string
 }
@@ -35,6 +36,7 @@ type TrackCreateParams struct {
 	Title        string
 	Album        string
 	ArtistID     ArtistID
+	FolderID     FolderID
 	RelativePath TrackPath
 	SourceID     string
 }
@@ -265,12 +267,25 @@ func NewSQLiteTrackRepository(q *store.Queries) *SQLiteTrackRepository {
 	return &SQLiteTrackRepository{q: q}
 }
 
+func rowToTrack(row store.Track) Track {
+	return Track{
+		ID:           TrackID(row.ID),
+		Title:        row.Title,
+		Album:        db.FromNullString(row.Album),
+		ArtistID:     ArtistID(db.FromNullString(row.ArtistID)),
+		FolderID:     FolderID(db.FromNullString(row.FolderID)),
+		RelativePath: TrackPath(row.RelativePath),
+		SourceID:     db.FromNullString(row.SourceID),
+	}
+}
+
 func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 	return r.db(ctx).CreateTrack(ctx, store.CreateTrackParams{
 		ID:           string(t.ID),
 		Title:        t.Title,
 		Album:        db.ToNullString(t.Album),
 		ArtistID:     db.ToNullString(string(t.ArtistID)),
+		FolderID:     db.ToNullString(string(t.FolderID)),
 		RelativePath: string(t.RelativePath),
 		SourceID:     db.ToNullString(t.SourceID),
 	})
@@ -282,14 +297,7 @@ func (r *SQLiteTrackRepository) ByID(ctx context.Context, id TrackID) (Track, er
 		return Track{}, err
 	}
 
-	return Track{
-		ID:           TrackID(row.ID),
-		Title:        row.Title,
-		Album:        db.FromNullString(row.Album),
-		ArtistID:     ArtistID(db.FromNullString(row.ArtistID)),
-		RelativePath: TrackPath(row.RelativePath),
-		SourceID:     db.FromNullString(row.SourceID),
-	}, nil
+	return rowToTrack(row.Track), nil
 }
 
 func (r *SQLiteTrackRepository) ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error) {
@@ -300,15 +308,9 @@ func (r *SQLiteTrackRepository) ByArtistID(ctx context.Context, artistID ArtistI
 
 	tracks := make([]Track, 0, len(rows))
 	for _, row := range rows {
-		tracks = append(tracks, Track{
-			ID:           TrackID(row.ID),
-			Title:        row.Title,
-			Album:        db.FromNullString(row.Album),
-			ArtistID:     ArtistID(db.FromNullString(row.ArtistID)),
-			RelativePath: TrackPath(row.RelativePath),
-			SourceID:     db.FromNullString(row.SourceID),
-		})
+		tracks = append(tracks, rowToTrack(row.Track))
 	}
+
 	return tracks, nil
 }
 
@@ -320,15 +322,9 @@ func (r *SQLiteTrackRepository) ByPathPattern(ctx context.Context, pattern strin
 
 	tracks := make([]Track, 0, len(rows))
 	for _, row := range rows {
-		tracks = append(tracks, Track{
-			ID:           TrackID(row.ID),
-			Title:        row.Title,
-			Album:        db.FromNullString(row.Album),
-			ArtistID:     ArtistID(db.FromNullString(row.ArtistID)),
-			RelativePath: TrackPath(row.RelativePath),
-			SourceID:     db.FromNullString(row.SourceID),
-		})
+		tracks = append(tracks, rowToTrack(row.Track))
 	}
+
 	return tracks, nil
 }
 
