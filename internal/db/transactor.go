@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"playlist-manager/internal/appctx"
+	"github.com/yappachino-dev/yci/internal/appctx"
 )
 
 type SQLiteTransactor struct {

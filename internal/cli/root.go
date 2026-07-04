@@ -13,9 +13,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"playlist-manager/internal/app"
-	"playlist-manager/internal/db"
-	"playlist-manager/internal/fs"
+	"github.com/yappachino-dev/yci/internal/app"
+	"github.com/yappachino-dev/yci/internal/db"
+	"github.com/yappachino-dev/yci/internal/fs"
 
 	_ "modernc.org/sqlite"
 )

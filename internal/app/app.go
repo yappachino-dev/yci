@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 
-	"playlist-manager/internal/audit"
-	"playlist-manager/internal/db"
-	"playlist-manager/internal/download"
-	"playlist-manager/internal/fs"
-	"playlist-manager/internal/library"
-	"playlist-manager/internal/store"
+	"github.com/yappachino-dev/yci/internal/audit"
+	"github.com/yappachino-dev/yci/internal/db"
+	"github.com/yappachino-dev/yci/internal/download"
+	"github.com/yappachino-dev/yci/internal/fs"
+	"github.com/yappachino-dev/yci/internal/library"
+	"github.com/yappachino-dev/yci/internal/store"
 )
 
 type Container struct {

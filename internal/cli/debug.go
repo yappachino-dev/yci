@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"playlist-manager/internal/db"
+	"github.com/yappachino-dev/yci/internal/db"
 
 	"github.com/spf13/cobra"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"playlist-manager/internal/library"
+	"github.com/yappachino-dev/yci/internal/library"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"

@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"playlist-manager/internal/download"
+	"github.com/yappachino-dev/yci/internal/download"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"

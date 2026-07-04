@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"playlist-manager/db/migrations"
+	"github.com/yappachino-dev/yci/db/migrations"
 
 	"github.com/pressly/goose/v3"
 )

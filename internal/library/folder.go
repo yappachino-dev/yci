@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"playlist-manager/internal/appctx"
-	"playlist-manager/internal/db"
-	"playlist-manager/internal/store"
+	"github.com/yappachino-dev/yci/internal/appctx"
+	"github.com/yappachino-dev/yci/internal/db"
+	"github.com/yappachino-dev/yci/internal/store"
 )
 
 const RootID string = "root"

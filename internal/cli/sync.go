@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"playlist-manager/internal/download"
-	"playlist-manager/internal/library"
+	"github.com/yappachino-dev/yci/internal/download"
+	"github.com/yappachino-dev/yci/internal/library"
 
 	"github.com/spf13/cobra"
 )

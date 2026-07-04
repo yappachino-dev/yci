@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"playlist-manager/internal/fs"
+	"github.com/yappachino-dev/yci/internal/fs"
 
 	"github.com/google/uuid"
 )

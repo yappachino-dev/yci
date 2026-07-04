@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"playlist-manager/internal/library"
+	"github.com/yappachino-dev/yci/internal/library"
 )
 
 type TrackProvider interface {

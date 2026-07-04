@@ -1,7 +1,7 @@
 package main
 
 import (
-	"playlist-manager/internal/cli"
+	"github.com/yappachino-dev/yci/internal/cli"
 )
 
 func main() {

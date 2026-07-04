@@ -1,4 +1,4 @@
-module playlist-manager
+module github.com/yappachino-dev/yci
 
 go 1.26.1
 
