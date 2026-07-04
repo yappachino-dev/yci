@@ -3,11 +3,18 @@ INSERT INTO artists (id, display_name, folder_id)
 VALUES (:id, :display_name, :folder_id);
 
 -- name: GetArtist :one
-SELECT id, display_name, folder_id
-FROM artists WHERE id = :id;
+SELECT
+    id,
+    display_name,
+    folder_id
+FROM artists
+WHERE id = :id;
 
 -- name: GetArtists :many
-SELECT id, display_name, folder_id
+SELECT
+    id,
+    display_name,
+    folder_id
 FROM artists;
 
 -- name: UpdateArtist :exec
