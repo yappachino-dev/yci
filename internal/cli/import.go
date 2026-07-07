@@ -44,7 +44,7 @@ var importStagingCmd = &cobra.Command{
 		}
 		artistSuggestions := StringSlice(artistIds)
 
-		folderIds, err := appl.ArtistService.AllIDs(ctx)
+		folderIds, err := appl.FolderService.AllIDs(ctx)
 		if err != nil {
 			return fmt.Errorf("fetch folder ids: %w", err)
 		}
