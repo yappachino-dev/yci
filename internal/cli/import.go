@@ -67,7 +67,8 @@ var importStagingCmd = &cobra.Command{
 				huh.NewSelect[string]().
 					Title("How would you like to handle this track?").
 					Options(
-						huh.NewOption("Link Channel to an Artist (Permanent)", "artist"),
+						huh.NewOption("Link Channel to an Artist (Permanent)", "artist-link"),
+						huh.NewOption("Link this track to an Artist (One-off track)", "artist"),
 						huh.NewOption("Route straight to a Folder (One-off track)", "folder"),
 						huh.NewOption("Skip this track", "skip"),
 						huh.NewOption("Abort processing loop", "abort"),
@@ -85,12 +86,17 @@ var importStagingCmd = &cobra.Command{
 				return library.StagingResult{Action: library.ActionSkip}, nil
 			case "abort":
 				return library.StagingResult{Action: library.ActionAbort}, nil
-			case "artist":
+			case "artist-link", "artist":
+				description := "Enter an existing Artist ID to bind this track as a one-off"
+				if actionType == "artist-link" {
+					description = "Enter an existing Artist ID to permanently bind this channel"
+				}
+
 				var artistInput string
 				artistForm := huh.NewForm(huh.NewGroup(
 					huh.NewInput().
 						Title("Target Artist ID").
-						Description("Enter an existing Artist ID to bind this channel").
+						Description(description).
 						Value(&artistInput).
 						Suggestions(artistSuggestions).
 						Validate(func(str string) error {
@@ -107,11 +113,17 @@ var importStagingCmd = &cobra.Command{
 				}
 
 				artistInput = strings.TrimSpace(artistInput)
-				fmt.Printf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
+
+				if actionType == "artist-link" {
+					fmt.Printf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
+				} else {
+					fmt.Printf("Linked track to Artist %q\n", artistInput)
+				}
 
 				return library.StagingResult{
-					Action: library.ActionImport,
-					Artist: library.ArtistID(artistInput),
+					Action:     library.ActionImport,
+					Artist:     library.ArtistID(artistInput),
+					LinkArtist: actionType == "artist-link",
 				}, nil
 			case "folder":
 				var folderInput string

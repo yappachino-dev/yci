@@ -25,9 +25,10 @@ const (
 )
 
 type StagingResult struct {
-	Action StagingAction
-	Artist ArtistID
-	Folder FolderID
+	Action     StagingAction
+	Artist     ArtistID
+	Folder     FolderID
+	LinkArtist bool
 }
 
 type TrackCreator interface {
@@ -152,7 +153,7 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 			trackFolder = res.Folder
 		}
 
-		if artistID != "" {
+		if artistID != "" && res.LinkArtist {
 			if err := s.linker.Link(ctx, artistID, channelName); err != nil {
 				return fmt.Errorf("failed linking unknown channel to artist: %w", err)
 			}
