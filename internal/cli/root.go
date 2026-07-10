@@ -20,6 +20,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const version = "1.0.0"
+
 const (
 	flagID     = "id"
 	flagName   = "name"
@@ -42,8 +44,9 @@ var huhTheme = huh.ThemeBase()
 var appl *app.Container
 
 var rootCmd = &cobra.Command{
-	Use:   "yci",
-	Short: "A CLI to manage your local music library",
+	Use:     "yci",
+	Short:   "A CLI to manage your local music library",
+	Version: version,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		autoMigrate := !strings.HasPrefix(cmd.CommandPath(), "yci debug migration")
 		return initApplication(cmd.Context(), autoMigrate)
