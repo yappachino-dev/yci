@@ -9,11 +9,16 @@ import (
 )
 
 type SQLiteTransactor struct {
-	db *sql.DB
+	db         *sql.DB
+	postCommit func(ctx context.Context) error
 }
 
 func NewSQLiteTransactor(db *sql.DB) *SQLiteTransactor {
 	return &SQLiteTransactor{db: db}
+}
+
+func (t *SQLiteTransactor) SetPostCommit(fn func(ctx context.Context) error) {
+	t.postCommit = fn
 }
 
 func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) (err error) {
@@ -48,6 +53,12 @@ func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx co
 	}
 
 	commited = true
+
+	if t.postCommit != nil {
+		if err := t.postCommit(ctx); err != nil {
+			return fmt.Errorf("post-commit actions: %w", err)
+		}
+	}
 
 	return nil
 }
