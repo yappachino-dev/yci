@@ -50,10 +50,17 @@ func (q *Queries) FailDownload(ctx context.Context, arg FailDownloadParams) erro
 }
 
 const getNextActionableDownload = `-- name: GetNextActionableDownload :one
-SELECT id, source_id, status, attempts, error_msg
+SELECT
+    download_queue.id,
+    download_queue.source_id,
+    download_queue.status,
+    download_queue.attempts,
+    download_queue.error_msg
 FROM download_queue
-WHERE status IN ('pending', 'failed') AND attempts < 3
-ORDER BY COALESCE(updated_at, created_at) ASC
+WHERE
+    download_queue.status IN ('pending', 'failed')
+    AND download_queue.attempts < 3
+ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
 LIMIT 1
 `
 
@@ -79,7 +86,12 @@ func (q *Queries) GetNextActionableDownload(ctx context.Context) (GetNextActiona
 }
 
 const getQueue = `-- name: GetQueue :many
-SELECT id, source_id, status, attempts, error_msg
+SELECT
+    id,
+    source_id,
+    status,
+    attempts,
+    error_msg
 FROM download_queue
 `
 
@@ -133,7 +145,11 @@ func (q *Queries) GetQueueLength(ctx context.Context) (int64, error) {
 
 const resetHardFailedDownloads = `-- name: ResetHardFailedDownloads :exec
 UPDATE download_queue
-SET status = 'pending', attempts = 0, error_msg = NULL, updated_at = CURRENT_TIMESTAMP
+SET
+    status = 'pending',
+    attempts = 0,
+    error_msg = NULL,
+    updated_at = CURRENT_TIMESTAMP
 WHERE status = 'failed' AND attempts >= 3
 `
 
@@ -155,7 +171,10 @@ func (q *Queries) ResetOrphanedDownloads(ctx context.Context) error {
 
 const startDownload = `-- name: StartDownload :exec
 UPDATE download_queue
-SET status = 'processing', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
+SET
+    status = 'processing',
+    attempts = attempts + 1,
+    updated_at = CURRENT_TIMESTAMP
 WHERE id = ?1
 `
 

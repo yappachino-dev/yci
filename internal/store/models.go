@@ -37,6 +37,16 @@ type Folder struct {
 	ParentID    sql.NullString
 }
 
+type FsJournal struct {
+	ID        int64
+	Op        string
+	Src       string
+	Dst       sql.NullString
+	Status    string
+	Error     sql.NullString
+	CreatedAt time.Time
+}
+
 type Track struct {
 	ID           string
 	Title        string

@@ -25,7 +25,7 @@ WITH RECURSIVE ancestor_chain AS (
         parent_id,
         0 AS depth
     FROM folders
-    WHERE id = :id
+    WHERE folders.id = :id
 
     UNION ALL
 

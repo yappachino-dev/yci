@@ -11,8 +11,9 @@ import (
 )
 
 const checkFolderExists = `-- name: CheckFolderExists :one
-SELECT EXISTS (
-    SELECT 1 FROM folders where id = ?1
+SELECT EXISTS(
+    SELECT 1 FROM folders
+    WHERE id = ?1
 )
 `
 
@@ -25,9 +26,13 @@ func (q *Queries) CheckFolderExists(ctx context.Context, id string) (bool, error
 
 const checkFolderHasChildren = `-- name: CheckFolderHasChildren :one
 SELECT EXISTS (
-    SELECT 1 FROM folders WHERE (parent_id = ?1 OR (?1 IS NULL AND parent_id IS NULL))
+    SELECT 1
+    FROM folders
+    WHERE (parent_id = ?1 OR (?1 IS NULL AND parent_id IS NULL))
     UNION ALL
-    SELECT 1 FROM artists WHERE (folder_id = ?1 OR (?1 IS NULL AND folder_id IS NULL))
+    SELECT 1
+    FROM artists
+    WHERE (folder_id = ?1 OR (?1 IS NULL AND folder_id IS NULL))
 )
 `
 
@@ -65,8 +70,12 @@ func (q *Queries) DeleteFolder(ctx context.Context, id string) error {
 }
 
 const getFolder = `-- name: GetFolder :one
-SELECT id, display_name, parent_id
-FROM folders WHERE id = ?1
+SELECT
+    id,
+    display_name,
+    parent_id
+FROM folders
+WHERE id = ?1
 `
 
 func (q *Queries) GetFolder(ctx context.Context, id string) (Folder, error) {
@@ -78,18 +87,27 @@ func (q *Queries) GetFolder(ctx context.Context, id string) (Folder, error) {
 
 const getFolderAncestors = `-- name: GetFolderAncestors :many
 WITH RECURSIVE ancestor_chain AS (
-    SELECT id, display_name, parent_id, 0 AS depth
+    SELECT
+        id,
+        display_name,
+        parent_id,
+        0 AS depth
     FROM folders
     WHERE folders.id = ?1
 
     UNION ALL
 
-    SELECT f.id, f.display_name, f.parent_id, ac.depth + 1
-    FROM folders f
-    JOIN ancestor_chain ac ON f.id = ac.parent_id
+    SELECT
+        f.id,
+        f.display_name,
+        f.parent_id,
+        ac.depth + 1 AS depth
+    FROM folders AS f
+    INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
 )
-SELECT display_name 
-FROM ancestor_chain 
+
+SELECT display_name
+FROM ancestor_chain
 WHERE id != 'root'
 ORDER BY depth DESC
 `
@@ -118,7 +136,10 @@ func (q *Queries) GetFolderAncestors(ctx context.Context, id string) ([]string, 
 }
 
 const getFolders = `-- name: GetFolders :many
-SELECT id, display_name, parent_id
+SELECT
+    id,
+    display_name,
+    parent_id
 FROM folders
 `
 
@@ -146,8 +167,8 @@ func (q *Queries) GetFolders(ctx context.Context) ([]Folder, error) {
 }
 
 const updateFolder = `-- name: UpdateFolder :exec
-UPDATE folders 
-SET id = ?1, display_name = ?2, parent_id = ?3 
+UPDATE folders
+SET id = ?1, display_name = ?2, parent_id = ?3
 WHERE id = ?4
 `
 

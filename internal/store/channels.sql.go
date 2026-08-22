@@ -27,7 +27,7 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) er
 
 const deleteChannel = `-- name: DeleteChannel :exec
 DELETE FROM channels
-WHERE artist_id = ?1 and channel_name = ?2
+WHERE artist_id = ?1 AND channel_name = ?2
 `
 
 type DeleteChannelParams struct {
@@ -54,7 +54,10 @@ func (q *Queries) GetArtistIDByChannel(ctx context.Context, channelName sql.Null
 }
 
 const getChannels = `-- name: GetChannels :many
-SELECT id, artist_id, channel_name
+SELECT
+    id,
+    artist_id,
+    channel_name
 FROM channels
 `
 

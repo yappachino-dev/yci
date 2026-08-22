@@ -103,6 +103,15 @@ func initApplication(ctx context.Context, autoMigrate bool) error {
 		return fmt.Errorf("initialize application container statements: %w", err)
 	}
 
+	if autoMigrate {
+		// Replay filesystem operations journaled by a previous crashed run so
+		// the physical library converges on the committed metadata state.
+		if err = appl.FileActions.ExecutePending(ctx); err != nil {
+			dbConn.Close()
+			return fmt.Errorf("recover pending file actions: %w", err)
+		}
+	}
+
 	return nil
 }
 

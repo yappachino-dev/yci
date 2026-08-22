@@ -37,8 +37,12 @@ func (q *Queries) DeleteArtist(ctx context.Context, id string) error {
 }
 
 const getArtist = `-- name: GetArtist :one
-SELECT id, display_name, folder_id
-FROM artists WHERE id = ?1
+SELECT
+    id,
+    display_name,
+    folder_id
+FROM artists
+WHERE id = ?1
 `
 
 func (q *Queries) GetArtist(ctx context.Context, id string) (Artist, error) {
@@ -49,7 +53,10 @@ func (q *Queries) GetArtist(ctx context.Context, id string) (Artist, error) {
 }
 
 const getArtists = `-- name: GetArtists :many
-SELECT id, display_name, folder_id
+SELECT
+    id,
+    display_name,
+    folder_id
 FROM artists
 `
 

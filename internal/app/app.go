@@ -21,6 +21,7 @@ type Container struct {
 	StagingService  *library.StagingService
 	DownloadService *download.Service
 	AuditService    *audit.Service
+	FileActions     *db.FileActionExecutor
 	Paths           fs.AppPaths
 }
 
@@ -30,13 +31,18 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 	transactor := db.NewSQLiteTransactor(dbConn)
 	rootID := library.FolderID(library.RootID)
 
+	fileActionRepo := db.NewFileActionRepository(queries)
+	diskMover := fs.NewOSDiskMover()
+	fileActionExecutor := db.NewFileActionExecutor(fileActionRepo, diskMover)
+	transactor.SetPostCommit(fileActionExecutor.ExecutePending)
+	journaledMover := db.NewJournaledMover(fileActionRepo, diskMover)
+
 	folderRepo := library.NewSQLiteFolderRepository(queries, rootID)
 	artistRepo := library.NewSQLiteArtistRepository(queries, rootID)
 	trackRepo := library.NewSQLiteTrackRepository(queries)
 	channelRepo := library.NewSQLiteChannelRepository(queries)
 	queueRepo := download.NewSQLiteQueueRepo(queries)
 
-	diskMover := fs.NewOSDiskMover()
 	diskReader := fs.NewOSDiskReader()
 	metaReader := library.NewTagMetadataReader()
 
@@ -45,7 +51,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 	folderService := library.NewFolderService(library.FolderServiceConfig{
 		FolderRepo:  folderRepo,
 		TrackWriter: trackRepo,
-		DiskMover:   diskMover,
+		DiskMover:   journaledMover,
 		Transactor:  transactor,
 		RootFolder:  rootID,
 		Config:      paths,
@@ -54,7 +60,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 	trackService := library.NewTrackService(library.TrackServiceConfig{
 		TrackRepo:      trackRepo,
 		FolderResolver: folderService,
-		DiskMover:      diskMover,
+		DiskMover:      journaledMover,
 		Transactor:     transactor,
 		Config:         paths,
 	})
@@ -73,7 +79,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 		FolderResolver: folderService,
 		Linker:         channelService,
 		MetaReader:     metaReader,
-		DiskMover:      diskMover,
+		DiskMover:      journaledMover,
 		Transactor:     transactor,
 		Config:         paths,
 	})
@@ -100,6 +106,7 @@ func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Cont
 		StagingService:  stagingService,
 		DownloadService: downloadService,
 		AuditService:    auditService,
+		FileActions:     fileActionExecutor,
 		Paths:           paths,
 	}, nil
 }
