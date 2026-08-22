@@ -40,10 +40,6 @@ type Artist struct {
 	FolderID FolderID
 }
 
-type Transactor interface {
-	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
-}
-
 type ArtistRepository interface {
 	Create(ctx context.Context, a Artist) (Artist, error)
 	ByID(ctx context.Context, id ArtistID) (Artist, error)
@@ -60,6 +56,8 @@ type ArtistTracksMover interface {
 	MoveByArtist(ctx context.Context, id ArtistID, oldFolder, newFolder FolderID) error
 }
 
+// ArtistService manages artist entities and relocates their tracks when
+// the artist moves folders.
 type ArtistService struct {
 	repo          ArtistRepository
 	folderChecker FolderChecker
@@ -220,6 +218,7 @@ func (s *ArtistService) Delete(ctx context.Context, id ArtistID) error {
 	return nil
 }
 
+// SQLiteArtistRepository implements ArtistRepository over sqlc queries.
 type SQLiteArtistRepository struct {
 	q      *store.Queries
 	rootID FolderID

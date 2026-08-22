@@ -66,6 +66,7 @@ type PhysicalMover interface {
 	MoveDirectory(ctx context.Context, oldRootPath, newRootPath string) error
 }
 
+// FolderService manages folder entities and their physical directories.
 type FolderService struct {
 	repo        FolderRepository
 	trackWriter TracksPathWriter
@@ -143,7 +144,7 @@ func (s *FolderService) All(ctx context.Context) ([]Folder, error) {
 func (s *FolderService) AllIDs(ctx context.Context) ([]FolderID, error) {
 	a, err := s.repo.All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("all artists: %w", err)
+		return nil, fmt.Errorf("all folders: %w", err)
 	}
 
 	ids := make([]FolderID, 0, len(a))
@@ -303,6 +304,7 @@ func (s *FolderService) PredictPath(ctx context.Context, parent FolderID, name F
 	return filepath.ToSlash(filepath.Join(parentPath, string(name))), nil
 }
 
+// SQLiteFolderRepository implements FolderRepository over sqlc queries.
 type SQLiteFolderRepository struct {
 	q      *store.Queries
 	rootID FolderID

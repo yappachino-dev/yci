@@ -16,6 +16,7 @@ import (
 
 var ErrProcessAborted = errors.New("processing aborted by user")
 
+// StagingAction is the disposition chosen for a staged file.
 type StagingAction int
 
 const (
@@ -24,6 +25,7 @@ const (
 	ActionAbort
 )
 
+// StagingResult communicates the handler's decision back to ProcessStaging.
 type StagingResult struct {
 	Action     StagingAction
 	Artist     ArtistID
@@ -45,10 +47,13 @@ type ChannelLinker interface {
 	All(ctx context.Context) ([]Channel, error)
 }
 
+// MetadataReader reads tag metadata from an audio file.
 type MetadataReader interface {
 	Read(ctx context.Context, path string) (TrackMetadata, error)
 }
 
+// StagingService imports finished downloads from the staging directory
+// into the library.
 type StagingService struct {
 	trackCreator   TrackCreator
 	artistReader   ArtistReader
@@ -84,12 +89,14 @@ func NewStagingService(cfg StagingServiceConfig) *StagingService {
 	}
 }
 
+// TrackMetadata holds tag values read from an audio file.
 type TrackMetadata struct {
 	Title  string
 	Album  string
 	Artist string
 }
 
+// LinkHandler decides the fate of a file whose channel has no linked artist.
 type LinkHandler func(channelName string, title string) (StagingResult, error)
 
 func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {

@@ -40,6 +40,7 @@ type ChannelRepository interface {
 	Delete(ctx context.Context, artistID ArtistID, name ChannelName) error
 }
 
+// ChannelService links YouTube channel names to artists.
 type ChannelService struct {
 	repo ChannelRepository
 }
@@ -67,13 +68,25 @@ func (s *ChannelService) ResolveArtist(ctx context.Context, name ChannelName) (A
 }
 
 func (s *ChannelService) Unlink(ctx context.Context, artistID ArtistID, name ChannelName) error {
-	return s.repo.Delete(ctx, artistID, name)
+	if err := name.Validate(); err != nil {
+		return fmt.Errorf("unlink channel: %w", err)
+	}
+	if artistID == "" {
+		return fmt.Errorf("unlink channel: artist ID cannot be empty")
+	}
+
+	if err := s.repo.Delete(ctx, artistID, name); err != nil {
+		return fmt.Errorf("unlink channel %q from artist %q: %w", name, artistID, err)
+	}
+
+	return nil
 }
 
 func (s *ChannelService) All(ctx context.Context) ([]Channel, error) {
 	return s.repo.All(ctx)
 }
 
+// SQLiteChannelRepository implements ChannelRepository over sqlc queries.
 type SQLiteChannelRepository struct {
 	q *store.Queries
 }

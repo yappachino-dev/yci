@@ -79,6 +79,7 @@ type StagingConfig interface {
 	LibraryDir() string
 }
 
+// TrackService manages track entities and their physical files.
 type TrackService struct {
 	repo           TrackRepository
 	folderResolver FolderResolver
@@ -129,14 +130,6 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (Tr
 	}
 
 	return t, nil
-}
-
-func (s *TrackService) UpdatePathByPrefix(ctx context.Context, oldPrefix, newPrefix string) error {
-	if err := s.repo.UpdatePathsByPrefix(ctx, oldPrefix, newPrefix); err != nil {
-		return fmt.Errorf("bulk update track paths from %q to %q: %w", oldPrefix, newPrefix, err)
-	}
-
-	return nil
 }
 
 func (s *TrackService) MoveByArtist(ctx context.Context, id ArtistID, oldFolder, newFolder FolderID) error {
@@ -242,7 +235,7 @@ func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursiv
 func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
 	track, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("find track metadata for deletion: %w", err)
+		return fmt.Errorf("find track %q: %w", id, err)
 	}
 
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -266,6 +259,7 @@ func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
 	return nil
 }
 
+// SQLiteTrackRepository implements TrackRepository over sqlc queries.
 type SQLiteTrackRepository struct {
 	q *store.Queries
 }
