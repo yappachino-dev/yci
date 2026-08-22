@@ -133,21 +133,23 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (Tr
 }
 
 func (s *TrackService) MoveByArtist(ctx context.Context, id ArtistID, oldFolder, newFolder FolderID) error {
-	tracks, err := s.repo.ByArtistID(ctx, id)
-	if err != nil {
-		return fmt.Errorf("move tracks by artist: %w", err)
-	}
-
-	if len(tracks) == 0 {
-		return nil
-	}
-
-	newRelFolder, err := s.folderResolver.ResolvePath(ctx, newFolder)
-	if err != nil {
-		return fmt.Errorf("resolve artist target folder path: %w", err)
-	}
-
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		// The read lives inside the transaction so the whole move is one
+		// consistent unit; nested calls join via the transactor.
+		tracks, err := s.repo.ByArtistID(txCtx, id)
+		if err != nil {
+			return fmt.Errorf("move tracks by artist: %w", err)
+		}
+
+		if len(tracks) == 0 {
+			return nil
+		}
+
+		newRelFolder, err := s.folderResolver.ResolvePath(txCtx, newFolder)
+		if err != nil {
+			return fmt.Errorf("resolve artist target folder path: %w", err)
+		}
+
 		var moves []TrackPathMove
 
 		for _, track := range tracks {
