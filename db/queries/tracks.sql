@@ -74,7 +74,7 @@ SET
 WHERE
     id = :old_id;
 
--- name: DeleteTrack :exec
+-- name: DeleteTrack :execrows
 DELETE FROM tracks
 WHERE
     id = :id;

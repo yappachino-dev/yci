@@ -3,12 +3,19 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/store"
+)
+
+// Sentinel errors for channel link operations.
+var (
+	ErrChannelAlreadyLinked = errors.New("channel already linked to artist")
+	ErrChannelNotLinked     = errors.New("channel not linked to artist")
 )
 
 type ChannelName string
@@ -76,19 +83,24 @@ func NewSQLiteChannelRepository(q *store.Queries) *SQLiteChannelRepository {
 }
 
 func (r *SQLiteChannelRepository) Create(ctx context.Context, artistID ArtistID, name ChannelName) error {
-	return r.db(ctx).CreateChannel(ctx, store.CreateChannelParams{
+	err := r.db(ctx).CreateChannel(ctx, store.CreateChannelParams{
 		ArtistID:    string(artistID),
 		ChannelName: db.ToNullString(string(name)),
 	})
+	if err != nil {
+		return db.MapSQLError(err, nil, ErrChannelAlreadyLinked)
+	}
+
+	return nil
 }
 
 func (r *SQLiteChannelRepository) FindArtistID(ctx context.Context, name ChannelName) (ArtistID, bool, error) {
 	artistID, err := r.db(ctx).GetArtistIDByChannel(ctx, db.ToNullString(string(name)))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("find artist by channel %q: %w", name, err)
 	}
 
 	return ArtistID(artistID), true, nil
@@ -113,10 +125,19 @@ func (r *SQLiteChannelRepository) All(ctx context.Context) ([]Channel, error) {
 }
 
 func (r *SQLiteChannelRepository) Delete(ctx context.Context, artistID ArtistID, name ChannelName) error {
-	return r.db(ctx).DeleteChannel(ctx, store.DeleteChannelParams{
+	rows, err := r.db(ctx).DeleteChannel(ctx, store.DeleteChannelParams{
 		ArtistID:    string(artistID),
 		ChannelName: db.ToNullString(string(name)),
 	})
+	if err != nil {
+		return fmt.Errorf("unlink channel %q from artist %q: %w", name, artistID, err)
+	}
+
+	if rows == 0 {
+		return ErrChannelNotLinked
+	}
+
+	return nil
 }
 
 func (r *SQLiteChannelRepository) db(ctx context.Context) *store.Queries {

@@ -43,9 +43,10 @@ func (q *Queries) CheckFolderHasChildren(ctx context.Context, id sql.NullString)
 	return exists, err
 }
 
-const createFolder = `-- name: CreateFolder :exec
+const createFolder = `-- name: CreateFolder :one
 INSERT INTO folders (id, display_name, parent_id)
 VALUES (?1, ?2, ?3)
+RETURNING id, display_name, parent_id
 `
 
 type CreateFolderParams struct {
@@ -54,19 +55,24 @@ type CreateFolderParams struct {
 	ParentID    sql.NullString
 }
 
-func (q *Queries) CreateFolder(ctx context.Context, arg CreateFolderParams) error {
-	_, err := q.db.ExecContext(ctx, createFolder, arg.ID, arg.DisplayName, arg.ParentID)
-	return err
+func (q *Queries) CreateFolder(ctx context.Context, arg CreateFolderParams) (Folder, error) {
+	row := q.db.QueryRowContext(ctx, createFolder, arg.ID, arg.DisplayName, arg.ParentID)
+	var i Folder
+	err := row.Scan(&i.ID, &i.DisplayName, &i.ParentID)
+	return i, err
 }
 
-const deleteFolder = `-- name: DeleteFolder :exec
+const deleteFolder = `-- name: DeleteFolder :execrows
 DELETE FROM folders
 WHERE id = ?1
 `
 
-func (q *Queries) DeleteFolder(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteFolder, id)
-	return err
+func (q *Queries) DeleteFolder(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteFolder, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getFolder = `-- name: GetFolder :one
@@ -166,10 +172,11 @@ func (q *Queries) GetFolders(ctx context.Context) ([]Folder, error) {
 	return items, nil
 }
 
-const updateFolder = `-- name: UpdateFolder :exec
+const updateFolder = `-- name: UpdateFolder :one
 UPDATE folders
 SET id = ?1, display_name = ?2, parent_id = ?3
 WHERE id = ?4
+RETURNING id, display_name, parent_id
 `
 
 type UpdateFolderParams struct {
@@ -179,12 +186,14 @@ type UpdateFolderParams struct {
 	OldID       string
 }
 
-func (q *Queries) UpdateFolder(ctx context.Context, arg UpdateFolderParams) error {
-	_, err := q.db.ExecContext(ctx, updateFolder,
+func (q *Queries) UpdateFolder(ctx context.Context, arg UpdateFolderParams) (Folder, error) {
+	row := q.db.QueryRowContext(ctx, updateFolder,
 		arg.NewID,
 		arg.DisplayName,
 		arg.ParentID,
 		arg.OldID,
 	)
-	return err
+	var i Folder
+	err := row.Scan(&i.ID, &i.DisplayName, &i.ParentID)
+	return i, err
 }

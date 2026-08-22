@@ -10,9 +10,10 @@ import (
 	"database/sql"
 )
 
-const createArtist = `-- name: CreateArtist :exec
+const createArtist = `-- name: CreateArtist :one
 INSERT INTO artists (id, display_name, folder_id)
 VALUES (?1, ?2, ?3)
+RETURNING id, display_name, folder_id
 `
 
 type CreateArtistParams struct {
@@ -21,19 +22,24 @@ type CreateArtistParams struct {
 	FolderID    sql.NullString
 }
 
-func (q *Queries) CreateArtist(ctx context.Context, arg CreateArtistParams) error {
-	_, err := q.db.ExecContext(ctx, createArtist, arg.ID, arg.DisplayName, arg.FolderID)
-	return err
+func (q *Queries) CreateArtist(ctx context.Context, arg CreateArtistParams) (Artist, error) {
+	row := q.db.QueryRowContext(ctx, createArtist, arg.ID, arg.DisplayName, arg.FolderID)
+	var i Artist
+	err := row.Scan(&i.ID, &i.DisplayName, &i.FolderID)
+	return i, err
 }
 
-const deleteArtist = `-- name: DeleteArtist :exec
+const deleteArtist = `-- name: DeleteArtist :execrows
 DELETE FROM artists
 WHERE id = ?1
 `
 
-func (q *Queries) DeleteArtist(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteArtist, id)
-	return err
+func (q *Queries) DeleteArtist(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteArtist, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getArtist = `-- name: GetArtist :one
@@ -83,10 +89,11 @@ func (q *Queries) GetArtists(ctx context.Context) ([]Artist, error) {
 	return items, nil
 }
 
-const updateArtist = `-- name: UpdateArtist :exec
+const updateArtist = `-- name: UpdateArtist :one
 UPDATE artists
 SET id = ?1, display_name = ?2, folder_id = ?3
 WHERE id = ?4
+RETURNING id, display_name, folder_id
 `
 
 type UpdateArtistParams struct {
@@ -96,12 +103,14 @@ type UpdateArtistParams struct {
 	OldID       string
 }
 
-func (q *Queries) UpdateArtist(ctx context.Context, arg UpdateArtistParams) error {
-	_, err := q.db.ExecContext(ctx, updateArtist,
+func (q *Queries) UpdateArtist(ctx context.Context, arg UpdateArtistParams) (Artist, error) {
+	row := q.db.QueryRowContext(ctx, updateArtist,
 		arg.NewID,
 		arg.DisplayName,
 		arg.FolderID,
 		arg.OldID,
 	)
-	return err
+	var i Artist
+	err := row.Scan(&i.ID, &i.DisplayName, &i.FolderID)
+	return i, err
 }

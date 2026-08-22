@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,14 @@ import (
 )
 
 const RootID string = "root"
+
+// Sentinel errors for folder operations.
+var (
+	ErrFolderNotFound      = errors.New("folder not found")
+	ErrParentNotFound      = errors.New("parent folder not found")
+	ErrFolderAlreadyExists = errors.New("folder already exists")
+	ErrCyclicParent        = errors.New("new parent cannot be a child of current folder")
+)
 
 type (
 	FolderID   string
@@ -38,14 +47,15 @@ type Folder struct {
 }
 
 type FolderRepository interface {
-	Create(ctx context.Context, f Folder) error
+	Create(ctx context.Context, f Folder) (Folder, error)
 	ByID(ctx context.Context, id FolderID) (Folder, error)
 	All(ctx context.Context) ([]Folder, error)
-	Update(ctx context.Context, oldID FolderID, a Folder) error
+	Update(ctx context.Context, oldID FolderID, a Folder) (Folder, error)
 	Delete(ctx context.Context, id FolderID) error
 
 	Ancestors(ctx context.Context, id FolderID) ([]string, error)
 	HasChildren(ctx context.Context, id FolderID) (bool, error)
+	Exists(ctx context.Context, id FolderID) (bool, error)
 }
 
 type TracksPathWriter interface {
@@ -98,17 +108,18 @@ func (s *FolderService) Create(ctx context.Context, id FolderID, parentID Folder
 		parentID = s.rootFolder
 	}
 
-	f := Folder{
+	draft := Folder{
 		ID:       id,
 		Name:     name,
 		ParentID: parentID,
 	}
 
-	if err := s.repo.Create(ctx, f); err != nil {
-		return Folder{}, fmt.Errorf("create folder %q: %w", f.ID, err)
+	saved, err := s.repo.Create(ctx, draft)
+	if err != nil {
+		return Folder{}, fmt.Errorf("create folder %q: %w", draft.ID, err)
 	}
 
-	return f, nil
+	return saved, nil
 }
 
 func (s *FolderService) ByID(ctx context.Context, id FolderID) (Folder, error) {
@@ -148,6 +159,7 @@ func (s *FolderService) IsEmpty(ctx context.Context, id FolderID) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("is folder empty: %w", err)
 	}
+
 	return !hasChildren, nil
 }
 
@@ -158,62 +170,80 @@ type FolderUpdateParams struct {
 	RegenerateSlugID bool
 }
 
-func (s *FolderService) Update(ctx context.Context, oldID FolderID, params FolderUpdateParams) error {
-	oldFolder, err := s.repo.ByID(ctx, oldID)
+func (s *FolderService) Update(ctx context.Context, oldID FolderID, params FolderUpdateParams) (Folder, error) {
+	current, err := s.repo.ByID(ctx, oldID)
 	if err != nil {
-		return fmt.Errorf("update folder %q: %w", oldID, err)
+		return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
 	}
 
 	newID := newIfPresent(params.NewID, oldID)
-	newName := newIfPresent(params.Name, oldFolder.Name)
-	newParent := newIfPresent(params.Parent, oldFolder.ParentID)
+	newName := newIfPresent(params.Name, current.Name)
+	newParent := newIfPresent(params.Parent, current.ParentID)
 
 	if params.RegenerateSlugID {
 		newID = FolderID(nameToSlug(string(newName)))
 	}
 
-	ancestors, err := s.repo.Ancestors(ctx, newParent)
-	if err != nil {
-		return fmt.Errorf("update folder %q: %w", oldID, err)
+	if newParent == oldID {
+		return Folder{}, fmt.Errorf("update folder %q: %w", oldID, ErrCyclicParent)
 	}
 
-	if slices.Contains(ancestors, string(oldID)) {
-		return fmt.Errorf("update folder %q: new parent cannot be a child of current folder", oldID)
+	if newParent != current.ParentID && newParent != s.rootFolder {
+		parentExists, err := s.repo.Exists(ctx, newParent)
+		if err != nil {
+			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
+		}
+		if !parentExists {
+			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, ErrParentNotFound)
+		}
+
+		ancestors, err := s.repo.Ancestors(ctx, newParent)
+		if err != nil {
+			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
+		}
+
+		if slices.Contains(ancestors, string(oldID)) {
+			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, ErrCyclicParent)
+		}
 	}
 
-	newFolder := Folder{
+	draft := Folder{
 		ID:       newID,
 		Name:     newName,
 		ParentID: newParent,
 	}
 
-	oldPath, err := s.ResolvePath(ctx, oldID)
+	currentPath, err := s.ResolvePath(ctx, oldID)
 	if err != nil {
-		return fmt.Errorf("update folder %q: %w", oldID, err)
+		return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
 	}
 
-	newPath, err := s.PredictPath(ctx, newParent, newName)
+	draftPath, err := s.PredictPath(ctx, newParent, newName)
 	if err != nil {
-		return fmt.Errorf("update folder %q: %w", oldID, err)
+		return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
 	}
 
-	if oldPath != newPath {
+	if currentPath != draftPath {
+		var saved Folder
 		txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			oldPrefix := oldPath + "/"
-			newPrefix := newPath + "/"
+			currentPrefix := currentPath + "/"
+			draftPrefix := draftPath + "/"
 
-			if err := s.trackWriter.UpdatePathsByPrefix(txCtx, oldPrefix, newPrefix); err != nil {
+			if err := s.trackWriter.UpdatePathsByPrefix(txCtx, currentPrefix, draftPrefix); err != nil {
 				return err
 			}
 
-			if err := s.repo.Update(txCtx, oldID, newFolder); err != nil {
+			updated, err := s.repo.Update(txCtx, oldID, draft)
+			if err != nil {
 				return err
 			}
 
-			oldAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(oldPath))
-			newAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(newPath))
+			saved = updated
 
-			if err := s.diskMover.MoveDirectory(txCtx, oldAbs, newAbs); err != nil {
+			currentAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(currentPath))
+			draftAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(draftPath))
+
+			if err := s.diskMover.MoveDirectory(txCtx, currentAbs, draftAbs); err != nil {
 				return err
 			}
 
@@ -221,17 +251,18 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 		})
 
 		if txErr != nil {
-			return fmt.Errorf("update folder %q: %w", oldID, txErr)
+			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, txErr)
 		}
 
-		return nil
+		return saved, nil
 	}
 
-	if err := s.repo.Update(ctx, oldID, newFolder); err != nil {
-		return fmt.Errorf("update folder %q: %w", oldID, err)
+	saved, err := s.repo.Update(ctx, oldID, draft)
+	if err != nil {
+		return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
 	}
 
-	return nil
+	return saved, nil
 }
 
 func (s *FolderService) Delete(ctx context.Context, id FolderID) error {
@@ -284,18 +315,27 @@ func NewSQLiteFolderRepository(q *store.Queries, rootID FolderID) *SQLiteFolderR
 	}
 }
 
-func (r *SQLiteFolderRepository) Create(ctx context.Context, a Folder) error {
-	return r.db(ctx).CreateFolder(ctx, store.CreateFolderParams{
+func (r *SQLiteFolderRepository) Create(ctx context.Context, a Folder) (Folder, error) {
+	row, err := r.db(ctx).CreateFolder(ctx, store.CreateFolderParams{
 		ID:          string(a.ID),
 		DisplayName: string(a.Name),
 		ParentID:    db.ToNullString(string(a.ParentID)),
 	})
+	if err != nil {
+		return Folder{}, r.mapError(err)
+	}
+
+	return Folder{
+		ID:       FolderID(row.ID),
+		Name:     FolderName(row.DisplayName),
+		ParentID: FolderID(db.FromNullString(row.ParentID)),
+	}, nil
 }
 
 func (r *SQLiteFolderRepository) ByID(ctx context.Context, id FolderID) (Folder, error) {
 	row, err := r.db(ctx).GetFolder(ctx, string(id))
 	if err != nil {
-		return Folder{}, err
+		return Folder{}, r.mapError(err)
 	}
 
 	return Folder{
@@ -308,7 +348,7 @@ func (r *SQLiteFolderRepository) ByID(ctx context.Context, id FolderID) (Folder,
 func (r *SQLiteFolderRepository) All(ctx context.Context) ([]Folder, error) {
 	rows, err := r.db(ctx).GetFolders(ctx)
 	if err != nil {
-		return nil, err
+		return nil, r.mapError(err)
 	}
 
 	folders := make([]Folder, 0, len(rows))
@@ -331,17 +371,35 @@ func (r *SQLiteFolderRepository) HasChildren(ctx context.Context, id FolderID) (
 	return r.db(ctx).CheckFolderHasChildren(ctx, db.ToNullString(string(id)))
 }
 
-func (r *SQLiteFolderRepository) Update(ctx context.Context, id FolderID, a Folder) error {
-	return r.db(ctx).UpdateFolder(ctx, store.UpdateFolderParams{
+func (r *SQLiteFolderRepository) Update(ctx context.Context, id FolderID, a Folder) (Folder, error) {
+	row, err := r.db(ctx).UpdateFolder(ctx, store.UpdateFolderParams{
 		OldID:       string(id),
 		NewID:       string(a.ID),
 		DisplayName: string(a.Name),
 		ParentID:    db.ToNullString(string(a.ParentID)),
 	})
+	if err != nil {
+		return Folder{}, r.mapError(err)
+	}
+
+	return Folder{
+		ID:       FolderID(row.ID),
+		Name:     FolderName(row.DisplayName),
+		ParentID: FolderID(db.FromNullString(row.ParentID)),
+	}, nil
 }
 
 func (r *SQLiteFolderRepository) Delete(ctx context.Context, id FolderID) error {
-	return r.db(ctx).DeleteFolder(ctx, string(id))
+	rows, err := r.db(ctx).DeleteFolder(ctx, string(id))
+	if err != nil {
+		return r.mapError(err)
+	}
+
+	if rows == 0 {
+		return ErrFolderNotFound
+	}
+
+	return nil
 }
 
 func (r *SQLiteFolderRepository) Exists(ctx context.Context, id FolderID) (bool, error) {
@@ -354,4 +412,9 @@ func (r *SQLiteFolderRepository) db(ctx context.Context) *store.Queries {
 	}
 
 	return r.q
+}
+
+// mapError translates storage-level failures into folder sentinels.
+func (r *SQLiteFolderRepository) mapError(err error) error {
+	return db.MapSQLError(err, ErrFolderNotFound, ErrFolderAlreadyExists)
 }

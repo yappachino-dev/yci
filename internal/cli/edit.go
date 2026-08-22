@@ -49,11 +49,12 @@ var editFolderCmd = &cobra.Command{
 			RegenerateSlugID: newSlug,
 		}
 
-		if err := appl.FolderService.Update(cmd.Context(), library.FolderID(oldID), params); err != nil {
+		f, err := appl.FolderService.Update(cmd.Context(), library.FolderID(oldID), params)
+		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Updated folder: %s\n", oldID)
+		fmt.Printf("Updated folder: %s\n", f.ID)
 		return nil
 	},
 }
@@ -87,11 +88,12 @@ var editArtistCmd = &cobra.Command{
 			RegenerateSlugID: newSlug,
 		}
 
-		if err := appl.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params); err != nil {
+		a, err := appl.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params)
+		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Updated artist: %s\n", oldID)
+		fmt.Printf("Updated artist: %s\n", a.ID)
 		return nil
 	},
 }

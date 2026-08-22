@@ -14,6 +14,6 @@ SELECT artist_id
 FROM channels
 WHERE channel_name = :channel_name;
 
--- name: DeleteChannel :exec
+-- name: DeleteChannel :execrows
 DELETE FROM channels
 WHERE artist_id = :artist_id AND channel_name = :channel_name;

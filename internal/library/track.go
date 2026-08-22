@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -19,6 +20,12 @@ import (
 type (
 	TrackID   string
 	TrackPath string
+)
+
+// Sentinel errors for track lookups and writes.
+var (
+	ErrTrackNotFound   = errors.New("track not found")
+	ErrTrackPathExists = errors.New("track path already exists")
 )
 
 type Track struct {
@@ -280,7 +287,7 @@ func rowToTrack(row store.Track) Track {
 }
 
 func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
-	return r.db(ctx).CreateTrack(ctx, store.CreateTrackParams{
+	err := r.db(ctx).CreateTrack(ctx, store.CreateTrackParams{
 		ID:           string(t.ID),
 		Title:        t.Title,
 		Album:        db.ToNullString(t.Album),
@@ -289,12 +296,17 @@ func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 		RelativePath: string(t.RelativePath),
 		SourceID:     db.ToNullString(t.SourceID),
 	})
+	if err != nil {
+		return db.MapSQLError(err, ErrTrackNotFound, ErrTrackPathExists)
+	}
+
+	return nil
 }
 
 func (r *SQLiteTrackRepository) ByID(ctx context.Context, id TrackID) (Track, error) {
 	row, err := r.db(ctx).GetTrack(ctx, string(id))
 	if err != nil {
-		return Track{}, err
+		return Track{}, r.mapError(err)
 	}
 
 	return rowToTrack(row.Track), nil
@@ -333,7 +345,16 @@ func (r *SQLiteTrackRepository) ExistsBySourceID(ctx context.Context, sourceID s
 }
 
 func (r *SQLiteTrackRepository) Delete(ctx context.Context, id TrackID) error {
-	return r.db(ctx).DeleteTrack(ctx, string(id))
+	rows, err := r.db(ctx).DeleteTrack(ctx, string(id))
+	if err != nil {
+		return r.mapError(err)
+	}
+
+	if rows == 0 {
+		return ErrTrackNotFound
+	}
+
+	return nil
 }
 
 func (r *SQLiteTrackRepository) UpdatePathsByPrefix(ctx context.Context, oldPrefix, newPrefix string) error {
@@ -353,7 +374,7 @@ func (r *SQLiteTrackRepository) UpdatePathsBatch(ctx context.Context, moves []Tr
 			RelativePath: string(m.NewPath),
 		})
 		if err != nil {
-			return fmt.Errorf("execute batch tracking update for entry %q: %w", m.ID, err)
+			return fmt.Errorf("update track path %q: %w", m.ID, err)
 		}
 	}
 
@@ -365,4 +386,9 @@ func (r *SQLiteTrackRepository) db(ctx context.Context) *store.Queries {
 		return r.q.WithTx(tx)
 	}
 	return r.q
+}
+
+// mapError translates storage-level failures into track sentinels.
+func (r *SQLiteTrackRepository) mapError(err error) error {
+	return db.MapSQLError(err, ErrTrackNotFound, ErrTrackPathExists)
 }

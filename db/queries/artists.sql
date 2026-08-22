@@ -1,6 +1,7 @@
--- name: CreateArtist :exec
+-- name: CreateArtist :one
 INSERT INTO artists (id, display_name, folder_id)
-VALUES (:id, :display_name, :folder_id);
+VALUES (:id, :display_name, :folder_id)
+RETURNING id, display_name, folder_id;
 
 -- name: GetArtist :one
 SELECT
@@ -17,11 +18,12 @@ SELECT
     folder_id
 FROM artists;
 
--- name: UpdateArtist :exec
+-- name: UpdateArtist :one
 UPDATE artists
 SET id = :new_id, display_name = :display_name, folder_id = :folder_id
-WHERE id = :old_id;
+WHERE id = :old_id
+RETURNING id, display_name, folder_id;
 
--- name: DeleteArtist :exec
+-- name: DeleteArtist :execrows
 DELETE FROM artists
 WHERE id = :id;

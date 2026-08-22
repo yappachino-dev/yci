@@ -3,12 +3,19 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/store"
+)
+
+// Sentinel errors for artist lookups and writes.
+var (
+	ErrArtistNotFound      = errors.New("artist not found")
+	ErrArtistAlreadyExists = errors.New("artist already exists")
 )
 
 type (
@@ -38,10 +45,10 @@ type Transactor interface {
 }
 
 type ArtistRepository interface {
-	Create(ctx context.Context, a Artist) error
+	Create(ctx context.Context, a Artist) (Artist, error)
 	ByID(ctx context.Context, id ArtistID) (Artist, error)
 	All(ctx context.Context) ([]Artist, error)
-	Update(ctx context.Context, oldID ArtistID, a Artist) error
+	Update(ctx context.Context, oldID ArtistID, a Artist) (Artist, error)
 	Delete(ctx context.Context, id ArtistID) error
 }
 
@@ -101,17 +108,18 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 		}
 	}
 
-	a := Artist{
+	draft := Artist{
 		ID:       id,
 		Name:     name,
 		FolderID: folderID,
 	}
 
-	if err := s.repo.Create(ctx, a); err != nil {
-		return Artist{}, fmt.Errorf("create artist %q: %w", a.ID, err)
+	saved, err := s.repo.Create(ctx, draft)
+	if err != nil {
+		return Artist{}, fmt.Errorf("create artist %q: %w", draft.ID, err)
 	}
 
-	return a, nil
+	return saved, nil
 }
 
 func (s *ArtistService) ByID(ctx context.Context, id ArtistID) (Artist, error) {
@@ -153,51 +161,55 @@ type ArtistUpdateParams struct {
 	RegenerateSlugID bool
 }
 
-func (s *ArtistService) Update(ctx context.Context, oldID ArtistID, params ArtistUpdateParams) error {
-	oldArtist, err := s.repo.ByID(ctx, oldID)
+func (s *ArtistService) Update(ctx context.Context, oldID ArtistID, params ArtistUpdateParams) (Artist, error) {
+	current, err := s.repo.ByID(ctx, oldID)
 	if err != nil {
-		return fmt.Errorf("update artist %q: %w", oldID, err)
+		return Artist{}, fmt.Errorf("update artist %q: %w", oldID, err)
 	}
 
 	newID := newIfPresent(params.NewID, oldID)
-	newName := newIfPresent(params.Name, oldArtist.Name)
-	newFolder := newIfPresent(params.Folder, oldArtist.FolderID)
+	newName := newIfPresent(params.Name, current.Name)
+	newFolder := newIfPresent(params.Folder, current.FolderID)
 
 	if params.RegenerateSlugID {
 		newID = ArtistID(nameToSlug(string(newName)))
 	}
 
-	newArtist := Artist{
+	draft := Artist{
 		ID:       newID,
 		Name:     newName,
 		FolderID: newFolder,
 	}
 
-	if oldArtist.FolderID != newFolder {
+	if current.FolderID != newFolder {
+		var saved Artist
 		txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			if err := s.trackMover.MoveByArtist(txCtx, oldID, oldArtist.FolderID, newFolder); err != nil {
+			if err := s.trackMover.MoveByArtist(txCtx, oldID, current.FolderID, newFolder); err != nil {
 				return err
 			}
 
-			if err := s.repo.Update(txCtx, oldID, newArtist); err != nil {
+			updated, err := s.repo.Update(txCtx, oldID, draft)
+			if err != nil {
 				return err
 			}
 
+			saved = updated
 			return nil
 		})
 
 		if txErr != nil {
-			return fmt.Errorf("update artist %q: %w", oldID, txErr)
+			return Artist{}, fmt.Errorf("update artist %q: %w", oldID, txErr)
 		}
 
-		return nil
+		return saved, nil
 	}
 
-	if err := s.repo.Update(ctx, oldID, newArtist); err != nil {
-		return fmt.Errorf("update artist %q: %w", oldID, err)
+	saved, err := s.repo.Update(ctx, oldID, draft)
+	if err != nil {
+		return Artist{}, fmt.Errorf("update artist %q: %w", oldID, err)
 	}
 
-	return nil
+	return saved, nil
 }
 
 func (s *ArtistService) Delete(ctx context.Context, id ArtistID) error {
@@ -220,18 +232,27 @@ func NewSQLiteArtistRepository(q *store.Queries, rootID FolderID) *SQLiteArtistR
 	}
 }
 
-func (r *SQLiteArtistRepository) Create(ctx context.Context, a Artist) error {
-	return r.db(ctx).CreateArtist(ctx, store.CreateArtistParams{
+func (r *SQLiteArtistRepository) Create(ctx context.Context, a Artist) (Artist, error) {
+	row, err := r.db(ctx).CreateArtist(ctx, store.CreateArtistParams{
 		ID:          string(a.ID),
 		DisplayName: string(a.Name),
 		FolderID:    db.ToNullString(string(a.FolderID)),
 	})
+	if err != nil {
+		return Artist{}, r.mapError(err)
+	}
+
+	return Artist{
+		ID:       ArtistID(row.ID),
+		Name:     ArtistName(row.DisplayName),
+		FolderID: FolderID(db.FromNullString(row.FolderID)),
+	}, nil
 }
 
 func (r *SQLiteArtistRepository) ByID(ctx context.Context, id ArtistID) (Artist, error) {
 	row, err := r.db(ctx).GetArtist(ctx, string(id))
 	if err != nil {
-		return Artist{}, err
+		return Artist{}, r.mapError(err)
 	}
 
 	return Artist{
@@ -244,7 +265,7 @@ func (r *SQLiteArtistRepository) ByID(ctx context.Context, id ArtistID) (Artist,
 func (r *SQLiteArtistRepository) All(ctx context.Context) ([]Artist, error) {
 	rows, err := r.db(ctx).GetArtists(ctx)
 	if err != nil {
-		return nil, err
+		return nil, r.mapError(err)
 	}
 
 	artists := make([]Artist, 0, len(rows))
@@ -262,23 +283,41 @@ func (r *SQLiteArtistRepository) All(ctx context.Context) ([]Artist, error) {
 func (r *SQLiteArtistRepository) FolderID(ctx context.Context, id ArtistID) (FolderID, error) {
 	a, err := r.db(ctx).GetArtist(ctx, string(id))
 	if err != nil {
-		return "", err
+		return "", r.mapError(err)
 	}
 
 	return FolderID(db.FromNullString(a.FolderID)), nil
 }
 
-func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a Artist) error {
-	return r.db(ctx).UpdateArtist(ctx, store.UpdateArtistParams{
+func (r *SQLiteArtistRepository) Update(ctx context.Context, id ArtistID, a Artist) (Artist, error) {
+	row, err := r.db(ctx).UpdateArtist(ctx, store.UpdateArtistParams{
 		OldID:       string(id),
 		NewID:       string(a.ID),
 		DisplayName: string(a.Name),
 		FolderID:    db.ToNullString(string(a.FolderID)),
 	})
+	if err != nil {
+		return Artist{}, r.mapError(err)
+	}
+
+	return Artist{
+		ID:       ArtistID(row.ID),
+		Name:     ArtistName(row.DisplayName),
+		FolderID: FolderID(db.FromNullString(row.FolderID)),
+	}, nil
 }
 
 func (r *SQLiteArtistRepository) Delete(ctx context.Context, id ArtistID) error {
-	return r.db(ctx).DeleteArtist(ctx, string(id))
+	rows, err := r.db(ctx).DeleteArtist(ctx, string(id))
+	if err != nil {
+		return r.mapError(err)
+	}
+
+	if rows == 0 {
+		return ErrArtistNotFound
+	}
+
+	return nil
 }
 
 func (r *SQLiteArtistRepository) db(ctx context.Context) *store.Queries {
@@ -287,4 +326,9 @@ func (r *SQLiteArtistRepository) db(ctx context.Context) *store.Queries {
 	}
 
 	return r.q
+}
+
+// mapError translates storage-level failures into artist sentinels.
+func (r *SQLiteArtistRepository) mapError(err error) error {
+	return db.MapSQLError(err, ErrArtistNotFound, ErrArtistAlreadyExists)
 }

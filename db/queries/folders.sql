@@ -1,6 +1,7 @@
--- name: CreateFolder :exec
+-- name: CreateFolder :one
 INSERT INTO folders (id, display_name, parent_id)
-VALUES (:id, :display_name, :parent_id);
+VALUES (:id, :display_name, :parent_id)
+RETURNING id, display_name, parent_id;
 
 -- name: GetFolder :one
 SELECT
@@ -60,11 +61,12 @@ SELECT EXISTS(
     WHERE id = :id
 );
 
--- name: DeleteFolder :exec
-DELETE FROM folders
-WHERE id = :id;
-
--- name: UpdateFolder :exec
+-- name: UpdateFolder :one
 UPDATE folders
 SET id = :new_id, display_name = :display_name, parent_id = :parent_id
-WHERE id = :old_id;
+WHERE id = :old_id
+RETURNING id, display_name, parent_id;
+
+-- name: DeleteFolder :execrows
+DELETE FROM folders
+WHERE id = :id;

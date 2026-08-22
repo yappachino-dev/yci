@@ -25,7 +25,7 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) er
 	return err
 }
 
-const deleteChannel = `-- name: DeleteChannel :exec
+const deleteChannel = `-- name: DeleteChannel :execrows
 DELETE FROM channels
 WHERE artist_id = ?1 AND channel_name = ?2
 `
@@ -35,9 +35,12 @@ type DeleteChannelParams struct {
 	ChannelName sql.NullString
 }
 
-func (q *Queries) DeleteChannel(ctx context.Context, arg DeleteChannelParams) error {
-	_, err := q.db.ExecContext(ctx, deleteChannel, arg.ArtistID, arg.ChannelName)
-	return err
+func (q *Queries) DeleteChannel(ctx context.Context, arg DeleteChannelParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteChannel, arg.ArtistID, arg.ChannelName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getArtistIDByChannel = `-- name: GetArtistIDByChannel :one

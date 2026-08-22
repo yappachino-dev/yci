@@ -78,15 +78,18 @@ func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error 
 	return err
 }
 
-const deleteTrack = `-- name: DeleteTrack :exec
+const deleteTrack = `-- name: DeleteTrack :execrows
 DELETE FROM tracks
 WHERE
     id = ?1
 `
 
-func (q *Queries) DeleteTrack(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteTrack, id)
-	return err
+func (q *Queries) DeleteTrack(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTrack, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getTrack = `-- name: GetTrack :one
