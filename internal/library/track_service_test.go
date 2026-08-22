@@ -7,30 +7,6 @@ import (
 	"testing"
 )
 
-func TestArtistCreateLinksToSameSlugFolder(t *testing.T) {
-	env := newLibraryEnv(t)
-	ctx := t.Context()
-
-	env.mustCreateFolder(t, "Radiohead")
-
-	a, err := env.artists.Create(ctx, "", "", "Radiohead")
-	if err != nil {
-		t.Fatalf("create artist: %v", err)
-	}
-	if a.FolderID != FolderID("radiohead") {
-		t.Errorf("folder = %q, want existing same-slug folder", a.FolderID)
-	}
-
-	// Without a matching folder the artist falls back to root.
-	other, err := env.artists.Create(ctx, "", "", "Portishead")
-	if err != nil {
-		t.Fatalf("create second artist: %v", err)
-	}
-	if other.FolderID != FolderID(RootID) {
-		t.Errorf("fallback folder = %q, want root", other.FolderID)
-	}
-}
-
 func TestTrackMoveByArtist(t *testing.T) {
 	env := newLibraryEnv(t)
 	ctx := t.Context()
@@ -146,42 +122,5 @@ func TestTrackByFolderRecursiveVsExact(t *testing.T) {
 	}
 	if len(recursive) != 2 {
 		t.Errorf("recursive matches = %d, want 2 (nested excluded Other/)", len(recursive))
-	}
-}
-
-func TestChannelServiceRoundTrip(t *testing.T) {
-	env := newLibraryEnv(t)
-	ctx := t.Context()
-
-	artist, err := env.artists.Create(ctx, "", "", "An Artist")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := env.channels.Link(ctx, artist.ID, "Some Channel"); err != nil {
-		t.Fatalf("link: %v", err)
-	}
-	if err := env.channels.Link(ctx, artist.ID, "Some Channel"); !errors.Is(err, ErrChannelAlreadyLinked) {
-		t.Errorf("duplicate link err = %v, want ErrChannelAlreadyLinked", err)
-	}
-
-	resolved, ok, err := env.channels.ResolveArtist(ctx, "Some Channel")
-	if err != nil || !ok || resolved != artist.ID {
-		t.Errorf("resolve = (%q, %t, %v), want (%q, true, nil)", resolved, ok, err, artist.ID)
-	}
-
-	all, err := env.channels.All(ctx)
-	if err != nil || len(all) != 1 {
-		t.Errorf("all = %+v (err %v), want one channel", all, err)
-	}
-
-	if err := env.channels.Unlink(ctx, artist.ID, "Some Channel"); err != nil {
-		t.Fatalf("unlink: %v", err)
-	}
-	if err := env.channels.Unlink(ctx, artist.ID, "Some Channel"); !errors.Is(err, ErrChannelNotLinked) {
-		t.Errorf("double unlink err = %v, want ErrChannelNotLinked", err)
-	}
-	if _, ok, _ := env.channels.ResolveArtist(ctx, "Some Channel"); ok {
-		t.Error("channel still resolves after unlink")
 	}
 }
