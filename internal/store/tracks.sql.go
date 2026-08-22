@@ -271,18 +271,20 @@ func (q *Queries) UpdateTrackPath(ctx context.Context, arg UpdateTrackPathParams
 const updateTrackPathsByPrefix = `-- name: UpdateTrackPathsByPrefix :exec
 UPDATE tracks
 SET
-    relative_path = REPLACE(relative_path, ?1, ?2)
+    relative_path = ?1 || SUBSTR(relative_path, LENGTH(?2) + 1)
 WHERE
     relative_path LIKE ?3
 `
 
 type UpdateTrackPathsByPrefixParams struct {
-	OldPrefix   string
 	NewPrefix   string
+	OldPrefix   interface{}
 	MatchPrefix string
 }
 
+// Replaces only the leading prefix: SUBSTR keeps the remainder intact, so a
+// repeated folder name deeper in the path survives renames.
 func (q *Queries) UpdateTrackPathsByPrefix(ctx context.Context, arg UpdateTrackPathsByPrefixParams) error {
-	_, err := q.db.ExecContext(ctx, updateTrackPathsByPrefix, arg.OldPrefix, arg.NewPrefix, arg.MatchPrefix)
+	_, err := q.db.ExecContext(ctx, updateTrackPathsByPrefix, arg.NewPrefix, arg.OldPrefix, arg.MatchPrefix)
 	return err
 }

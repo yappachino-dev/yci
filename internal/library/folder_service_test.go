@@ -169,3 +169,24 @@ func TestFolderNameOfOnlyIllegalCharactersSanitized(t *testing.T) {
 		t.Errorf("path = %q, want %q (illegal characters replaced)", got, "___")
 	}
 }
+
+func TestFolderRenameKeepsRepeatedFolderNameDeeperInPath(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	env.mustPutTrack(t, "t1", "Song", "Music/Music/song.opus")
+
+	if _, err := env.folders.Update(ctx, folder.ID, FolderUpdateParams{Name: "Metal"}); err != nil {
+		t.Fatalf("update folder: %v", err)
+	}
+
+	track, err := env.repos.tracks.ByID(ctx, "t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if track.RelativePath != "Metal/Music/song.opus" {
+		t.Errorf("relative path = %q, want %q (only the leading prefix may change)",
+			track.RelativePath, "Metal/Music/song.opus")
+	}
+}

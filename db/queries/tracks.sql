@@ -54,9 +54,11 @@ SELECT
     );
 
 -- name: UpdateTrackPathsByPrefix :exec
+-- Replaces only the leading prefix: SUBSTR keeps the remainder intact, so a
+-- repeated folder name deeper in the path survives renames.
 UPDATE tracks
 SET
-    relative_path = REPLACE(relative_path, :old_prefix, :new_prefix)
+    relative_path = :new_prefix || SUBSTR(relative_path, LENGTH(:old_prefix) + 1)
 WHERE
     relative_path LIKE :match_prefix;
 
