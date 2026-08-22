@@ -11,6 +11,7 @@ import (
 
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
+	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/store"
 )
 
@@ -289,7 +290,12 @@ func (s *FolderService) ResolvePath(ctx context.Context, id FolderID) (string, e
 		return "", fmt.Errorf("resolve path %q: no ancestors found", id)
 	}
 
-	return filepath.ToSlash(filepath.Join(names...)), nil
+	segments := make([]string, len(names))
+	for i, name := range names {
+		segments[i] = fs.SanitizeFilename(name)
+	}
+
+	return filepath.ToSlash(filepath.Join(segments...)), nil
 }
 
 func (s *FolderService) PredictPath(ctx context.Context, parent FolderID, name FolderName) (string, error) {
@@ -298,11 +304,12 @@ func (s *FolderService) PredictPath(ctx context.Context, parent FolderID, name F
 		return "", fmt.Errorf("predict path %q: %w", parent, err)
 	}
 
+	safeName := fs.SanitizeFilename(string(name))
 	if parentPath == "" {
-		return string(name), nil
+		return safeName, nil
 	}
 
-	return filepath.ToSlash(filepath.Join(parentPath, string(name))), nil
+	return filepath.ToSlash(filepath.Join(parentPath, safeName)), nil
 }
 
 // SQLiteFolderRepository implements FolderRepository over sqlc queries.

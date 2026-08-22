@@ -125,3 +125,47 @@ func TestFolderUpdateRejectsMissingParent(t *testing.T) {
 		t.Fatalf("err = %v, want ErrParentNotFound", err)
 	}
 }
+
+func TestFolderNamesSanitizedInSlugsAndPaths(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Weird/Name")
+
+	if folder.ID != "weird_name" {
+		t.Errorf("slug ID = %q, want %q (no path separators)", folder.ID, "weird_name")
+	}
+
+	got, err := env.folders.ResolvePath(ctx, folder.ID)
+	if err != nil {
+		t.Fatalf("resolve path: %v", err)
+	}
+	if got != "Weird_Name" {
+		t.Errorf("path = %q, want %q (illegal characters replaced)", got, "Weird_Name")
+	}
+
+	predicted, err := env.folders.PredictPath(ctx, folder.ID, "Sub:Dir")
+	if err != nil {
+		t.Fatalf("predict path: %v", err)
+	}
+	if predicted != "Weird_Name/Sub_Dir" {
+		t.Errorf("predicted = %q, want %q", predicted, "Weird_Name/Sub_Dir")
+	}
+}
+
+func TestFolderNameOfOnlyIllegalCharactersSanitized(t *testing.T) {
+	env := newLibraryEnv(t)
+
+	f, err := env.folders.Create(t.Context(), "", "", "///")
+	if err != nil {
+		t.Fatalf("create folder: %v", err)
+	}
+
+	got, err := env.folders.ResolvePath(t.Context(), f.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "___" {
+		t.Errorf("path = %q, want %q (illegal characters replaced)", got, "___")
+	}
+}
