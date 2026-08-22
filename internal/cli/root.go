@@ -104,8 +104,7 @@ func initApplication(ctx context.Context, autoMigrate bool) error {
 	}
 
 	if autoMigrate {
-		// Replay filesystem operations journaled by a previous crashed run so
-		// the physical library converges on the committed metadata state.
+		// Replay journals left pending by a previous crashed run.
 		if err = appl.FileActions.ExecutePending(ctx); err != nil {
 			dbConn.Close()
 			return fmt.Errorf("recover pending file actions: %w", err)

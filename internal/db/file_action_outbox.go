@@ -12,9 +12,8 @@ import (
 	"github.com/yappachino-dev/yci/internal/store"
 )
 
-// FileActionOp enumerates the physical filesystem operations that can be
-// journaled. Every operation must be safe to replay (idempotent) because the
-// journal is re-executed after crashes.
+// FileActionOp is a filesystem operation recorded in the journal.
+// Every op must be safe to replay.
 type FileActionOp string
 
 const (
@@ -32,26 +31,23 @@ func (op FileActionOp) valid() bool {
 	}
 }
 
-// FileActionEntry describes one planned physical filesystem operation. Paths
-// are absolute native paths so a journal recorded before a configuration
-// change still points at the physical locations involved at record time.
+// FileActionEntry is one planned filesystem operation. Paths are absolute
+// so entries stay valid across configuration changes.
 type FileActionEntry struct {
 	Op  FileActionOp
 	Src string
 	Dst string // ignored for OpDeleteFile
 }
 
-// DiskMover is the low-level physical primitive used to execute journal
-// entries. It is implemented by fs.OSDiskMover.
+// DiskMover applies journal entries to disk. Implemented by fs.OSDiskMover.
 type DiskMover interface {
 	MoveFile(ctx context.Context, oldPath, newPath string) error
 	MoveDirectory(ctx context.Context, oldRootPath, newRootPath string) error
 	DeleteFile(ctx context.Context, path string) error
 }
 
-// FileActionRepository records and tracks planned filesystem operations in
-// the fs_journal table. Recording happens inside the caller's transaction (if
-// any) so that the journal commits atomically together with metadata changes.
+// FileActionRepository records planned filesystem operations in fs_journal,
+// inside the caller's transaction when one is active.
 type FileActionRepository struct {
 	q *store.Queries
 }
@@ -60,8 +56,7 @@ func NewFileActionRepository(q *store.Queries) *FileActionRepository {
 	return &FileActionRepository{q: q}
 }
 
-// Record persists journal entries within the caller's transaction when one is
-// active, otherwise directly on the database.
+// Record persists entries within the active transaction, if any.
 func (r *FileActionRepository) Record(ctx context.Context, entries []FileActionEntry) error {
 	for _, entry := range entries {
 		if !entry.Op.valid() {
@@ -86,8 +81,8 @@ func (r *FileActionRepository) Record(ctx context.Context, entries []FileActionE
 	return nil
 }
 
-// Pending returns all unexecuted journal entries in insertion order.
-// Insertion order is execution order: operations are causal.
+// Pending returns unexecuted entries in insertion order, which is
+// execution order.
 func (r *FileActionRepository) Pending(ctx context.Context) ([]store.GetPendingFileActionsRow, error) {
 	rows, err := r.db(ctx).GetPendingFileActions(ctx)
 	if err != nil {
@@ -153,11 +148,9 @@ func (r *FileActionRepository) db(ctx context.Context) *store.Queries {
 	return r.q
 }
 
-// JournaledMover implements the physical mover interfaces used by the library
-// services. Inside a transaction it only records the intended operation into
-// the journal; the actual disk mutation happens after the transaction commits,
-// driven by FileActionExecutor. Outside a transaction it falls back to direct
-// execution.
+// JournaledMover records operations into the journal instead of touching
+// disk; FileActionExecutor applies them after commit. Outside a transaction
+// it moves directly.
 type JournaledMover struct {
 	repo *FileActionRepository
 	disk DiskMover
@@ -187,9 +180,8 @@ func (m *JournaledMover) recordOrExecute(ctx context.Context, entry FileActionEn
 	return ExecuteFileAction(ctx, m.disk, entry)
 }
 
-// FileActionExecutor replays journal entries against the physical filesystem.
-// Execution is forward-only (redo): every operation is applied idempotently so
-// that a crash between "rename done" and "mark done" converges on retry.
+// FileActionExecutor replays journal entries on disk. Operations are applied
+// idempotently so replays converge after crashes.
 type FileActionExecutor struct {
 	repo *FileActionRepository
 	disk DiskMover
@@ -219,9 +211,8 @@ func (e *FileActionExecutor) PurgeDone(ctx context.Context) error {
 	return e.repo.PurgeDone(ctx)
 }
 
-// ExecutePending applies every pending journal entry in order. On the first
-// failure it marks that entry as failed and stops; remaining entries stay
-// pending and are retried on the next run.
+// ExecutePending applies pending entries in order and stops at the first
+// failure. Remaining entries stay pending for later retry.
 func (e *FileActionExecutor) ExecutePending(ctx context.Context) error {
 	pending, err := e.repo.Pending(ctx)
 	if err != nil {
@@ -251,11 +242,9 @@ func (e *FileActionExecutor) ExecutePending(ctx context.Context) error {
 	return nil
 }
 
-// ExecuteFileAction applies a single operation with redo semantics:
-//
-//	move:      src missing + dst exists -> already done (success)
-//	           both present or both missing -> hard failure
-//	delete:    src missing -> already done (success)
+// ExecuteFileAction applies one operation idempotently: a move whose
+// destination already exists succeeds, conflicting or missing states fail;
+// deleting a missing file succeeds.
 func ExecuteFileAction(ctx context.Context, disk DiskMover, entry FileActionEntry) error {
 	srcExists, err := pathExists(entry.Src)
 	if err != nil {

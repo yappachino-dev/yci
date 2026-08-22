@@ -17,6 +17,7 @@ func NewSQLiteTransactor(db *sql.DB) *SQLiteTransactor {
 	return &SQLiteTransactor{db: db}
 }
 
+// SetPostCommit registers fn to run after each successful commit.
 func (t *SQLiteTransactor) SetPostCommit(fn func(ctx context.Context) error) {
 	t.postCommit = fn
 }
