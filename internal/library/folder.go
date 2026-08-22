@@ -54,6 +54,7 @@ type FolderRepository interface {
 	Delete(ctx context.Context, id FolderID) error
 
 	Ancestors(ctx context.Context, id FolderID) ([]string, error)
+	AncestorIDs(ctx context.Context, id FolderID) ([]string, error)
 	HasChildren(ctx context.Context, id FolderID) (bool, error)
 	Exists(ctx context.Context, id FolderID) (bool, error)
 }
@@ -198,12 +199,12 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, ErrParentNotFound)
 		}
 
-		ancestors, err := s.repo.Ancestors(ctx, newParent)
+		ancestorIDs, err := s.repo.AncestorIDs(ctx, newParent)
 		if err != nil {
 			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, err)
 		}
 
-		if slices.Contains(ancestors, string(oldID)) {
+		if slices.Contains(ancestorIDs, string(oldID)) {
 			return Folder{}, fmt.Errorf("update folder %q: %w", oldID, ErrCyclicParent)
 		}
 	}
@@ -367,6 +368,13 @@ func (r *SQLiteFolderRepository) All(ctx context.Context) ([]Folder, error) {
 
 func (r *SQLiteFolderRepository) Ancestors(ctx context.Context, id FolderID) ([]string, error) {
 	return r.db(ctx).GetFolderAncestors(ctx, string(id))
+}
+
+// AncestorIDs returns folder IDs from the folder up to the root. Unlike
+// Ancestors (display names), these are stable identifiers and safe for
+// membership checks.
+func (r *SQLiteFolderRepository) AncestorIDs(ctx context.Context, id FolderID) ([]string, error) {
+	return r.db(ctx).GetFolderAncestorIDs(ctx, string(id))
 }
 
 func (r *SQLiteFolderRepository) HasChildren(ctx context.Context, id FolderID) (bool, error) {

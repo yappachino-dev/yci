@@ -91,6 +91,54 @@ func (q *Queries) GetFolder(ctx context.Context, id string) (Folder, error) {
 	return i, err
 }
 
+const getFolderAncestorIDs = `-- name: GetFolderAncestorIDs :many
+WITH RECURSIVE ancestor_chain AS (
+    SELECT
+        id,
+        parent_id,
+        0 AS depth
+    FROM folders
+    WHERE folders.id = ?1
+
+    UNION ALL
+
+    SELECT
+        f.id,
+        f.parent_id,
+        ac.depth + 1 AS depth
+    FROM folders AS f
+    INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
+)
+
+SELECT id
+FROM ancestor_chain
+WHERE id != 'root'
+ORDER BY depth DESC
+`
+
+func (q *Queries) GetFolderAncestorIDs(ctx context.Context, id string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getFolderAncestorIDs, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFolderAncestors = `-- name: GetFolderAncestors :many
 WITH RECURSIVE ancestor_chain AS (
     SELECT

@@ -44,6 +44,30 @@ FROM ancestor_chain
 WHERE id != 'root'
 ORDER BY depth DESC;
 
+-- name: GetFolderAncestorIDs :many
+WITH RECURSIVE ancestor_chain AS (
+    SELECT
+        id,
+        parent_id,
+        0 AS depth
+    FROM folders
+    WHERE folders.id = :id
+
+    UNION ALL
+
+    SELECT
+        f.id,
+        f.parent_id,
+        ac.depth + 1 AS depth
+    FROM folders AS f
+    INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
+)
+
+SELECT id
+FROM ancestor_chain
+WHERE id != 'root'
+ORDER BY depth DESC;
+
 -- name: CheckFolderHasChildren :one
 SELECT EXISTS (
     SELECT 1
