@@ -22,7 +22,14 @@ func (t *SQLiteTransactor) SetPostCommit(fn func(ctx context.Context) error) {
 	t.postCommit = fn
 }
 
+// WithinTransaction runs fn inside a database transaction. When a
+// transaction is already active on ctx, fn joins it instead of opening a
+// new one — an inner failure rolls back the whole unit of work.
 func (t *SQLiteTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) (err error) {
+	if _, active := appctx.TxFromContext[*sql.Tx](ctx); active {
+		return fn(ctx)
+	}
+
 	tx, err := t.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
