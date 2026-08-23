@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/yappachino-dev/yci/internal/download"
@@ -210,15 +211,33 @@ func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
 	fmt.Printf("[-] Failed: %v\n\n", err)
 }
 
+// parseDelay validates the min:max delay flag up front so invalid values
+// fail with a clear message instead of a cryptic yt-dlp error.
+func parseDelay(flagValue string) (minStr, maxStr string, err error) {
+	parts := strings.Split(flagValue, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
+	}
+
+	for _, half := range parts {
+		n, parseErr := strconv.Atoi(half)
+		if parseErr != nil || n < 0 {
+			return "", "", fmt.Errorf("invalid delay %q: both components must be non-negative integers", flagValue)
+		}
+	}
+
+	return parts[0], parts[1], nil
+}
+
 func executeDownloadLoop(ctx context.Context, delayFlag string) error {
 	c := Container(ctx)
 
-	delayParts := strings.Split(delayFlag, ":")
-	if len(delayParts) != 2 {
-		return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
+	minSleep, maxSleep, err := parseDelay(delayFlag)
+	if err != nil {
+		return err
 	}
 
-	result, err := c.DownloadService.ProcessQueue(ctx, delayParts[0], delayParts[1], &ProcessReporter{})
+	result, err := c.DownloadService.ProcessQueue(ctx, minSleep, maxSleep, &ProcessReporter{})
 	if err != nil {
 		return err
 	}
@@ -226,7 +245,7 @@ func executeDownloadLoop(ctx context.Context, delayFlag string) error {
 	fmt.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
 
 	if result.Success > 0 {
-		fmt.Println("▶ Run `yci process staging` to import them into your library.")
+		fmt.Println("▶ Run `yci import staging` to import them into your library.")
 	}
 
 	return nil
