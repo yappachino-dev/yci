@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fast local gate mirroring CI. Install with `make hooks`.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+out=$(gofmt -l ./internal ./cmd)
+if [ -n "$out" ]; then
+    echo "pre-commit: files need gofmt:" >&2
+    echo "$out" >&2
+    exit 1
+fi
+
+go vet ./... > /dev/null
+go test ./... > /dev/null
+
+echo "pre-commit checks passed"

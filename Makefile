@@ -5,7 +5,7 @@ BIN_DIR  := $(PREFIX)/bin
 XDG_CONFIG_HOME ?= $(HOME)/.config
 FISH_COMP_DIR   ?= $(XDG_CONFIG_HOME)/fish/completions
 
-.PHONY: all build install clean
+.PHONY: all build install clean fmt fmt-check vet test check sqlc sqlc-check hooks
 
 all: build
 
@@ -29,3 +29,30 @@ install: build
 clean:
 	@echo "Cleaning up..."
 	rm -f $(APP_NAME)
+
+fmt:
+	gofmt -w ./internal ./cmd
+
+fmt-check:
+	@out=$$(gofmt -l ./internal ./cmd); if [ -n "$$out" ]; then \
+		echo "Files need gofmt:"; echo "$$out"; exit 1; fi
+
+vet:
+	go vet ./...
+
+test:
+	go test -race ./...
+
+sqlc:
+	go tool sqlc generate
+
+# Regenerating must be a no-op; a diff means hand-edited or stale
+# generated code.
+sqlc-check:
+	go tool sqlc generate
+	git diff --exit-code -- internal/store db/queries
+
+check: fmt-check vet build test sqlc-check
+
+hooks:
+	install -m 0755 scripts/hooks/pre-commit .git/hooks/pre-commit
