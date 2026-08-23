@@ -53,7 +53,8 @@ var syncCmd = &cobra.Command{
 			return nil
 		}
 
-		cmd.Printf("Audit complete. Found %d missing files.\n\n", len(missing))
+		cmd.Printf("Audit complete. Found %d missing files.\n", len(missing))
+		cmd.Println()
 
 		if dryRun {
 			cmd.Println("--- DRY RUN: The following files would be enqueued and downloaded ---")
@@ -81,11 +82,13 @@ var syncCmd = &cobra.Command{
 			result.Enqueued, result.Skipped, result.Failed)
 
 		if queueOnly {
-			cmd.Println("\n▶ Flag --queue-only set. Run `yci download resume` to process them.")
+			cmd.Println()
+			cmd.Println("▶ Flag --queue-only set. Run `yci download resume` to process them.")
 			return nil
 		}
 
-		cmd.Print("\nProcessing queue...\n")
+		cmd.Println()
+		cmd.Println("Processing queue...")
 		return executeDownloadLoop(cmd, delayFlag)
 	},
 }

@@ -36,12 +36,13 @@ var repairCmd = &cobra.Command{
 
 		dryRun, _ := cmd.Flags().GetBool(flagDryRunRepair)
 		if dryRun {
-			cmd.Println("\nDry run: no changes made.")
+			cmd.Println("Dry run: no changes made.")
 			return nil
 		}
 
 		if len(failed) > 0 {
-			cmd.Print("\nRetrying failed actions...\n")
+			cmd.Println()
+			cmd.Println("Retrying failed actions...")
 
 			if err := c.FileActions.ResetFailed(ctx); err != nil {
 				return fmt.Errorf("requeue failed file actions: %w", err)
@@ -56,7 +57,7 @@ var repairCmd = &cobra.Command{
 			return fmt.Errorf("purge completed file actions: %w", err)
 		}
 
-		cmd.Print("Journal replayed successfully\n")
+		cmd.Println("Journal replayed successfully")
 		return nil
 	},
 }

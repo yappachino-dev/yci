@@ -64,12 +64,12 @@ var downloadCmd = &cobra.Command{
 		})
 		if err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
-				cmd.Println("\n[!] Operation cancelled by user.")
+				cmd.Println("[!] Operation cancelled by user.")
 				return nil
 			}
 
 			if errors.Is(err, errNoChannelsSelected) {
-				cmd.Println("\n[!] No channels selected — nothing enqueued.")
+				cmd.Println("[!] No channels selected — nothing enqueued.")
 				return nil
 			}
 
@@ -81,13 +81,15 @@ var downloadCmd = &cobra.Command{
 
 		queueOnly, _ := cmd.Flags().GetBool(flagQueueOnly)
 		if queueOnly {
-			cmd.Println("\n[!] Flag --queue-only detected. Items enqueued but download paused")
+			cmd.Println()
+			cmd.Println("[!] Flag --queue-only detected. Items enqueued but download paused")
 			return nil
 		}
 
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
-		cmd.Print("\nProcessing queue...\n")
+		cmd.Println()
+		cmd.Println("Processing queue...")
 		return executeDownloadLoop(cmd, delayFlag)
 	},
 }
@@ -128,11 +130,13 @@ func (r *consoleReporter) OnTrackStart(index int, total int, sourceID string) {
 }
 
 func (r *consoleReporter) OnTrackSuccess(_ string) {
-	r.cmd.Printf("[+] Success!\n\n")
+	r.cmd.Println("[+] Success!")
+	r.cmd.Println()
 }
 
 func (r *consoleReporter) OnTrackFailure(_ string, err error) {
-	r.cmd.Printf("[-] Failed: %v\n\n", err)
+	r.cmd.Printf("[-] Failed: %v\n", err)
+	r.cmd.Println()
 }
 
 // errNoChannelsSelected reports that the user submitted the channel
@@ -204,7 +208,7 @@ var downloadResumeCmd = &cobra.Command{
 
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
-		cmd.Print("Resuming queue...\n")
+		cmd.Println("Resuming queue...")
 		return executeDownloadLoop(cmd, delayFlag)
 	},
 }

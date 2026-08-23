@@ -164,7 +164,8 @@ var importStagingCmd = &cobra.Command{
 			return library.StagingResult{Action: library.ActionSkip}, nil
 		}
 
-		cmd.Print("Processing staging directory...\n\n")
+		cmd.Println("Processing staging directory...")
+		cmd.Println()
 
 		if err := c.StagingService.ProcessStaging(ctx, handler); err != nil {
 			if errors.Is(err, library.ErrProcessAborted) {
@@ -175,7 +176,8 @@ var importStagingCmd = &cobra.Command{
 			return err
 		}
 
-		cmd.Println("\nSuccess! Staging queue processed.")
+		cmd.Println()
+		cmd.Println("Success! Staging queue processed.")
 		return nil
 	},
 }
