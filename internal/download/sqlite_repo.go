@@ -47,15 +47,6 @@ func (r *SQLiteQueueRepo) Enqueue(ctx context.Context, sourceID string) (bool, e
 	return rows > 0, nil
 }
 
-func (r *SQLiteQueueRepo) QueueLength(ctx context.Context) (int, error) {
-	length, err := r.db(ctx).GetQueueLength(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	return int(length), nil
-}
-
 func (r *SQLiteQueueRepo) ResetPending(ctx context.Context) error {
 	return r.db(ctx).ResetOrphanedDownloads(ctx)
 }

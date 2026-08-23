@@ -15,6 +15,21 @@ const (
 	SkipReasonUnrecognized   = "unrecognized url format"
 )
 
+// Queue row states; typed treatment tracked separately (TD-04).
+const (
+	statusPending    = "pending"
+	statusProcessing = "processing"
+	statusFailed     = "failed"
+)
+
+// maxAttempts mirrors the SQL retry cap in GetNextActionableDownload.
+const maxAttempts = 3
+
+// isActionable reports whether an entry will be picked up by Next.
+func isActionable(e QueueEntry) bool {
+	return (e.Status == statusPending || e.Status == statusFailed) && e.Attempts < maxAttempts
+}
+
 type QueueEntry struct {
 	ID       int
 	SourceID string
@@ -74,7 +89,6 @@ type DirReader interface {
 type QueueRepo interface {
 	All(ctx context.Context) ([]QueueEntry, error)
 	Enqueue(ctx context.Context, sourceID string) (bool, error)
-	QueueLength(ctx context.Context) (int, error)
 	ResetPending(ctx context.Context) error
 	Next(ctx context.Context) (QueueEntry, bool, error)
 	Start(ctx context.Context, id int) error
@@ -346,9 +360,17 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 	}
 
 	current := 0
-	total, err := s.repo.QueueLength(ctx)
+	total := 0
+
+	pending, err := s.repo.All(ctx)
 	if err != nil {
-		return result, fmt.Errorf("read queue length: %w", err)
+		return result, fmt.Errorf("list queue entries: %w", err)
+	}
+
+	for _, e := range pending {
+		if isActionable(e) {
+			total++
+		}
 	}
 
 	reporter.OnQueueStart(total)
@@ -357,7 +379,6 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		current++
 
 		entry, ok, err := s.repo.Next(ctx)
 		if err != nil {
@@ -366,6 +387,7 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 		if !ok {
 			break
 		}
+		current++
 
 		reporter.OnTrackStart(current, total, entry.SourceID)
 

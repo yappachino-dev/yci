@@ -132,17 +132,6 @@ func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
 	return items, nil
 }
 
-const getQueueLength = `-- name: GetQueueLength :one
-SELECT COUNT(*) FROM download_queue
-`
-
-func (q *Queries) GetQueueLength(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getQueueLength)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const resetDownloadByID = `-- name: ResetDownloadByID :execrows
 UPDATE download_queue
 SET

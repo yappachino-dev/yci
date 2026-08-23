@@ -11,9 +11,6 @@ SELECT
     error_msg
 FROM download_queue;
 
--- name: GetQueueLength :one
-SELECT COUNT(*) FROM download_queue;
-
 -- name: GetNextActionableDownload :one
 SELECT
     download_queue.id,
