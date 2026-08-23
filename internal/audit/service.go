@@ -2,6 +2,9 @@ package audit
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -38,7 +41,7 @@ func NewService(cfg Config) *Service {
 func (s *Service) MissingAll(ctx context.Context) ([]library.Track, error) {
 	tracks, err := s.trackProvider.All(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list all tracks: %w", err)
 	}
 
 	return s.filterMissing(tracks)
@@ -47,7 +50,7 @@ func (s *Service) MissingAll(ctx context.Context) ([]library.Track, error) {
 func (s *Service) MissingByArtist(ctx context.Context, id library.ArtistID) ([]library.Track, error) {
 	tracks, err := s.trackProvider.ByArtistID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list artist tracks: %w", err)
 	}
 
 	return s.filterMissing(tracks)
@@ -56,12 +59,14 @@ func (s *Service) MissingByArtist(ctx context.Context, id library.ArtistID) ([]l
 func (s *Service) MissingByFolder(ctx context.Context, id library.FolderID, recursive bool) ([]library.Track, error) {
 	tracks, err := s.trackProvider.ByFolder(ctx, id, recursive)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list folder tracks: %w", err)
 	}
 
 	return s.filterMissing(tracks)
 }
 
+// filterMissing keeps tracks whose physical file cannot be stat'd. Tracks
+// without a SourceID are skipped — they cannot be re-downloaded.
 func (s *Service) filterMissing(tracks []library.Track) ([]library.Track, error) {
 	var missing []library.Track
 	for _, t := range tracks {
@@ -70,7 +75,11 @@ func (s *Service) filterMissing(tracks []library.Track) ([]library.Track, error)
 		}
 
 		absPath := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
-		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		if _, err := os.Stat(absPath); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return nil, fmt.Errorf("stat track %q: %w", t.ID, err)
+			}
+
 			missing = append(missing, t)
 		}
 	}
