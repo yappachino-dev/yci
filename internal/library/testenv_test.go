@@ -29,19 +29,25 @@ func newLibraryDBConn(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { dbConn.Close() })
 
+	// Match initApplication: the FK actions in the schema below are only
+	// enforced while the pragma is on.
+	if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		t.Fatalf("enable foreign keys: %v", err)
+	}
+
 	const schema = `
 		CREATE TABLE folders (
 			id TEXT PRIMARY KEY,
 			display_name TEXT NOT NULL,
 			parent_id TEXT,
-			FOREIGN KEY (parent_id) REFERENCES folders (id)
+			FOREIGN KEY (parent_id) REFERENCES folders (id) ON DELETE CASCADE ON UPDATE CASCADE
 		);
 
 		CREATE TABLE artists (
 			id TEXT PRIMARY KEY,
 			display_name TEXT NOT NULL,
 			folder_id TEXT,
-			FOREIGN KEY (folder_id) REFERENCES folders (id)
+			FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL ON UPDATE CASCADE
 		);
 
 		CREATE TABLE channels (
@@ -61,8 +67,8 @@ func newLibraryDBConn(t *testing.T) *sql.DB {
 			relative_path TEXT NOT NULL UNIQUE,
 			source_id TEXT,
 			folder_id TEXT,
-			FOREIGN KEY (artist_id) REFERENCES artists (id),
-			FOREIGN KEY (folder_id) REFERENCES folders (id)
+			FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE SET NULL ON UPDATE CASCADE,
+			FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL ON UPDATE CASCADE
 		);
 
 		CREATE TABLE fs_journal (
@@ -78,6 +84,11 @@ func newLibraryDBConn(t *testing.T) *sql.DB {
 
 	if _, err := dbConn.Exec(schema); err != nil {
 		t.Fatalf("create schema: %v", err)
+	}
+
+	// Match migration 003: the root folder row exists.
+	if _, err := dbConn.Exec(`INSERT INTO folders (id, display_name, parent_id) VALUES ('root', 'Root', NULL)`); err != nil {
+		t.Fatalf("seed root folder: %v", err)
 	}
 
 	return dbConn

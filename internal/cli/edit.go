@@ -53,7 +53,10 @@ var editFolderCmd = &cobra.Command{
 
 		f, err := c.FolderService.Update(cmd.Context(), library.FolderID(oldID), params)
 		if err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrFolderNotFound: fmt.Sprintf("folder %q does not exist", oldID),
+				library.ErrParentNotFound: fmt.Sprintf("parent folder %q does not exist", params.Parent),
+			})
 		}
 
 		fmt.Printf("Updated folder: %s\n", f.ID)
@@ -94,7 +97,10 @@ var editArtistCmd = &cobra.Command{
 
 		a, err := c.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params)
 		if err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", oldID),
+				library.ErrFolderNotFound: fmt.Sprintf("folder %q does not exist", params.Folder),
+			})
 		}
 
 		fmt.Printf("Updated artist: %s\n", a.ID)

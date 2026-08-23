@@ -31,7 +31,10 @@ var createFolderCmd = &cobra.Command{
 
 		f, err := c.FolderService.Create(cmd.Context(), library.FolderID(id), library.FolderID(parent), library.FolderName(name))
 		if err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrFolderAlreadyExists: fmt.Sprintf("folder %q already exists", id),
+				library.ErrParentNotFound:      fmt.Sprintf("parent folder %q does not exist", parent),
+			})
 		}
 
 		fmt.Printf("Created folder: %q (ID: %s) under parent: %s\n", f.Name, f.ID, f.ParentID)
@@ -55,7 +58,10 @@ var createArtistCmd = &cobra.Command{
 
 		a, err := c.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name))
 		if err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrArtistAlreadyExists: fmt.Sprintf("artist %q already exists", id),
+				library.ErrFolderNotFound:      fmt.Sprintf("folder %q does not exist", folder),
+			})
 		}
 
 		fmt.Printf("Created artist: %q (ID: %s) in folder: %s\n", a.Name, a.ID, a.FolderID)
@@ -77,11 +83,15 @@ var createChannelCmd = &cobra.Command{
 
 		artist, err := c.ArtistService.ByID(cmd.Context(), library.ArtistID(artistID))
 		if err != nil {
-			return fmt.Errorf("could not find artist with ID %q: %w", artistID, err)
+			return mapSentinels(err, map[error]string{
+				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", artistID),
+			})
 		}
 
 		if err := c.ChannelService.Link(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrChannelAlreadyLinked: fmt.Sprintf("channel %q is already linked to an artist", channelName),
+			})
 		}
 
 		fmt.Printf("Linked channel %q to Artist: %s\n", channelName, artist.Name)

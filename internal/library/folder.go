@@ -22,6 +22,7 @@ var (
 	ErrFolderNotFound      = errors.New("folder not found")
 	ErrParentNotFound      = errors.New("parent folder not found")
 	ErrFolderAlreadyExists = errors.New("folder already exists")
+	ErrFolderNotEmpty      = errors.New("folder not empty")
 	ErrCyclicParent        = errors.New("new parent cannot be a child of current folder")
 )
 
@@ -157,13 +158,31 @@ func (s *FolderService) AllIDs(ctx context.Context) ([]FolderID, error) {
 	return ids, nil
 }
 
-func (s *FolderService) IsEmpty(ctx context.Context, id FolderID) (bool, error) {
-	hasChildren, err := s.repo.HasChildren(ctx, id)
-	if err != nil {
-		return false, fmt.Errorf("is folder empty: %w", err)
+// DeleteOptions controls folder deletion semantics.
+type DeleteOptions struct {
+	// Force allows deleting a non-empty folder: sub-folders are removed
+	// recursively, while artists and tracks keep their rows with folder
+	// references cleared (FK ON DELETE SET NULL).
+	Force bool
+}
+
+func (s *FolderService) Delete(ctx context.Context, id FolderID, opts DeleteOptions) error {
+	if !opts.Force {
+		hasChildren, err := s.repo.HasChildren(ctx, id)
+		if err != nil {
+			return fmt.Errorf("delete folder %q: %w", id, err)
+		}
+
+		if hasChildren {
+			return fmt.Errorf("%w: folder %q still contains sub-folders or artists", ErrFolderNotEmpty, id)
+		}
 	}
 
-	return !hasChildren, nil
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("delete folder: %w", err)
+	}
+
+	return nil
 }
 
 type FolderUpdateParams struct {
@@ -266,14 +285,6 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 	}
 
 	return saved, nil
-}
-
-func (s *FolderService) Delete(ctx context.Context, id FolderID) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("delete folder: %w", err)
-	}
-
-	return nil
 }
 
 func (s *FolderService) ResolvePath(ctx context.Context, id FolderID) (string, error) {

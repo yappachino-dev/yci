@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -84,6 +85,18 @@ func Container(ctx context.Context) *app.Container {
 	}
 
 	return c
+}
+
+// mapSentinels turns known domain sentinels into one clean user-facing
+// sentence; unexpected errors keep their full wrap chain.
+func mapSentinels(err error, messages map[error]string) error {
+	for sentinel, msg := range messages {
+		if errors.Is(err, sentinel) {
+			return errors.New(msg)
+		}
+	}
+
+	return err
 }
 
 // ContainerOK is the non-panicking variant for paths that run without the

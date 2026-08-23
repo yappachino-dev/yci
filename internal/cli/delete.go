@@ -29,18 +29,10 @@ var deleteFolderCmd = &cobra.Command{
 
 		id = strings.TrimSpace(id)
 
-		if !force {
-			isEmpty, err := c.FolderService.IsEmpty(ctx, library.FolderID(id))
-			if err != nil {
-				return fmt.Errorf("failed to check folder contents: %w", err)
-			}
-			if !isEmpty {
-				return fmt.Errorf("folder %q is not empty. Use --force to delete it anyway", id)
-			}
-		}
-
-		if err := c.FolderService.Delete(ctx, library.FolderID(id)); err != nil {
-			return err
+		if err := c.FolderService.Delete(ctx, library.FolderID(id), library.DeleteOptions{Force: force}); err != nil {
+			return mapSentinels(err, map[error]string{
+				library.ErrFolderNotFound: fmt.Sprintf("folder %q does not exist", id),
+			})
 		}
 
 		fmt.Printf("Deleted folder: %s\n", id)
@@ -58,7 +50,9 @@ var deleteArtistCmd = &cobra.Command{
 		id = strings.TrimSpace(id)
 
 		if err := c.ArtistService.Delete(cmd.Context(), library.ArtistID(id)); err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", id),
+			})
 		}
 
 		fmt.Printf("Deleted artist: %s\n", id)
@@ -79,7 +73,10 @@ var deleteChannelCmd = &cobra.Command{
 		channelName = strings.TrimSpace(channelName)
 
 		if err := c.ChannelService.Unlink(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrArtistNotFound:   fmt.Sprintf("artist %q does not exist", artistID),
+				library.ErrChannelNotLinked: fmt.Sprintf("channel %q is not linked to artist %q", channelName, artistID),
+			})
 		}
 
 		fmt.Printf("Unlinked channel %q from artist %q\n", channelName, artistID)
@@ -97,7 +94,9 @@ var deleteTrackCmd = &cobra.Command{
 		id = strings.TrimSpace(id)
 
 		if err := c.TrackService.Delete(cmd.Context(), library.TrackID(id)); err != nil {
-			return err
+			return mapSentinels(err, map[error]string{
+				library.ErrTrackNotFound: fmt.Sprintf("track %q does not exist", id),
+			})
 		}
 
 		fmt.Printf("Deleted track and physical file for ID: %s\n", id)
