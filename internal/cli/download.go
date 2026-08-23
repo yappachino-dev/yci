@@ -58,7 +58,7 @@ var downloadCmd = &cobra.Command{
 
 		result, err := c.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:          urls,
-			Reporter:      &EnqueueReporter{},
+			Reporter:      &consoleReporter{},
 			Selector:      selector,
 			ForcePlaylist: forcePlaylist,
 		})
@@ -87,9 +87,11 @@ var downloadCmd = &cobra.Command{
 	},
 }
 
-type EnqueueReporter struct{}
+// consoleReporter prints enqueue and download-progress events to stdout.
+// The download package defines the event set; this type only formats it.
+type consoleReporter struct{}
 
-func (r *EnqueueReporter) OnHybridURL(url string, forcePlaylist bool) {
+func (r *consoleReporter) OnHybridURL(url string, forcePlaylist bool) {
 	if forcePlaylist {
 		fmt.Printf("[!] Extracting every video from hybrid-playlist URL: %s\n", url)
 		return
@@ -98,12 +100,27 @@ func (r *EnqueueReporter) OnHybridURL(url string, forcePlaylist bool) {
 	fmt.Printf("[!] Extracting video from hybrid URL: %s\n", url)
 }
 
-func (r *EnqueueReporter) OnPlaylistURL(url string) {
+func (r *consoleReporter) OnPlaylistURL(url string) {
 	fmt.Printf("[!] Extracting every video from playlist URL: %s\n", url)
 }
 
-func (r *EnqueueReporter) OnEnqueueSkipped(id string, reason string) {
+func (r *consoleReporter) OnEnqueueSkipped(id string, reason string) {
 	fmt.Printf("[-] Skipped %s: %s\n", id, reason)
+}
+
+func (r *consoleReporter) OnQueueStart(totalTracks int) {}
+
+func (r *consoleReporter) OnTrackStart(index int, total int, sourceID string) {
+	fmt.Printf("--- [Track %d / %d] ---\n", index, total)
+	fmt.Printf("[!] Target: %s\n", sourceID)
+}
+
+func (r *consoleReporter) OnTrackSuccess(_ string) {
+	fmt.Printf("[+] Success!\n\n")
+}
+
+func (r *consoleReporter) OnTrackFailure(_ string, err error) {
+	fmt.Printf("[-] Failed: %v\n\n", err)
 }
 
 type EnqueueSelector struct{}
@@ -224,23 +241,6 @@ func readUrlsFromFile(path string) ([]string, error) {
 	return urls, nil
 }
 
-type ProcessReporter struct{}
-
-func (r *ProcessReporter) OnQueueStart(totalTracks int) {}
-
-func (r *ProcessReporter) OnTrackStart(index int, total int, sourceID string) {
-	fmt.Printf("--- [Track %d / %d] ---\n", index, total)
-	fmt.Printf("[!] Target: %s\n", sourceID)
-}
-
-func (r *ProcessReporter) OnTrackSuccess(_ string) {
-	fmt.Printf("[+] Success!\n\n")
-}
-
-func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
-	fmt.Printf("[-] Failed: %v\n\n", err)
-}
-
 // parseDelay validates the min:max delay flag up front so invalid values
 // fail with a clear message instead of a cryptic yt-dlp error.
 func parseDelay(flagValue string) (minStr, maxStr string, err error) {
@@ -267,7 +267,7 @@ func executeDownloadLoop(ctx context.Context, delayFlag string) error {
 		return err
 	}
 
-	result, err := c.DownloadService.ProcessQueue(ctx, minSleep, maxSleep, &ProcessReporter{})
+	result, err := c.DownloadService.ProcessQueue(ctx, minSleep, maxSleep, &consoleReporter{})
 	if err != nil {
 		return err
 	}

@@ -38,13 +38,13 @@ type QueueEntry struct {
 	ErrorMsg string
 }
 
-type EnqueueReporter interface {
+// Reporter observes enqueue and queue-processing events. Its methods map
+// onto the actual event sequence of Enqueue and ProcessQueue.
+type Reporter interface {
 	OnHybridURL(url string, forcePlaylist bool)
 	OnPlaylistURL(url string)
 	OnEnqueueSkipped(id string, reason string)
-}
 
-type ProgressReporter interface {
 	OnQueueStart(totalTracks int)
 	OnTrackStart(index int, total int, sourceID string)
 	OnTrackSuccess(sourceID string)
@@ -53,15 +53,16 @@ type ProgressReporter interface {
 
 type noOpReporter struct{}
 
-func (r *noOpReporter) OnHybridURL(url string, forcePlaylist bool) {}
-func (r *noOpReporter) OnPlaylistURL(url string)                   {}
-func (r *noOpReporter) OnEnqueueSkipped(id string, reason string)  {}
+func (noOpReporter) OnHybridURL(string, bool)        {}
+func (noOpReporter) OnPlaylistURL(string)            {}
+func (noOpReporter) OnEnqueueSkipped(string, string) {}
 
-func (r *noOpReporter) OnQueueStart(totalTracks int)                  {}
-func (r *noOpReporter) OnTrackStart(index int, total int, url string) {}
-func (r *noOpReporter) OnTrackSkipped(sourceID string, reason string) {}
-func (r *noOpReporter) OnTrackSuccess(url string)                     {}
-func (r *noOpReporter) OnTrackFailure(url string, err error)          {}
+func (noOpReporter) OnQueueStart(int)              {}
+func (noOpReporter) OnTrackStart(int, int, string) {}
+func (noOpReporter) OnTrackSuccess(string)         {}
+func (noOpReporter) OnTrackFailure(string, error)  {}
+
+var _ Reporter = noOpReporter{}
 
 type PlaylistSelector interface {
 	SelectChannels(ctx context.Context, channels []string) ([]string, error)
@@ -69,13 +70,15 @@ type PlaylistSelector interface {
 
 type noOpSelector struct{}
 
-func (s *noOpSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
+var _ PlaylistSelector = noOpSelector{}
+
+func (noOpSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
 	return channels, nil
 }
 
 var (
-	defaultNoOpRepoter  = &noOpReporter{}
-	defaultNoOpSelector = &noOpSelector{}
+	defaultNoOpReporter = noOpReporter{}
+	defaultNoOpSelector = noOpSelector{}
 )
 
 type TrackChecker interface {
@@ -149,7 +152,7 @@ func (s *Service) All(ctx context.Context) ([]QueueEntry, error) {
 
 type EnqueueParams struct {
 	URLs          []string
-	Reporter      EnqueueReporter
+	Reporter      Reporter
 	Selector      PlaylistSelector
 	ForcePlaylist bool
 }
@@ -157,7 +160,7 @@ type EnqueueParams struct {
 func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueResult, error) {
 	reporter := params.Reporter
 	if reporter == nil {
-		reporter = defaultNoOpRepoter
+		reporter = defaultNoOpReporter
 	}
 
 	selector := params.Selector
@@ -347,9 +350,9 @@ func (s *Service) RetryFailed(ctx context.Context, ids []int) (RetryResult, erro
 	return result, nil
 }
 
-func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, reporter ProgressReporter) (ProcessResult, error) {
+func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, reporter Reporter) (ProcessResult, error) {
 	if reporter == nil {
-		reporter = &noOpReporter{}
+		reporter = defaultNoOpReporter
 	}
 
 	var result ProcessResult

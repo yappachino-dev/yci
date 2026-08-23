@@ -72,7 +72,7 @@ var syncCmd = &cobra.Command{
 
 		result, err := c.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:     ids,
-			Reporter: &EnqueueReporter{},
+			Reporter: &consoleReporter{},
 		})
 		if err != nil {
 			return err

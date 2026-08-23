@@ -80,8 +80,12 @@ func newCaptureReporter() *captureReporter {
 	return &captureReporter{skipped: make(map[string]string)}
 }
 
-func (r *captureReporter) OnHybridURL(string, bool) {}
-func (r *captureReporter) OnPlaylistURL(string)     {}
+func (r *captureReporter) OnHybridURL(string, bool)      {}
+func (r *captureReporter) OnPlaylistURL(string)          {}
+func (r *captureReporter) OnQueueStart(int)              {}
+func (r *captureReporter) OnTrackStart(int, int, string) {}
+func (r *captureReporter) OnTrackSuccess(string)         {}
+func (r *captureReporter) OnTrackFailure(string, error)  {}
 
 func (r *captureReporter) OnEnqueueSkipped(id, reason string) {
 	r.skipped[id] = reason
