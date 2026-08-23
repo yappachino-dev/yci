@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -13,7 +14,7 @@ func NewOSDiskReader() *OSDiskReader {
 func (r *OSDiskReader) ReadDir(path string) ([]string, error) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read directory %q: %w", path, err)
 	}
 
 	files := make([]string, 0, len(entries))

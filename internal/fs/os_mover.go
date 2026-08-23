@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 )
 
+// OSDiskMover applies filesystem operations synchronously using the os
+// package. Contexts are accepted to satisfy db.DiskMover but ignored —
+// plain filesystem calls cannot be cancelled.
 type OSDiskMover struct{}
 
 func NewOSDiskMover() *OSDiskMover {
