@@ -303,13 +303,13 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 	targetPath := filepath.Join(s.config.StagingDir(), "%(id)s.opus")
 
 	if err := s.repo.ResetPending(ctx); err != nil {
-		return result, err
+		return result, fmt.Errorf("reset interrupted downloads: %w", err)
 	}
 
 	current := 0
 	total, err := s.repo.QueueLength(ctx)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("read queue length: %w", err)
 	}
 
 	reporter.OnQueueStart(total)
@@ -322,7 +322,7 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 
 		entry, ok, err := s.repo.Next(ctx)
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("read next queue entry: %w", err)
 		}
 		if !ok {
 			break
@@ -338,22 +338,28 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 		}
 
 		if err := s.repo.Start(ctx, entry.ID); err != nil {
-			return result, err
+			return result, fmt.Errorf("start queue entry %d: %w", entry.ID, err)
 		}
 
 		if err := Download(ctx, cfg); err != nil {
+			// Cancelled run: ResetPending re-arms the row on the next run;
+			// don't burn an attempt or record a bogus failure.
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+
 			reporter.OnTrackFailure(entry.SourceID, err)
 			result.Failed++
 
 			if err = s.repo.Fail(ctx, entry.ID, err); err != nil {
-				return result, err
+				return result, fmt.Errorf("fail queue entry %d: %w", entry.ID, err)
 			}
 
 			continue
 		}
 
 		if err := s.repo.Complete(ctx, entry.ID); err != nil {
-			return result, err
+			return result, fmt.Errorf("complete queue entry %d: %w", entry.ID, err)
 		}
 
 		reporter.OnTrackSuccess(entry.SourceID)
