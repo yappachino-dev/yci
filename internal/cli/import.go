@@ -181,7 +181,7 @@ func init() {
 	importCmd.AddCommand(importStagingCmd)
 
 	importStagingCmd.Flags().Bool(flagSkipUnknown, false, "Automatically skip tracks with unknown channels")
-	importStagingCmd.Flags().Bool(flagSkipCollabArtists, false, "Automatically skip tracks multiple channels as artist")
+	importStagingCmd.Flags().Bool(flagSkipCollabArtists, false, "Automatically skip tracks with multiple channels (collabs) as artist")
 	importStagingCmd.Flags().String(flagFallbackArtist, "", "Automatically link unknown channels to this Artist ID")
 }
 

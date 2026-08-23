@@ -140,7 +140,7 @@ func performMigration(ctx context.Context, target int) error {
 	}
 
 	if err := db.SetMigration(ctx, c.DB, current, target); err != nil {
-		return err
+		return fmt.Errorf("set schema version %d: %w", target, err)
 	}
 
 	fmt.Println("Migration successfully completed!")

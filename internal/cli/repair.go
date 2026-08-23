@@ -16,7 +16,7 @@ var repairCmd = &cobra.Command{
 
 		failed, err := c.FileActions.Failed(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("list failed file actions: %w", err)
 		}
 
 		for _, entry := range failed {
@@ -25,7 +25,7 @@ var repairCmd = &cobra.Command{
 
 		pending, err := c.FileActions.Pending(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("list pending file actions: %w", err)
 		}
 
 		for _, entry := range pending {
@@ -36,7 +36,7 @@ var repairCmd = &cobra.Command{
 			fmt.Print("\nRetrying failed actions...\n")
 
 			if err := c.FileActions.ResetFailed(ctx); err != nil {
-				return err
+				return fmt.Errorf("requeue failed file actions: %w", err)
 			}
 		}
 
@@ -45,7 +45,7 @@ var repairCmd = &cobra.Command{
 		}
 
 		if err := c.FileActions.PurgeDone(ctx); err != nil {
-			return err
+			return fmt.Errorf("purge completed file actions: %w", err)
 		}
 
 		fmt.Print("Journal replayed successfully\n")
