@@ -97,7 +97,7 @@ func initApplication(ctx context.Context, autoMigrate bool) error {
 		}
 	}
 
-	appl, err = app.NewContainer(ctx, dbConn, paths)
+	appl, err = app.NewContainer(dbConn, paths)
 	if err != nil {
 		dbConn.Close()
 		return fmt.Errorf("initialize application container statements: %w", err)

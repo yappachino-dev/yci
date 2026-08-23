@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"database/sql"
 
 	"github.com/yappachino-dev/yci/internal/audit"
@@ -25,7 +24,7 @@ type Container struct {
 	Paths           fs.AppPaths
 }
 
-func NewContainer(ctx context.Context, dbConn *sql.DB, paths fs.AppPaths) (*Container, error) {
+func NewContainer(dbConn *sql.DB, paths fs.AppPaths) (*Container, error) {
 	queries := store.New(dbConn)
 
 	transactor := db.NewSQLiteTransactor(dbConn)
