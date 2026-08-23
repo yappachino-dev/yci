@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/yappachino-dev/yci/db/migrations"
@@ -18,7 +19,7 @@ func GetMaxVersion() (int, error) {
 
 	last, err := migrations.Last()
 	if err != nil {
-		return 0, nil
+		return 0, fmt.Errorf("find last migration: %w", err)
 	}
 
 	return int(last.Version), nil
@@ -35,7 +36,7 @@ func GetCurrentVersion(ctx context.Context, db *sql.DB) (int, error) {
 
 	var current int
 	if err := db.QueryRowContext(ctx, activeVersionQuery).Scan(&current); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		}
 
@@ -69,11 +70,11 @@ func SetMigration(ctx context.Context, db *sql.DB, current int, target int) erro
 	switch {
 	case current > target:
 		if err := goose.DownToContext(ctx, db, ".", int64(target)); err != nil {
-			return fmt.Errorf("run schema migrations: %w", err)
+			return fmt.Errorf("roll back schema migrations to %d: %w", target, err)
 		}
 	case current < target:
 		if err := goose.UpToContext(ctx, db, ".", int64(target)); err != nil {
-			return fmt.Errorf("run schema migrations: %w", err)
+			return fmt.Errorf("apply schema migrations to %d: %w", target, err)
 		}
 	}
 
