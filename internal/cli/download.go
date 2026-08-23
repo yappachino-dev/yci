@@ -25,21 +25,11 @@ const (
 var downloadCmd = &cobra.Command{
 	Use:   "download [urls...]",
 	Short: "Download YouTube audio directly to the staging area",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		c, err := initApplication(cmd.Context(), true)
-		if err != nil {
-			return err
-		}
-
-		cmd.SetContext(WithContainer(cmd.Context(), c))
-
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := download.CheckDependencies(); err != nil {
 			return err
 		}
 
-		return nil
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
 		urls := args
@@ -141,6 +131,10 @@ var downloadResumeCmd = &cobra.Command{
 	Short: "Process all enqueued downloads",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := download.CheckDependencies(); err != nil {
+			return err
+		}
+
 		ctx := cmd.Context()
 
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
