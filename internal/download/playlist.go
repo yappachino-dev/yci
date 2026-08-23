@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 )
@@ -35,16 +36,29 @@ func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return PlaylistMetadata{}, err
+		return PlaylistMetadata{}, fmt.Errorf("create stdout pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return PlaylistMetadata{}, err
+		return PlaylistMetadata{}, fmt.Errorf("start yt-dlp: %w", err)
 	}
 
-	defer func() {
-		_ = cmd.Wait()
-	}()
+	// The wait closure is the single owner of cmd.Wait: the deferred call
+	// covers early returns (reaping the process), the normal path reads its
+	// exit status after decoding.
+	waited := false
+	var waitErr error
+
+	wait := func() error {
+		if !waited {
+			waited = true
+			waitErr = cmd.Wait()
+		}
+
+		return waitErr
+	}
+
+	defer func() { _ = wait() }()
 
 	var videos []VideoMetadata
 	var channels []string
@@ -54,7 +68,7 @@ func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
 	for decoder.More() {
 		var video VideoMetadata
 		if err := decoder.Decode(&video); err != nil {
-			return PlaylistMetadata{}, err
+			return PlaylistMetadata{}, fmt.Errorf("decode playlist entry: %w", err)
 		}
 
 		if _, seen := seenChannels[video.Channel]; !seen {
@@ -65,8 +79,8 @@ func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
 		videos = append(videos, video)
 	}
 
-	if err := cmd.Wait(); err != nil {
-		return PlaylistMetadata{}, err
+	if err := wait(); err != nil {
+		return PlaylistMetadata{}, fmt.Errorf("parse playlist %q: %w", url, err)
 	}
 
 	return PlaylistMetadata{
