@@ -80,6 +80,8 @@ type QueueRepo interface {
 	Start(ctx context.Context, id int) error
 	Complete(ctx context.Context, id int) error
 	Fail(ctx context.Context, id int, err error) error
+	RetryByID(ctx context.Context, id int) (bool, error)
+	RetryHardFailed(ctx context.Context) (int64, error)
 }
 
 type StagingConfig interface {
@@ -295,6 +297,40 @@ func processPlaylist(ctx context.Context, url string, selector PlaylistSelector,
 type ProcessResult struct {
 	Success int
 	Failed  int
+}
+
+// RetryResult reports how many queue entries were re-armed.
+type RetryResult struct {
+	Retried int
+}
+
+// RetryFailed re-arms failed entries for another download attempt. Explicit
+// IDs target individual entries regardless of attempt count; without IDs,
+// only entries that exhausted their attempts are reset.
+func (s *Service) RetryFailed(ctx context.Context, ids []int) (RetryResult, error) {
+	if len(ids) == 0 {
+		n, err := s.repo.RetryHardFailed(ctx)
+		if err != nil {
+			return RetryResult{}, fmt.Errorf("retry hard-failed downloads: %w", err)
+		}
+
+		return RetryResult{Retried: int(n)}, nil
+	}
+
+	var result RetryResult
+
+	for _, id := range ids {
+		ok, err := s.repo.RetryByID(ctx, id)
+		if err != nil {
+			return result, fmt.Errorf("retry download %d: %w", id, err)
+		}
+
+		if ok {
+			result.Retried++
+		}
+	}
+
+	return result, nil
 }
 
 func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, reporter ProgressReporter) (ProcessResult, error) {

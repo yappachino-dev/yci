@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
@@ -90,6 +91,27 @@ func (r *SQLiteQueueRepo) Fail(ctx context.Context, id int, err error) error {
 		ID:       int64(id),
 		ErrorMsg: db.ToNullString(err.Error()),
 	})
+}
+
+// RetryByID re-arms a single failed queue entry; reports whether an entry
+// with that ID existed and was failed.
+func (r *SQLiteQueueRepo) RetryByID(ctx context.Context, id int) (bool, error) {
+	rows, err := r.db(ctx).ResetDownloadByID(ctx, int64(id))
+	if err != nil {
+		return false, fmt.Errorf("retry queue entry %d: %w", id, err)
+	}
+
+	return rows > 0, nil
+}
+
+// RetryHardFailed re-arms every entry that exhausted its attempts.
+func (r *SQLiteQueueRepo) RetryHardFailed(ctx context.Context) (int64, error) {
+	rows, err := r.db(ctx).ResetHardFailedDownloads(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("retry hard-failed queue entries: %w", err)
+	}
+
+	return rows, nil
 }
 
 func (r *SQLiteQueueRepo) db(ctx context.Context) *store.Queries {

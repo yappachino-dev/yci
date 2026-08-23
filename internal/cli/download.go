@@ -127,6 +127,35 @@ func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string)
 	return selected, nil
 }
 
+var downloadRetryCmd = &cobra.Command{
+	Use:   "retry [ids...]",
+	Short: "Re-arm failed downloads for another attempt (no IDs: all hard-failed entries)",
+	Args:  cobra.ArbitraryArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		c := Container(ctx)
+
+		var ids []int
+		for _, a := range args {
+			id, err := strconv.Atoi(a)
+			if err != nil {
+				return fmt.Errorf("invalid queue ID %q: must be an integer (see yci ls queue)", a)
+			}
+
+			ids = append(ids, id)
+		}
+
+		result, err := c.DownloadService.RetryFailed(ctx, ids)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Re-armed %d failed download(s).\n", result.Retried)
+		fmt.Println("▶ Run `yci download resume` to process them.")
+		return nil
+	},
+}
+
 var downloadResumeCmd = &cobra.Command{
 	Use:   "resume",
 	Short: "Process all enqueued downloads",
@@ -149,6 +178,7 @@ func init() {
 	rootCmd.AddCommand(downloadCmd)
 
 	downloadCmd.AddCommand(downloadResumeCmd)
+	downloadCmd.AddCommand(downloadRetryCmd)
 	downloadCmd.PersistentFlags().String(flagDelay, defaultDelay, flagDelayComment)
 	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")

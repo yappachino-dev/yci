@@ -50,7 +50,7 @@ UPDATE download_queue
 SET status = 'pending', updated_at = CURRENT_TIMESTAMP
 WHERE status = 'processing';
 
--- name: ResetHardFailedDownloads :exec
+-- name: ResetHardFailedDownloads :execrows
 UPDATE download_queue
 SET
     status = 'pending',
@@ -58,3 +58,12 @@ SET
     error_msg = NULL,
     updated_at = CURRENT_TIMESTAMP
 WHERE status = 'failed' AND attempts >= 3;
+
+-- name: ResetDownloadByID :execrows
+UPDATE download_queue
+SET
+    status = 'pending',
+    attempts = 0,
+    error_msg = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = :id AND status = 'failed';

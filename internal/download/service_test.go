@@ -18,9 +18,13 @@ func (f *fakeTrackChecker) ExistsBySourceID(_ context.Context, id string) (bool,
 }
 
 type fakeQueueRepo struct {
-	present  map[string]bool
-	enqueued []string
-	failEnq  error
+	present         map[string]bool
+	enqueued        []string
+	failEnq         error
+	retried         []int
+	failedIDs       map[int]bool
+	hardRetried     int
+	hardFailedCount int64
 }
 
 func (f *fakeQueueRepo) All(context.Context) ([]QueueEntry, error) { return nil, nil }
@@ -46,6 +50,16 @@ func (f *fakeQueueRepo) Start(context.Context, int) error    { return nil }
 func (f *fakeQueueRepo) Complete(context.Context, int) error { return nil }
 func (f *fakeQueueRepo) Fail(context.Context, int, error) error {
 	return nil
+}
+
+func (f *fakeQueueRepo) RetryByID(_ context.Context, id int) (bool, error) {
+	f.retried = append(f.retried, id)
+	return f.failedIDs[id], nil
+}
+
+func (f *fakeQueueRepo) RetryHardFailed(context.Context) (int64, error) {
+	f.hardRetried++
+	return int64(f.hardFailedCount), nil
 }
 
 type fakeTransactor struct{}
@@ -175,6 +189,37 @@ func TestServiceEnqueueSkipReasons(t *testing.T) {
 	if !slices.Equal(repo.enqueued, []string{"dupvid", "inqueue"}) {
 		t.Errorf("repo enqueued %v, want [dupvid inqueue]", repo.enqueued)
 	}
+}
+
+func TestServiceRetryFailed(t *testing.T) {
+	t.Run("without IDs resets hard-failed entries", func(t *testing.T) {
+		repo := &fakeQueueRepo{hardFailedCount: 3}
+
+		result, err := newTestService(repo, &fakeTrackChecker{}, &fakeDirReader{}).
+			RetryFailed(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("RetryFailed returned error: %v", err)
+		}
+		if result.Retried != 3 || repo.hardRetried != 1 {
+			t.Errorf("result = %+v, hardRetried = %d, want Retried=3 via one hard reset", result, repo.hardRetried)
+		}
+	})
+
+	t.Run("with IDs targets individual entries and skips unknown ones", func(t *testing.T) {
+		repo := &fakeQueueRepo{failedIDs: map[int]bool{7: true}}
+
+		result, err := newTestService(repo, &fakeTrackChecker{}, &fakeDirReader{}).
+			RetryFailed(context.Background(), []int{7, 9})
+		if err != nil {
+			t.Fatalf("RetryFailed returned error: %v", err)
+		}
+		if result.Retried != 1 {
+			t.Errorf("Retried = %d, want 1 (ID 7 only)", result.Retried)
+		}
+		if !slices.Equal(repo.retried, []int{7, 9}) {
+			t.Errorf("repo retried %v, want [7 9]", repo.retried)
+		}
+	})
 }
 
 func TestServiceEnqueueTransactionFailureCountsAllFailed(t *testing.T) {

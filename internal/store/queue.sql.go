@@ -143,7 +143,25 @@ func (q *Queries) GetQueueLength(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-const resetHardFailedDownloads = `-- name: ResetHardFailedDownloads :exec
+const resetDownloadByID = `-- name: ResetDownloadByID :execrows
+UPDATE download_queue
+SET
+    status = 'pending',
+    attempts = 0,
+    error_msg = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?1 AND status = 'failed'
+`
+
+func (q *Queries) ResetDownloadByID(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetDownloadByID, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const resetHardFailedDownloads = `-- name: ResetHardFailedDownloads :execrows
 UPDATE download_queue
 SET
     status = 'pending',
@@ -153,9 +171,12 @@ SET
 WHERE status = 'failed' AND attempts >= 3
 `
 
-func (q *Queries) ResetHardFailedDownloads(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, resetHardFailedDownloads)
-	return err
+func (q *Queries) ResetHardFailedDownloads(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetHardFailedDownloads)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const resetOrphanedDownloads = `-- name: ResetOrphanedDownloads :exec
