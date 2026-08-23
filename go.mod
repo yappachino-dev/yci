@@ -3,7 +3,7 @@ module github.com/yappachino-dev/yci
 go 1.26.1
 
 require (
-	github.com/BurntSushi/toml v0.3.1
+	github.com/BurntSushi/toml v1.4.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/google/uuid v1.6.0

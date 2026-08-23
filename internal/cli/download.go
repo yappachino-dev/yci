@@ -263,24 +263,6 @@ func readUrlsFromFile(path string) ([]string, error) {
 	return urls, nil
 }
 
-// parseDelay validates the min:max delay flag up front so invalid values
-// fail with a clear message instead of a cryptic yt-dlp error.
-func parseDelay(flagValue string) (minStr, maxStr string, err error) {
-	parts := strings.Split(flagValue, ":")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
-	}
-
-	for _, half := range parts {
-		n, parseErr := strconv.Atoi(half)
-		if parseErr != nil || n < 0 {
-			return "", "", fmt.Errorf("invalid delay %q: both components must be non-negative integers", flagValue)
-		}
-	}
-
-	return parts[0], parts[1], nil
-}
-
 // resolveFlagOrConfig prefers an explicitly set flag over the resolved
 // config value.
 func resolveFlagOrConfig(cmd *cobra.Command, name, cfgValue string) string {
@@ -292,7 +274,7 @@ func executeDownloadLoop(cmd *cobra.Command) error {
 	c := Container(cmd.Context())
 
 	delay := resolveFlagOrConfig(cmd, flagDelay, c.Config.DownloadDelay)
-	minSleep, maxSleep, err := parseDelay(delay)
+	minSleep, maxSleep, err := config.ParseDelay(delay)
 	if err != nil {
 		return err
 	}

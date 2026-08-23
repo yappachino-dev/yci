@@ -1,5 +1,6 @@
 // Package config resolves application settings by layering environment
-// variables over an optional TOML file over built-in defaults.
+// variables over an optional TOML file over built-in defaults, and provides
+// validated read/write access to individual keys.
 package config
 
 import (
@@ -8,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -38,6 +41,15 @@ type File struct {
 	Download DownloadSection `toml:"download"`
 }
 
+// Source labels which precedence layer supplied a value.
+type Source string
+
+const (
+	SourceFile    Source = "file"
+	SourceDefault Source = "default"
+	SourceUnset   Source = ""
+)
+
 // Config holds fully resolved application settings.
 type Config struct {
 	LibraryDir    string
@@ -45,7 +57,8 @@ type Config struct {
 	DownloadDelay string
 	CookiesFile   string
 
-	dir string
+	dir     string
+	sources map[string]Source
 }
 
 // ConfigDir is the directory containing the resolved config file. The
@@ -58,6 +71,23 @@ func (c Config) ConfigDir() string {
 // LookupFunc reports the value of an environment variable, "" if unset.
 type LookupFunc func(string) string
 
+// DiscoverPath resolves the config file location and whether it was set
+// explicitly via YCI_CONFIG_PATH.
+func DiscoverPath(env LookupFunc) (path string, explicit bool, err error) {
+	conf, err := os.UserConfigDir()
+	if err != nil {
+		return "", false, fmt.Errorf("resolve config directory: %w", err)
+	}
+
+	envPath := filepath.FromSlash(env(EnvConfigPath))
+	path = filepath.Join(conf, "yci", "config.toml")
+	if envPath != "" {
+		path = envPath
+	}
+
+	return path, envPath != "", nil
+}
+
 // Load resolves paths: defaults < config file < environment. A missing
 // config file at the default location means "no settings"; one explicitly
 // named via YCI_CONFIG_PATH must exist.
@@ -67,20 +97,17 @@ func Load(env LookupFunc) (Config, error) {
 		return Config{}, fmt.Errorf("resolve home directory: %w", err)
 	}
 
-	conf, err := os.UserConfigDir()
-	if err != nil {
-		return Config{}, fmt.Errorf("resolve config directory: %w", err)
-	}
-
-	envPath := filepath.FromSlash(env(EnvConfigPath))
-	cfgPath := cmp.Or(envPath, filepath.Join(conf, "yci", "config.toml"))
-
-	fileCfg, err := readFile(cfgPath, envPath != "")
+	cfgPath, explicit, err := DiscoverPath(env)
 	if err != nil {
 		return Config{}, err
 	}
 
-	return Config{
+	fileCfg, err := readFile(cfgPath, explicit)
+	if err != nil {
+		return Config{}, err
+	}
+
+	c := Config{
 		LibraryDir: cmp.Or(
 			filepath.FromSlash(env(EnvLibraryPath)),
 			filepath.FromSlash(fileCfg.Library),
@@ -100,8 +127,31 @@ func Load(env LookupFunc) (Config, error) {
 			filepath.FromSlash(env(EnvDownloadCookies)),
 			filepath.FromSlash(fileCfg.Download.CookiesFile),
 		),
-		dir: filepath.Dir(cfgPath),
-	}, nil
+		dir:     filepath.Dir(cfgPath),
+		sources: sourcesFor(env, fileCfg),
+	}
+
+	return c, nil
+}
+
+func sourcesFor(env LookupFunc, f File) map[string]Source {
+	return map[string]Source{
+		"library_dir":           pickSource(env(EnvLibraryPath), f.Library),
+		"staging_dir":           pickSource(env(EnvStagingPath), f.Staging),
+		"download.delay":        pickSource(env(EnvDownloadDelay), f.Download.Delay),
+		"download.cookies_file": pickSource(env(EnvDownloadCookies), f.Download.CookiesFile),
+	}
+}
+
+func pickSource(envVal, fileVal string) Source {
+	switch {
+	case envVal != "":
+		return Source("env")
+	case fileVal != "":
+		return SourceFile
+	default:
+		return SourceDefault
+	}
 }
 
 func readFile(path string, explicit bool) (File, error) {
@@ -114,9 +164,36 @@ func readFile(path string, explicit bool) (File, error) {
 	}
 
 	var f File
-	if err := toml.Unmarshal(bytes, &f); err != nil {
+	md, err := toml.Decode(string(bytes), &f)
+	if err != nil {
 		return File{}, fmt.Errorf("parse config file %q: %w", path, err)
 	}
 
+	if undecoded := md.Undecoded(); len(undecoded) > 0 {
+		names := make([]string, 0, len(undecoded))
+		for _, k := range undecoded {
+			names = append(names, k.String())
+		}
+
+		return File{}, fmt.Errorf("unknown keys in config file %q: %s (see `yci config list`)", path, strings.Join(names, ", "))
+	}
+
 	return f, nil
+}
+
+// ParseDelay validates a min:max delay string and returns its halves.
+func ParseDelay(s string) (minStr, maxStr string, err error) {
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
+	}
+
+	for _, half := range parts {
+		n, parseErr := strconv.Atoi(half)
+		if parseErr != nil || n < 0 {
+			return "", "", fmt.Errorf("invalid delay %q: both components must be non-negative integers", s)
+		}
+	}
+
+	return parts[0], parts[1], nil
 }

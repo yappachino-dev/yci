@@ -228,6 +228,21 @@ func TestLoadEnvConfigPathRelocatesProfile(t *testing.T) {
 	}
 }
 
+func TestLoadUnknownKeyFails(t *testing.T) {
+	isolate(t)
+
+	writeConfig(t, filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "yci", "config.toml"),
+		"library_dir = \"/ok\"\nstaging_dirr = \"typo\"\n")
+
+	_, err := Load(os.Getenv)
+	if err == nil {
+		t.Fatal("Load succeeded with unknown key")
+	}
+	if !strings.Contains(err.Error(), "staging_dirr") {
+		t.Errorf("error %q does not name the offending key", err)
+	}
+}
+
 func TestLoadMalformedConfigFails(t *testing.T) {
 	isolate(t)
 

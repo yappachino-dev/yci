@@ -41,7 +41,8 @@ var rootCmd = &cobra.Command{
 
 		// Commands that never touch the library skip the boot sequence
 		// entirely; ContainerOK guards their access to the container.
-		if path == "yci version" || strings.HasPrefix(path, "yci completion") || path == "yci help" {
+		if path == "yci version" || strings.HasPrefix(path, "yci config") ||
+			strings.HasPrefix(path, "yci completion") || path == "yci help" {
 			return nil
 		}
 
