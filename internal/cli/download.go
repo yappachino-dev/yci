@@ -68,6 +68,11 @@ var downloadCmd = &cobra.Command{
 				return nil
 			}
 
+			if errors.Is(err, errNoChannelsSelected) {
+				fmt.Println("\n[!] No channels selected — nothing enqueued.")
+				return nil
+			}
+
 			return err
 		}
 
@@ -123,6 +128,10 @@ func (r *consoleReporter) OnTrackFailure(_ string, err error) {
 	fmt.Printf("[-] Failed: %v\n\n", err)
 }
 
+// errNoChannelsSelected reports that the user submitted the channel
+// picker without selecting anything.
+var errNoChannelsSelected = errors.New("no channels selected")
+
 type EnqueueSelector struct{}
 
 func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
@@ -139,6 +148,10 @@ func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string)
 
 	if err := form.Run(); err != nil {
 		return nil, fmt.Errorf("failed to read terminal input: %w", err)
+	}
+
+	if len(selected) == 0 {
+		return nil, errNoChannelsSelected
 	}
 
 	return selected, nil
