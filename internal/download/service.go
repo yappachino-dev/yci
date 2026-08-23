@@ -250,12 +250,12 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 	})
 
 	if txErr != nil {
-		result.Failed = len(uniqueIDs)
+		result.Failed += len(uniqueIDs)
 		return result, fmt.Errorf("enqueue downloads: %w", txErr)
 	}
 
-	result.Enqueued = txEnqueued
-	result.Skipped = txSkipped
+	result.Enqueued += txEnqueued
+	result.Skipped += txSkipped
 
 	return result, nil
 }
