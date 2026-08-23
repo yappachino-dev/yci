@@ -11,7 +11,7 @@ all: build
 
 build:
 	@echo "Building $(APP_NAME)..."
-	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(APP_NAME) cmd/cli/main.go
+	CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$$(git describe --tags --always --dirty)" -o $(APP_NAME) cmd/cli/main.go
 
 install: build
 	@echo "Installing bindary to $(BIN_DIR)..."

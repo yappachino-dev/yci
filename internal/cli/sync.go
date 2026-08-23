@@ -22,6 +22,7 @@ var syncCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
 		artist, _ := cmd.Flags().GetString(flagArtist)
 		folder, _ := cmd.Flags().GetString(flagFolder)
@@ -35,13 +36,13 @@ var syncCmd = &cobra.Command{
 		switch {
 		case artist != "":
 			fmt.Printf("Scanning missing files for artist: %s...\n", artist)
-			missing, err = appl.AuditService.MissingByArtist(ctx, library.ArtistID(artist))
+			missing, err = c.AuditService.MissingByArtist(ctx, library.ArtistID(artist))
 		case folder != "":
 			fmt.Printf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
-			missing, err = appl.AuditService.MissingByFolder(ctx, library.FolderID(folder), recursive)
+			missing, err = c.AuditService.MissingByFolder(ctx, library.FolderID(folder), recursive)
 		default:
 			fmt.Println("Scanning entire library for missing files...")
-			missing, err = appl.AuditService.MissingAll(ctx)
+			missing, err = c.AuditService.MissingAll(ctx)
 		}
 
 		if err != nil {
@@ -69,7 +70,7 @@ var syncCmd = &cobra.Command{
 			ids = append(ids, t.SourceID)
 		}
 
-		result, err := appl.DownloadService.Enqueue(ctx, download.EnqueueParams{
+		result, err := c.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:     ids,
 			Reporter: &EnqueueReporter{},
 		})

@@ -75,7 +75,9 @@ func newTabWriter() *tabwriter.Writer {
 }
 
 func listFolders(ctx context.Context) error {
-	folders, err := appl.FolderService.All(ctx)
+	c := Container(ctx)
+
+	folders, err := c.FolderService.All(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch folders: %w", err)
 	}
@@ -121,7 +123,9 @@ func listFolders(ctx context.Context) error {
 }
 
 func listArtists(ctx context.Context) error {
-	artists, err := appl.ArtistService.All(ctx)
+	c := Container(ctx)
+
+	artists, err := c.ArtistService.All(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch artists: %w", err)
 	}
@@ -141,7 +145,9 @@ func listArtists(ctx context.Context) error {
 }
 
 func listChannels(ctx context.Context) error {
-	channels, err := appl.ChannelService.All(ctx)
+	c := Container(ctx)
+
+	channels, err := c.ChannelService.All(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch channels: %w", err)
 	}
@@ -161,7 +167,9 @@ func listChannels(ctx context.Context) error {
 }
 
 func listTracks(ctx context.Context) error {
-	tracks, err := appl.TrackService.All(ctx)
+	c := Container(ctx)
+
+	tracks, err := c.TrackService.All(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch tracks: %w", err)
 	}
@@ -186,7 +194,9 @@ func listTracks(ctx context.Context) error {
 }
 
 func listQueue(ctx context.Context) error {
-	queue, err := appl.DownloadService.All(ctx)
+	c := Container(ctx)
+
+	queue, err := c.DownloadService.All(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch queue: %w", err)
 	}

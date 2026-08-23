@@ -23,11 +23,13 @@ var createFolderCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString(flagName)
 		parent, _ := cmd.Flags().GetString(flagParent)
 
+		c := Container(cmd.Context())
+
 		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
 		parent = strings.TrimSpace(parent)
 
-		f, err := appl.FolderService.Create(cmd.Context(), library.FolderID(id), library.FolderID(parent), library.FolderName(name))
+		f, err := c.FolderService.Create(cmd.Context(), library.FolderID(id), library.FolderID(parent), library.FolderName(name))
 		if err != nil {
 			return err
 		}
@@ -45,11 +47,13 @@ var createArtistCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString(flagName)
 		folder, _ := cmd.Flags().GetString(flagFolder)
 
+		c := Container(cmd.Context())
+
 		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
 		folder = strings.TrimSpace(folder)
 
-		a, err := appl.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name))
+		a, err := c.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name))
 		if err != nil {
 			return err
 		}
@@ -66,15 +70,17 @@ var createChannelCmd = &cobra.Command{
 		artistID, _ := cmd.Flags().GetString(flagArtist)
 		channelName, _ := cmd.Flags().GetString(flagName)
 
+		c := Container(cmd.Context())
+
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
 
-		artist, err := appl.ArtistService.ByID(cmd.Context(), library.ArtistID(artistID))
+		artist, err := c.ArtistService.ByID(cmd.Context(), library.ArtistID(artistID))
 		if err != nil {
 			return fmt.Errorf("could not find artist with ID %q: %w", artistID, err)
 		}
 
-		if err := appl.ChannelService.Link(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
+		if err := c.ChannelService.Link(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
 			return err
 		}
 

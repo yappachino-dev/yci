@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/yappachino-dev/yci/internal/app"
@@ -19,8 +18,6 @@ import (
 
 	_ "modernc.org/sqlite"
 )
-
-const version = "1.0.0"
 
 const (
 	flagID     = "id"
@@ -39,83 +36,119 @@ const (
 	flagDelayComment = "Randomized delay between downloads in seconds (format min:max)"
 )
 
-var huhTheme = huh.ThemeBase()
-
-var appl *app.Container
-
 var rootCmd = &cobra.Command{
-	Use:     "yci",
-	Short:   "A CLI to manage your local music library",
-	Version: version,
+	Use:   "yci",
+	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		autoMigrate := !strings.HasPrefix(cmd.CommandPath(), "yci debug migration")
-		return initApplication(cmd.Context(), autoMigrate)
+
+		c, err := initApplication(cmd.Context(), autoMigrate)
+		if err != nil {
+			return err
+		}
+
+		cmd.SetContext(WithContainer(cmd.Context(), c))
+		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		if appl != nil && appl.DB != nil {
-			if err := appl.DB.Close(); err != nil {
+		if c, ok := ContainerOK(cmd.Context()); ok {
+			if err := c.DB.Close(); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to cleanly close database connections: %v\n", err)
 			}
 		}
 	},
 }
 
-func Execute() {
+func Execute(v string) {
+	rootCmd.Version = v
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func initApplication(ctx context.Context, autoMigrate bool) error {
+type containerKey struct{}
+
+// WithContainer attaches the initialized application container to the
+// command context; Container retrieves it.
+func WithContainer(ctx context.Context, c *app.Container) context.Context {
+	return context.WithValue(ctx, containerKey{}, c)
+}
+
+// Container returns the application container. Only valid on paths where
+// PersistentPreRunE has already run.
+func Container(ctx context.Context) *app.Container {
+	c, ok := ContainerOK(ctx)
+	if !ok {
+		panic("container not initialized; PersistentPreRunE must run first")
+	}
+
+	return c
+}
+
+// ContainerOK is the non-panicking variant for paths that run without the
+// boot sequence, such as shell completion.
+func ContainerOK(ctx context.Context) (*app.Container, bool) {
+	c, ok := ctx.Value(containerKey{}).(*app.Container)
+	return c, ok
+}
+
+func initApplication(ctx context.Context, autoMigrate bool) (*app.Container, error) {
 	paths, err := fs.GetPaths()
 	if err != nil {
-		return fmt.Errorf("load application paths: %w", err)
+		return nil, fmt.Errorf("load application paths: %w", err)
 	}
 
 	if err = os.MkdirAll(paths.ConfigDir(), 0o755); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
+		return nil, fmt.Errorf("create config directory: %w", err)
 	}
 
 	dbConn, err := sql.Open("sqlite", filepath.Join(paths.ConfigDir(), "data.db"))
 	if err != nil {
-		return fmt.Errorf("open sqlite database: %w", err)
+		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
 
 	if _, err = dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 		dbConn.Close()
-		return fmt.Errorf("enable foreign key constraints: %w", err)
+		return nil, fmt.Errorf("enable foreign key constraints: %w", err)
 	}
 
 	if err = db.SetUpMigrationContext(); err != nil {
-		return fmt.Errorf("setup database migrations: %w", err)
+		dbConn.Close()
+		return nil, fmt.Errorf("setup database migrations: %w", err)
 	}
 
 	if autoMigrate {
 		if err = db.RunMigrations(ctx, dbConn); err != nil {
 			dbConn.Close()
-			return fmt.Errorf("execute database migration: %w", err)
+			return nil, fmt.Errorf("execute database migration: %w", err)
 		}
 	}
 
-	appl, err = app.NewContainer(dbConn, paths)
+	c, err := app.NewContainer(dbConn, paths)
 	if err != nil {
 		dbConn.Close()
-		return fmt.Errorf("initialize application container statements: %w", err)
+		return nil, fmt.Errorf("initialize application container statements: %w", err)
 	}
 
 	if autoMigrate {
 		// Replay journals left pending by a previous crashed run.
-		if err = appl.FileActions.ExecutePending(ctx); err != nil {
+		if err = c.FileActions.ExecutePending(ctx); err != nil {
 			dbConn.Close()
-			return fmt.Errorf("recover pending file actions: %w", err)
+			return nil, fmt.Errorf("recover pending file actions: %w", err)
 		}
 	}
 
-	return nil
+	return c, nil
 }
 
 func artistIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	artists, err := appl.ArtistService.All(cmd.Context())
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	artists, err := c.ArtistService.All(cmd.Context())
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
@@ -131,7 +164,12 @@ func artistIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]st
 }
 
 func folderIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	folders, err := appl.FolderService.All(cmd.Context())
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	folders, err := c.FolderService.All(cmd.Context())
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
@@ -147,7 +185,12 @@ func folderIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]st
 }
 
 func trackIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	tracks, err := appl.TrackService.All(cmd.Context())
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	tracks, err := c.TrackService.All(cmd.Context())
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
@@ -163,7 +206,12 @@ func trackIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]str
 }
 
 func channelNameCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	channels, err := appl.ChannelService.All(cmd.Context())
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	channels, err := c.ChannelService.All(cmd.Context())
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}

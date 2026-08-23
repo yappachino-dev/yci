@@ -34,6 +34,8 @@ var editFolderCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		c := Container(cmd.Context())
+
 		oldID, _ := cmd.Flags().GetString(flagID)
 		oldID = strings.TrimSpace(oldID)
 
@@ -49,7 +51,7 @@ var editFolderCmd = &cobra.Command{
 			RegenerateSlugID: newSlug,
 		}
 
-		f, err := appl.FolderService.Update(cmd.Context(), library.FolderID(oldID), params)
+		f, err := c.FolderService.Update(cmd.Context(), library.FolderID(oldID), params)
 		if err != nil {
 			return err
 		}
@@ -73,6 +75,8 @@ var editArtistCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		c := Container(cmd.Context())
+
 		oldID, _ := cmd.Flags().GetString(flagID)
 		oldID = strings.TrimSpace(oldID)
 
@@ -88,7 +92,7 @@ var editArtistCmd = &cobra.Command{
 			RegenerateSlugID: newSlug,
 		}
 
-		a, err := appl.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params)
+		a, err := c.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params)
 		if err != nil {
 			return err
 		}

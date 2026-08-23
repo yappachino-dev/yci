@@ -11,7 +11,7 @@ var versionCmd = &cobra.Command{
 	Short: "Write current version of the app",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf(version)
+		fmt.Println(cmd.Root().Version)
 		return nil
 	},
 }

@@ -22,6 +22,7 @@ var deleteFolderCmd = &cobra.Command{
 	Short: "Delete a folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
 		id, _ := cmd.Flags().GetString(flagID)
 		force, _ := cmd.Flags().GetBool(flagForce)
@@ -29,7 +30,7 @@ var deleteFolderCmd = &cobra.Command{
 		id = strings.TrimSpace(id)
 
 		if !force {
-			isEmpty, err := appl.FolderService.IsEmpty(ctx, library.FolderID(id))
+			isEmpty, err := c.FolderService.IsEmpty(ctx, library.FolderID(id))
 			if err != nil {
 				return fmt.Errorf("failed to check folder contents: %w", err)
 			}
@@ -38,7 +39,7 @@ var deleteFolderCmd = &cobra.Command{
 			}
 		}
 
-		if err := appl.FolderService.Delete(ctx, library.FolderID(id)); err != nil {
+		if err := c.FolderService.Delete(ctx, library.FolderID(id)); err != nil {
 			return err
 		}
 
@@ -51,10 +52,12 @@ var deleteArtistCmd = &cobra.Command{
 	Use:   "artist",
 	Short: "Delete an artist (WARNING: channels cascade, tracks become orphaned)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		c := Container(cmd.Context())
+
 		id, _ := cmd.Flags().GetString(flagID)
 		id = strings.TrimSpace(id)
 
-		if err := appl.ArtistService.Delete(cmd.Context(), library.ArtistID(id)); err != nil {
+		if err := c.ArtistService.Delete(cmd.Context(), library.ArtistID(id)); err != nil {
 			return err
 		}
 
@@ -67,13 +70,15 @@ var deleteChannelCmd = &cobra.Command{
 	Use:   "channel",
 	Short: "Unlink a YouTube channel from an artist",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		c := Container(cmd.Context())
+
 		artistID, _ := cmd.Flags().GetString(flagArtist)
 		channelName, _ := cmd.Flags().GetString(flagName)
 
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
 
-		if err := appl.ChannelService.Unlink(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
+		if err := c.ChannelService.Unlink(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
 			return err
 		}
 
@@ -86,10 +91,12 @@ var deleteTrackCmd = &cobra.Command{
 	Use:   "track",
 	Short: "Delete a track from the database AND remove the physical file",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		c := Container(cmd.Context())
+
 		id, _ := cmd.Flags().GetString(flagID)
 		id = strings.TrimSpace(id)
 
-		if err := appl.TrackService.Delete(cmd.Context(), library.TrackID(id)); err != nil {
+		if err := c.TrackService.Delete(cmd.Context(), library.TrackID(id)); err != nil {
 			return err
 		}
 

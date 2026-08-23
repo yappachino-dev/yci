@@ -27,24 +27,25 @@ var importStagingCmd = &cobra.Command{
 	Short: "Process the staging directory and import .opus files",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
 		skipUnknown, _ := cmd.Flags().GetBool(flagSkipUnknown)
 		skipCollabArtists, _ := cmd.Flags().GetBool(flagSkipCollabArtists)
 		fallbackArtist, _ := cmd.Flags().GetString(flagFallbackArtist)
 
 		if fallbackArtist != "" {
-			if _, err := appl.ArtistService.ByID(ctx, library.ArtistID(fallbackArtist)); err != nil {
+			if _, err := c.ArtistService.ByID(ctx, library.ArtistID(fallbackArtist)); err != nil {
 				return fmt.Errorf("invalid fallback artist %q: %w", fallbackArtist, err)
 			}
 		}
 
-		artistIds, err := appl.ArtistService.AllIDs(ctx)
+		artistIds, err := c.ArtistService.AllIDs(ctx)
 		if err != nil {
 			return fmt.Errorf("fetch artist ids: %w", err)
 		}
 		artistSuggestions := StringSlice(artistIds)
 
-		folderIds, err := appl.FolderService.AllIDs(ctx)
+		folderIds, err := c.FolderService.AllIDs(ctx)
 		if err != nil {
 			return fmt.Errorf("fetch folder ids: %w", err)
 		}
@@ -74,7 +75,7 @@ var importStagingCmd = &cobra.Command{
 						huh.NewOption("Abort processing loop", "abort"),
 					).
 					Value(&actionType),
-			)).WithTheme(huhTheme)
+			)).WithTheme(huh.ThemeBase())
 
 			if err := choiceForm.Run(); err != nil {
 				return library.StagingResult{}, fmt.Errorf("failed to read menu choice: %w", err)
@@ -106,7 +107,7 @@ var importStagingCmd = &cobra.Command{
 
 							return nil
 						}),
-				)).WithTheme(huhTheme)
+				)).WithTheme(huh.ThemeBase())
 
 				if err := artistForm.Run(); err != nil {
 					return library.StagingResult{}, fmt.Errorf("failed to read artist input: %w", err)
@@ -140,7 +141,7 @@ var importStagingCmd = &cobra.Command{
 
 							return nil
 						}),
-				)).WithTheme(huhTheme)
+				)).WithTheme(huh.ThemeBase())
 
 				if err := folderForm.Run(); err != nil {
 					return library.StagingResult{}, fmt.Errorf("failed to read folder input: %w", err)
@@ -160,7 +161,7 @@ var importStagingCmd = &cobra.Command{
 
 		fmt.Print("Processing staging directory...\n\n")
 
-		if err := appl.StagingService.ProcessStaging(ctx, handler); err != nil {
+		if err := c.StagingService.ProcessStaging(ctx, handler); err != nil {
 			if errors.Is(err, library.ErrProcessAborted) {
 				fmt.Println("Processing loop aborted by user.")
 				return nil

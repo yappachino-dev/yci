@@ -26,9 +26,12 @@ var downloadCmd = &cobra.Command{
 	Use:   "download [urls...]",
 	Short: "Download YouTube audio directly to the staging area",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := initApplication(cmd.Context(), true); err != nil {
+		c, err := initApplication(cmd.Context(), true)
+		if err != nil {
 			return err
 		}
+
+		cmd.SetContext(WithContainer(cmd.Context(), c))
 
 		if err := download.CheckDependencies(); err != nil {
 			return err
@@ -38,6 +41,7 @@ var downloadCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 		urls := args
 
 		filePath, _ := cmd.Flags().GetString(flagFile)
@@ -61,7 +65,7 @@ var downloadCmd = &cobra.Command{
 
 		forcePlaylist, _ := cmd.Flags().GetBool(flagForcePlaylist)
 
-		result, err := appl.DownloadService.Enqueue(ctx, download.EnqueueParams{
+		result, err := c.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:          urls,
 			Reporter:      &EnqueueReporter{},
 			Selector:      selector,
@@ -213,12 +217,14 @@ func (r *ProcessReporter) OnTrackFailure(_ string, err error) {
 }
 
 func executeDownloadLoop(ctx context.Context, delayFlag string) error {
+	c := Container(ctx)
+
 	delayParts := strings.Split(delayFlag, ":")
 	if len(delayParts) != 2 {
 		return fmt.Errorf("invalid delay format. Expected min:max (e.g., 5:30)")
 	}
 
-	result, err := appl.DownloadService.ProcessQueue(ctx, delayParts[0], delayParts[1], &ProcessReporter{})
+	result, err := c.DownloadService.ProcessQueue(ctx, delayParts[0], delayParts[1], &ProcessReporter{})
 	if err != nil {
 		return err
 	}

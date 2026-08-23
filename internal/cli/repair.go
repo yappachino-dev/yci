@@ -12,8 +12,9 @@ var repairCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
-		failed, err := appl.FileActions.Failed(ctx)
+		failed, err := c.FileActions.Failed(ctx)
 		if err != nil {
 			return err
 		}
@@ -22,7 +23,7 @@ var repairCmd = &cobra.Command{
 			fmt.Printf("failed:  #%d %s %q -> %q: %s\n", entry.ID, entry.Op, entry.Src, entry.Dst.String, entry.Error.String)
 		}
 
-		pending, err := appl.FileActions.Pending(ctx)
+		pending, err := c.FileActions.Pending(ctx)
 		if err != nil {
 			return err
 		}
@@ -34,16 +35,16 @@ var repairCmd = &cobra.Command{
 		if len(failed) > 0 {
 			fmt.Print("\nRetrying failed actions...\n")
 
-			if err := appl.FileActions.ResetFailed(ctx); err != nil {
+			if err := c.FileActions.ResetFailed(ctx); err != nil {
 				return err
 			}
 		}
 
-		if err := appl.FileActions.ExecutePending(ctx); err != nil {
+		if err := c.FileActions.ExecutePending(ctx); err != nil {
 			return fmt.Errorf("replay journal: %w", err)
 		}
 
-		if err := appl.FileActions.PurgeDone(ctx); err != nil {
+		if err := c.FileActions.PurgeDone(ctx); err != nil {
 			return err
 		}
 

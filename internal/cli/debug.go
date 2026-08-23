@@ -28,8 +28,9 @@ var debugMigrationGetCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
-		current, err := db.GetCurrentVersion(ctx, appl.DB)
+		current, err := db.GetCurrentVersion(ctx, c.DB)
 		if err != nil {
 			return fmt.Errorf("check current version: %w", err)
 		}
@@ -77,8 +78,9 @@ var debugMigrationUpCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
-		current, err := db.GetCurrentVersion(ctx, appl.DB)
+		current, err := db.GetCurrentVersion(ctx, c.DB)
 		if err != nil {
 			return fmt.Errorf("check current version: %w", err)
 		}
@@ -93,8 +95,9 @@ var debugMigrationDownCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		c := Container(ctx)
 
-		current, err := db.GetCurrentVersion(ctx, appl.DB)
+		current, err := db.GetCurrentVersion(ctx, c.DB)
 		if err != nil {
 			return fmt.Errorf("check current version: %w", err)
 		}
@@ -109,6 +112,8 @@ var debugMigrationDownCmd = &cobra.Command{
 }
 
 func performMigration(ctx context.Context, target int) error {
+	c := Container(ctx)
+
 	maxVersion, err := db.GetMaxVersion()
 	if err != nil {
 		return fmt.Errorf("check max version: %w", err)
@@ -118,7 +123,7 @@ func performMigration(ctx context.Context, target int) error {
 		return fmt.Errorf("requested version %d exceeds the maximum available local migration (%d)", target, maxVersion)
 	}
 
-	current, err := db.GetCurrentVersion(ctx, appl.DB)
+	current, err := db.GetCurrentVersion(ctx, c.DB)
 	if err != nil {
 		return fmt.Errorf("check current version: %w", err)
 	}
@@ -134,7 +139,7 @@ func performMigration(ctx context.Context, target int) error {
 		fmt.Printf("Advancing database schema from version %d up to %d...\n", current, target)
 	}
 
-	if err := db.SetMigration(ctx, appl.DB, current, target); err != nil {
+	if err := db.SetMigration(ctx, c.DB, current, target); err != nil {
 		return err
 	}
 
