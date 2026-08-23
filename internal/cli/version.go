@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +9,7 @@ var versionCmd = &cobra.Command{
 	Short: "Write current version of the app",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(cmd.Root().Version)
+		cmd.Println(cmd.Root().Version)
 		return nil
 	},
 }

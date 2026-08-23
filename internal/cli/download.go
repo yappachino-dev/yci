@@ -58,74 +58,81 @@ var downloadCmd = &cobra.Command{
 
 		result, err := c.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:          urls,
-			Reporter:      &consoleReporter{},
+			Reporter:      newConsoleReporter(cmd),
 			Selector:      selector,
 			ForcePlaylist: forcePlaylist,
 		})
 		if err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
-				fmt.Println("\n[!] Operation cancelled by user.")
+				cmd.Println("\n[!] Operation cancelled by user.")
 				return nil
 			}
 
 			if errors.Is(err, errNoChannelsSelected) {
-				fmt.Println("\n[!] No channels selected — nothing enqueued.")
+				cmd.Println("\n[!] No channels selected — nothing enqueued.")
 				return nil
 			}
 
 			return err
 		}
 
-		fmt.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
+		cmd.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
 			result.Enqueued, result.Skipped, result.Failed)
 
 		queueOnly, _ := cmd.Flags().GetBool(flagQueueOnly)
 		if queueOnly {
-			fmt.Println("\n[!] Flag --queue-only detected. Items enqueued but download paused")
+			cmd.Println("\n[!] Flag --queue-only detected. Items enqueued but download paused")
 			return nil
 		}
 
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
-		fmt.Print("\nProcessing queue...\n")
-		return executeDownloadLoop(ctx, delayFlag)
+		cmd.Print("\nProcessing queue...\n")
+		return executeDownloadLoop(cmd, delayFlag)
 	},
 }
 
-// consoleReporter prints enqueue and download-progress events to stdout.
-// The download package defines the event set; this type only formats it.
-type consoleReporter struct{}
+// consoleReporter prints enqueue and download-progress events to the
+// command's output. The download package defines the event set; this type
+// only formats it.
+type consoleReporter struct {
+	cmd *cobra.Command
+}
+
+func newConsoleReporter(cmd *cobra.Command) *consoleReporter {
+	return &consoleReporter{cmd: cmd}
+}
 
 func (r *consoleReporter) OnHybridURL(url string, forcePlaylist bool) {
 	if forcePlaylist {
-		fmt.Printf("[!] Extracting every video from hybrid-playlist URL: %s\n", url)
+		r.cmd.Printf("[!] Extracting every video from hybrid-playlist URL: %s\n", url)
 		return
 	}
 
-	fmt.Printf("[!] Extracting video from hybrid URL: %s\n", url)
+	r.cmd.Printf("[!] Extracting video from hybrid URL: %s\n", url)
 }
 
 func (r *consoleReporter) OnPlaylistURL(url string) {
-	fmt.Printf("[!] Extracting every video from playlist URL: %s\n", url)
+	r.cmd.Printf("[!] Extracting every video from playlist URL: %s\n", url)
 }
 
 func (r *consoleReporter) OnEnqueueSkipped(id string, reason string) {
-	fmt.Printf("[-] Skipped %s: %s\n", id, reason)
+	r.cmd.Printf("[-] Skipped %s: %s\n", id, reason)
 }
 
 func (r *consoleReporter) OnQueueStart(totalTracks int) {}
 
 func (r *consoleReporter) OnTrackStart(index int, total int, sourceID string) {
-	fmt.Printf("--- [Track %d / %d] ---\n", index, total)
-	fmt.Printf("[!] Target: %s\n", sourceID)
+	r.cmd.Printf("--- [Track %d / %d] ---\n", index, total)
+	r.cmd.Printf("[!] Target: %s\n", sourceID)
 }
 
 func (r *consoleReporter) OnTrackSuccess(_ string) {
-	fmt.Printf("[+] Success!\n\n")
+	r.cmd.Printf("[+] Success!\n\n")
 }
 
 func (r *consoleReporter) OnTrackFailure(_ string, err error) {
-	fmt.Printf("[-] Failed: %v\n\n", err)
+	r.cmd.Printf("[-] Failed: %v\n\n", err)
 }
 
 // errNoChannelsSelected reports that the user submitted the channel
@@ -180,8 +187,8 @@ var downloadRetryCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Re-armed %d failed download(s).\n", result.Retried)
-		fmt.Println("▶ Run `yci download resume` to process them.")
+		cmd.Printf("Re-armed %d failed download(s).\n", result.Retried)
+		cmd.Println("▶ Run `yci download resume` to process them.")
 		return nil
 	},
 }
@@ -195,12 +202,10 @@ var downloadResumeCmd = &cobra.Command{
 			return err
 		}
 
-		ctx := cmd.Context()
-
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
-		fmt.Print("Resuming queue...\n")
-		return executeDownloadLoop(ctx, delayFlag)
+		cmd.Print("Resuming queue...\n")
+		return executeDownloadLoop(cmd, delayFlag)
 	},
 }
 
@@ -272,23 +277,23 @@ func parseDelay(flagValue string) (minStr, maxStr string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func executeDownloadLoop(ctx context.Context, delayFlag string) error {
-	c := Container(ctx)
+func executeDownloadLoop(cmd *cobra.Command, delayFlag string) error {
+	c := Container(cmd.Context())
 
 	minSleep, maxSleep, err := parseDelay(delayFlag)
 	if err != nil {
 		return err
 	}
 
-	result, err := c.DownloadService.ProcessQueue(ctx, minSleep, maxSleep, &consoleReporter{})
+	result, err := c.DownloadService.ProcessQueue(cmd.Context(), minSleep, maxSleep, newConsoleReporter(cmd))
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
+	cmd.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
 
 	if result.Success > 0 {
-		fmt.Println("▶ Run `yci import staging` to import them into your library.")
+		cmd.Println("▶ Run `yci import staging` to import them into your library.")
 	}
 
 	return nil

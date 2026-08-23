@@ -18,16 +18,31 @@ var deleteCmd = &cobra.Command{
 }
 
 var deleteFolderCmd = &cobra.Command{
-	Use:   "folder",
+	Use:   "folder [id]",
 	Short: "Delete a folder",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
 
-		id, _ := cmd.Flags().GetString(flagID)
+		id, err := idFromArgsOrFlag(cmd, flagID, args)
+		if err != nil {
+			return err
+		}
+		if id == "" {
+			return fmt.Errorf("provide the folder ID as an argument or via --%s", flagID)
+		}
+
 		force, _ := cmd.Flags().GetBool(flagForce)
 
-		id = strings.TrimSpace(id)
+		confirmed, err := confirmDestructive(cmd, fmt.Sprintf("Delete folder %q?", id))
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			cmd.Println("Aborted. Nothing was deleted.")
+			return nil
+		}
 
 		if err := c.FolderService.Delete(ctx, library.FolderID(id), library.DeleteOptions{Force: force}); err != nil {
 			return mapSentinels(err, map[error]string{
@@ -35,27 +50,48 @@ var deleteFolderCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Printf("Deleted folder: %s\n", id)
+		cmd.Printf("Deleted folder: %s\n", id)
 		return nil
 	},
 }
 
 var deleteArtistCmd = &cobra.Command{
-	Use:   "artist",
-	Short: "Delete an artist (WARNING: channels cascade, tracks become orphaned)",
+	Use:   "artist [id]",
+	Short: "Delete an artist (linked channels cascade, tracks become orphaned)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := Container(cmd.Context())
+		ctx := cmd.Context()
+		c := Container(ctx)
 
-		id, _ := cmd.Flags().GetString(flagID)
-		id = strings.TrimSpace(id)
+		id, err := idFromArgsOrFlag(cmd, flagID, args)
+		if err != nil {
+			return err
+		}
+		if id == "" {
+			return fmt.Errorf("provide the artist ID as an argument or via --%s", flagID)
+		}
 
-		if err := c.ArtistService.Delete(cmd.Context(), library.ArtistID(id)); err != nil {
+		prompt := fmt.Sprintf(
+			"Delete artist %q? Linked channels are removed and its tracks become orphaned.",
+			id,
+		)
+
+		confirmed, err := confirmDestructive(cmd, prompt)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			cmd.Println("Aborted. Nothing was deleted.")
+			return nil
+		}
+
+		if err := c.ArtistService.Delete(ctx, library.ArtistID(id)); err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", id),
 			})
 		}
 
-		fmt.Printf("Deleted artist: %s\n", id)
+		cmd.Printf("Deleted artist: %s\n", id)
 		return nil
 	},
 }
@@ -79,27 +115,53 @@ var deleteChannelCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Printf("Unlinked channel %q from artist %q\n", channelName, artistID)
+		cmd.Printf("Unlinked channel %q from artist %q\n", channelName, artistID)
 		return nil
 	},
 }
 
 var deleteTrackCmd = &cobra.Command{
-	Use:   "track",
+	Use:   "track [id]",
 	Short: "Delete a track from the database AND remove the physical file",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := Container(cmd.Context())
+		ctx := cmd.Context()
+		c := Container(ctx)
 
-		id, _ := cmd.Flags().GetString(flagID)
-		id = strings.TrimSpace(id)
+		id, err := idFromArgsOrFlag(cmd, flagID, args)
+		if err != nil {
+			return err
+		}
+		if id == "" {
+			return fmt.Errorf("provide the track ID (or an unambiguous prefix) as an argument or via --%s", flagID)
+		}
 
-		if err := c.TrackService.Delete(cmd.Context(), library.TrackID(id)); err != nil {
+		trackID, err := resolveTrackID(ctx, c, id)
+		if err != nil {
+			return err
+		}
+
+		prompt := fmt.Sprintf(
+			"Delete track %q? Its file will be permanently removed from disk.",
+			trackID,
+		)
+
+		confirmed, err := confirmDestructive(cmd, prompt)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			cmd.Println("Aborted. Nothing was deleted.")
+			return nil
+		}
+
+		if err := c.TrackService.Delete(ctx, trackID); err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrTrackNotFound: fmt.Sprintf("track %q does not exist", id),
 			})
 		}
 
-		fmt.Printf("Deleted track and physical file for ID: %s\n", id)
+		cmd.Printf("Deleted track and physical file for ID: %s\n", trackID)
 		return nil
 	},
 }
@@ -112,13 +174,13 @@ func init() {
 	deleteCmd.AddCommand(deleteChannelCmd)
 	deleteCmd.AddCommand(deleteTrackCmd)
 
-	deleteFolderCmd.Flags().StringP(flagID, "i", "", "The ID of the folder to delete (Required)")
+	deleteCmd.PersistentFlags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
+
+	deleteFolderCmd.Flags().String(flagID, "", "The ID of the folder to delete")
 	deleteFolderCmd.Flags().Bool(flagForce, false, "Force delete a folder even if it contains artists or sub-folders")
-	deleteFolderCmd.MarkFlagRequired(flagID)
 	deleteFolderCmd.RegisterFlagCompletionFunc(flagID, folderIDCompletion)
 
-	deleteArtistCmd.Flags().StringP(flagID, "i", "", "The ID of the artist to delete (Required)")
-	deleteArtistCmd.MarkFlagRequired(flagID)
+	deleteArtistCmd.Flags().String(flagID, "", "The ID of the artist to delete")
 	deleteArtistCmd.RegisterFlagCompletionFunc(flagID, artistIDCompletion)
 
 	deleteChannelCmd.Flags().String(flagArtist, "", "The target Artist ID (Required)")
@@ -128,7 +190,6 @@ func init() {
 	deleteChannelCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)
 	deleteChannelCmd.RegisterFlagCompletionFunc(flagName, channelNameCompletion)
 
-	deleteTrackCmd.Flags().StringP(flagID, "i", "", "The UUID of the track to delete (Required)")
-	deleteTrackCmd.MarkFlagRequired(flagID)
+	deleteTrackCmd.Flags().String(flagID, "", "The UUID of the track to delete")
 	deleteTrackCmd.RegisterFlagCompletionFunc(flagID, trackIDCompletion)
 }

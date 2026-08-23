@@ -16,16 +16,20 @@ var createCmd = &cobra.Command{
 }
 
 var createFolderCmd = &cobra.Command{
-	Use:   "folder",
+	Use:   "folder [id]",
 	Short: "Create a new folder",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString(flagID)
+		id, err := idFromArgsOrFlag(cmd, flagID, args)
+		if err != nil {
+			return err
+		}
+
 		name, _ := cmd.Flags().GetString(flagName)
 		parent, _ := cmd.Flags().GetString(flagParent)
 
 		c := Container(cmd.Context())
 
-		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
 		parent = strings.TrimSpace(parent)
 
@@ -37,22 +41,26 @@ var createFolderCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Printf("Created folder: %q (ID: %s) under parent: %s\n", f.Name, f.ID, f.ParentID)
+		cmd.Printf("Created folder: %q (ID: %s) under parent: %s\n", f.Name, f.ID, f.ParentID)
 		return nil
 	},
 }
 
 var createArtistCmd = &cobra.Command{
-	Use:   "artist",
+	Use:   "artist [id]",
 	Short: "Create a new artist",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString(flagID)
+		id, err := idFromArgsOrFlag(cmd, flagID, args)
+		if err != nil {
+			return err
+		}
+
 		name, _ := cmd.Flags().GetString(flagName)
 		folder, _ := cmd.Flags().GetString(flagFolder)
 
 		c := Container(cmd.Context())
 
-		id = strings.TrimSpace(id)
 		name = strings.TrimSpace(name)
 		folder = strings.TrimSpace(folder)
 
@@ -64,7 +72,7 @@ var createArtistCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Printf("Created artist: %q (ID: %s) in folder: %s\n", a.Name, a.ID, a.FolderID)
+		cmd.Printf("Created artist: %q (ID: %s) in folder: %s\n", a.Name, a.ID, a.FolderID)
 		return nil
 	},
 }
@@ -94,7 +102,7 @@ var createChannelCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Printf("Linked channel %q to Artist: %s\n", channelName, artist.Name)
+		cmd.Printf("Linked channel %q to Artist: %s\n", channelName, artist.Name)
 		return nil
 	},
 }

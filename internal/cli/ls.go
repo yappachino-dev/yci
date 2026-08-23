@@ -3,7 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"text/tabwriter"
 
 	"github.com/yappachino-dev/yci/internal/library"
@@ -16,7 +16,7 @@ var lsCmd = &cobra.Command{
 	Short: "List library entities (defaults to folders)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listFolders(cmd.Context())
+		return listFolders(cmd.Context(), cmd)
 	},
 }
 
@@ -24,7 +24,7 @@ var lsFoldersCmd = &cobra.Command{
 	Use:   "folders",
 	Short: "List all folders in a visual tree hierarchy",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listFolders(cmd.Context())
+		return listFolders(cmd.Context(), cmd)
 	},
 }
 
@@ -32,7 +32,7 @@ var lsArtistsCmd = &cobra.Command{
 	Use:   "artists",
 	Short: "List all managed artists",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listArtists(cmd.Context())
+		return listArtists(cmd.Context(), cmd)
 	},
 }
 
@@ -40,15 +40,15 @@ var lsChannelsCmd = &cobra.Command{
 	Use:   "channels",
 	Short: "List all YouTube channel aliases linked to artists",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listChannels(cmd.Context())
+		return listChannels(cmd.Context(), cmd)
 	},
 }
 
 var lsTracksCmd = &cobra.Command{
 	Use:   "tracks",
-	Short: "List all tracks in the library",
+	Short: "List all tracks in the library (IDs truncated; prefixes work with delete)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listTracks(cmd.Context())
+		return listTracks(cmd.Context(), cmd)
 	},
 }
 
@@ -56,7 +56,7 @@ var lsQueueCmd = &cobra.Command{
 	Use:   "queue",
 	Short: "List all queued for download tracks",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listQueue(cmd.Context())
+		return listQueue(cmd.Context(), cmd)
 	},
 }
 
@@ -70,11 +70,11 @@ func init() {
 	lsCmd.AddCommand(lsQueueCmd)
 }
 
-func newTabWriter() *tabwriter.Writer {
-	return tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+func newTabWriter(w io.Writer) *tabwriter.Writer {
+	return tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
 }
 
-func listFolders(ctx context.Context) error {
+func listFolders(ctx context.Context, cmd *cobra.Command) error {
 	c := Container(ctx)
 
 	folders, err := c.FolderService.All(ctx)
@@ -82,7 +82,20 @@ func listFolders(ctx context.Context) error {
 		return fmt.Errorf("fetch folders: %w", err)
 	}
 
-	w := newTabWriter()
+	// The seeded root row always exists; only real folders make a tree.
+	userFolders := 0
+	for _, f := range folders {
+		if f.ID != library.FolderID(library.RootID) {
+			userFolders++
+		}
+	}
+
+	if userFolders == 0 {
+		cmd.Println("No folders yet. Create one with `yci create folder`.")
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "ID\tNAME\tPARENT")
 	fmt.Fprintln(w, "--\t----\t------")
 
@@ -117,12 +130,10 @@ func listFolders(ctx context.Context) error {
 	traverse(library.FolderID(library.RootID), "")
 
 	w.Flush()
-	fmt.Println()
-
 	return nil
 }
 
-func listArtists(ctx context.Context) error {
+func listArtists(ctx context.Context, cmd *cobra.Command) error {
 	c := Container(ctx)
 
 	artists, err := c.ArtistService.All(ctx)
@@ -130,7 +141,12 @@ func listArtists(ctx context.Context) error {
 		return fmt.Errorf("fetch artists: %w", err)
 	}
 
-	w := newTabWriter()
+	if len(artists) == 0 {
+		cmd.Println("No artists yet. Create one with `yci create artist`.")
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "ID\tNAME\tFOLDER_ID")
 	fmt.Fprintln(w, "--\t----\t---------")
 
@@ -139,12 +155,10 @@ func listArtists(ctx context.Context) error {
 	}
 
 	w.Flush()
-	fmt.Println()
-
 	return nil
 }
 
-func listChannels(ctx context.Context) error {
+func listChannels(ctx context.Context, cmd *cobra.Command) error {
 	c := Container(ctx)
 
 	channels, err := c.ChannelService.All(ctx)
@@ -152,7 +166,12 @@ func listChannels(ctx context.Context) error {
 		return fmt.Errorf("fetch channels: %w", err)
 	}
 
-	w := newTabWriter()
+	if len(channels) == 0 {
+		cmd.Println("No channels linked. Link one with `yci create channel`.")
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "ID\tARTIST_ID\tCHANNEL_NAME")
 	fmt.Fprintln(w, "--\t---------\t------------")
 
@@ -161,12 +180,10 @@ func listChannels(ctx context.Context) error {
 	}
 
 	w.Flush()
-	fmt.Println()
-
 	return nil
 }
 
-func listTracks(ctx context.Context) error {
+func listTracks(ctx context.Context, cmd *cobra.Command) error {
 	c := Container(ctx)
 
 	tracks, err := c.TrackService.All(ctx)
@@ -174,7 +191,12 @@ func listTracks(ctx context.Context) error {
 		return fmt.Errorf("fetch tracks: %w", err)
 	}
 
-	w := newTabWriter()
+	if len(tracks) == 0 {
+		cmd.Println("No tracks in the library. Import some with `yci import staging`.")
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "ID\tARTIST_ID\tSOURCE_ID\tTITLE")
 	fmt.Fprintln(w, "--\t---------\t---------\t-----")
 
@@ -188,12 +210,10 @@ func listTracks(ctx context.Context) error {
 	}
 
 	w.Flush()
-	fmt.Println()
-
 	return nil
 }
 
-func listQueue(ctx context.Context) error {
+func listQueue(ctx context.Context, cmd *cobra.Command) error {
 	c := Container(ctx)
 
 	queue, err := c.DownloadService.All(ctx)
@@ -201,7 +221,12 @@ func listQueue(ctx context.Context) error {
 		return fmt.Errorf("fetch queue: %w", err)
 	}
 
-	w := newTabWriter()
+	if len(queue) == 0 {
+		cmd.Println("Download queue is empty. Add items with `yci download` or `yci sync`.")
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "ID\tSOURCE_ID\tSTATUS\tATTEMPTS\tERROR_MSG")
 	fmt.Fprintln(w, "--\t---------\t------\t--------\t---------")
 
@@ -210,7 +235,5 @@ func listQueue(ctx context.Context) error {
 	}
 
 	w.Flush()
-	fmt.Println()
-
 	return nil
 }

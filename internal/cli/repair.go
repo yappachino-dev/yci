@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const flagDryRunRepair = "dry-run"
+
 var repairCmd = &cobra.Command{
 	Use:   "repair",
 	Short: "Replay pending and failed filesystem actions from the journal",
@@ -20,7 +22,7 @@ var repairCmd = &cobra.Command{
 		}
 
 		for _, entry := range failed {
-			fmt.Printf("failed:  #%d %s %q -> %q: %s\n", entry.ID, entry.Op, entry.Src, entry.Dst.String, entry.Error.String)
+			cmd.Printf("failed:  #%d %s %q -> %q: %s\n", entry.ID, entry.Op, entry.Src, entry.Dst.String, entry.Error.String)
 		}
 
 		pending, err := c.FileActions.Pending(ctx)
@@ -29,11 +31,17 @@ var repairCmd = &cobra.Command{
 		}
 
 		for _, entry := range pending {
-			fmt.Printf("pending: #%d %s %q -> %q\n", entry.ID, entry.Op, entry.Src, entry.Dst.String)
+			cmd.Printf("pending: #%d %s %q -> %q\n", entry.ID, entry.Op, entry.Src, entry.Dst.String)
+		}
+
+		dryRun, _ := cmd.Flags().GetBool(flagDryRunRepair)
+		if dryRun {
+			cmd.Println("\nDry run: no changes made.")
+			return nil
 		}
 
 		if len(failed) > 0 {
-			fmt.Print("\nRetrying failed actions...\n")
+			cmd.Print("\nRetrying failed actions...\n")
 
 			if err := c.FileActions.ResetFailed(ctx); err != nil {
 				return fmt.Errorf("requeue failed file actions: %w", err)
@@ -48,11 +56,13 @@ var repairCmd = &cobra.Command{
 			return fmt.Errorf("purge completed file actions: %w", err)
 		}
 
-		fmt.Print("Journal replayed successfully\n")
+		cmd.Print("Journal replayed successfully\n")
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(repairCmd)
+
+	repairCmd.Flags().Bool(flagDryRunRepair, false, "List journal entries without replaying them")
 }

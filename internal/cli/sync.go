@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/yappachino-dev/yci/internal/download"
 	"github.com/yappachino-dev/yci/internal/library"
 
@@ -28,6 +26,7 @@ var syncCmd = &cobra.Command{
 		folder, _ := cmd.Flags().GetString(flagFolder)
 		recursive, _ := cmd.Flags().GetBool(flagRecursive)
 		dryRun, _ := cmd.Flags().GetBool(flagDryRun)
+		queueOnly, _ := cmd.Flags().GetBool(flagQueueOnly)
 		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
 		var missing []library.Track
@@ -35,13 +34,13 @@ var syncCmd = &cobra.Command{
 
 		switch {
 		case artist != "":
-			fmt.Printf("Scanning missing files for artist: %s...\n", artist)
+			cmd.Printf("Scanning missing files for artist: %s...\n", artist)
 			missing, err = c.AuditService.MissingByArtist(ctx, library.ArtistID(artist))
 		case folder != "":
-			fmt.Printf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
+			cmd.Printf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
 			missing, err = c.AuditService.MissingByFolder(ctx, library.FolderID(folder), recursive)
 		default:
-			fmt.Println("Scanning entire library for missing files...")
+			cmd.Println("Scanning entire library for missing files...")
 			missing, err = c.AuditService.MissingAll(ctx)
 		}
 
@@ -50,16 +49,16 @@ var syncCmd = &cobra.Command{
 		}
 
 		if len(missing) == 0 {
-			fmt.Println("Library is fully synced. No missing files detected.")
+			cmd.Println("Library is fully synced. No missing files detected.")
 			return nil
 		}
 
-		fmt.Printf("Audit complete. Found %d missing files.\n\n", len(missing))
+		cmd.Printf("Audit complete. Found %d missing files.\n\n", len(missing))
 
 		if dryRun {
-			fmt.Println("--- DRY RUN: The following files would be enqueued and downloaded ---")
+			cmd.Println("--- DRY RUN: The following files would be enqueued and downloaded ---")
 			for _, t := range missing {
-				fmt.Printf("- %s (Target: %s)\n", t.Title, t.RelativePath)
+				cmd.Printf("- %s (Target: %s)\n", t.Title, t.RelativePath)
 			}
 
 			return nil
@@ -72,17 +71,22 @@ var syncCmd = &cobra.Command{
 
 		result, err := c.DownloadService.Enqueue(ctx, download.EnqueueParams{
 			URLs:     ids,
-			Reporter: &consoleReporter{},
+			Reporter: newConsoleReporter(cmd),
 		})
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
+		cmd.Printf("Queue complete! Enqueued: %d | Skipped: %d | Failed: %d\n",
 			result.Enqueued, result.Skipped, result.Failed)
 
-		fmt.Print("\nProcessing queue...\n")
-		return executeDownloadLoop(ctx, delayFlag)
+		if queueOnly {
+			cmd.Println("\n▶ Flag --queue-only set. Run `yci download resume` to process them.")
+			return nil
+		}
+
+		cmd.Print("\nProcessing queue...\n")
+		return executeDownloadLoop(cmd, delayFlag)
 	},
 }
 
@@ -91,8 +95,9 @@ func init() {
 
 	syncCmd.Flags().String(flagArtist, "", "Target a specific artist ID to sync")
 	syncCmd.Flags().String(flagFolder, "", "Target a specific folder ID to sync")
-	syncCmd.Flags().Bool(flagRecursive, true, "When syncing a folder, include all sub-folders")
+	syncCmd.Flags().Bool(flagRecursive, true, "Include sub-folders when syncing (only applies with --folder)")
 	syncCmd.Flags().Bool(flagDryRun, false, "Print missing files without downloading them")
+	syncCmd.Flags().Bool(flagQueueOnly, false, "Enqueue missing files without starting the download")
 	syncCmd.Flags().String(flagDelay, defaultDelay, flagDelayComment)
 	syncCmd.MarkFlagsMutuallyExclusive(flagArtist, flagFolder)
 	syncCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)

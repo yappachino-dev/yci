@@ -33,6 +33,11 @@ var importStagingCmd = &cobra.Command{
 		skipCollabArtists, _ := cmd.Flags().GetBool(flagSkipCollabArtists)
 		fallbackArtist, _ := cmd.Flags().GetString(flagFallbackArtist)
 
+		if !stdinIsTTY() && fallbackArtist == "" && !skipUnknown && !skipCollabArtists {
+			return fmt.Errorf("non-interactive session: unknown channels cannot prompt for a decision; use --fallback-artist, --%s, or --%s",
+				flagSkipUnknown, flagSkipCollabArtists)
+		}
+
 		if fallbackArtist != "" {
 			if _, err := c.ArtistService.ByID(ctx, library.ArtistID(fallbackArtist)); err != nil {
 				return fmt.Errorf("invalid fallback artist %q: %w", fallbackArtist, err)
@@ -83,7 +88,7 @@ var importStagingCmd = &cobra.Command{
 
 			switch actionType {
 			case "skip":
-				fmt.Printf("Skipped track from %q\n", channelName)
+				cmd.Printf("Skipped track from %q\n", channelName)
 				return library.StagingResult{Action: library.ActionSkip}, nil
 			case "abort":
 				return library.StagingResult{Action: library.ActionAbort}, nil
@@ -116,9 +121,9 @@ var importStagingCmd = &cobra.Command{
 				artistInput = strings.TrimSpace(artistInput)
 
 				if actionType == "artist-link" {
-					fmt.Printf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
+					cmd.Printf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
 				} else {
-					fmt.Printf("Linked track to Artist %q\n", artistInput)
+					cmd.Printf("Linked track to Artist %q\n", artistInput)
 				}
 
 				return library.StagingResult{
@@ -148,7 +153,7 @@ var importStagingCmd = &cobra.Command{
 				}
 
 				folderInput = strings.TrimSpace(folderInput)
-				fmt.Printf("Routing track directly into folder %q\n", folderInput)
+				cmd.Printf("Routing track directly into folder %q\n", folderInput)
 
 				return library.StagingResult{
 					Action: library.ActionImport,
@@ -159,18 +164,18 @@ var importStagingCmd = &cobra.Command{
 			return library.StagingResult{Action: library.ActionSkip}, nil
 		}
 
-		fmt.Print("Processing staging directory...\n\n")
+		cmd.Print("Processing staging directory...\n\n")
 
 		if err := c.StagingService.ProcessStaging(ctx, handler); err != nil {
 			if errors.Is(err, library.ErrProcessAborted) {
-				fmt.Println("Processing loop aborted by user.")
+				cmd.Println("Processing loop aborted by user.")
 				return nil
 			}
 
 			return err
 		}
 
-		fmt.Println("\nSuccess! Staging queue processed.")
+		cmd.Println("\nSuccess! Staging queue processed.")
 		return nil
 	},
 }

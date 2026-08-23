@@ -42,7 +42,15 @@ var rootCmd = &cobra.Command{
 	Use:   "yci",
 	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		autoMigrate := !strings.HasPrefix(cmd.CommandPath(), "yci debug migration")
+		path := cmd.CommandPath()
+
+		// Commands that never touch the library skip the boot sequence
+		// entirely; ContainerOK guards their access to the container.
+		if path == "yci version" || strings.HasPrefix(path, "yci completion") || path == "yci help" {
+			return nil
+		}
+
+		autoMigrate := !strings.HasPrefix(path, "yci debug migration")
 
 		c, err := initApplication(cmd.Context(), autoMigrate)
 		if err != nil {
@@ -55,7 +63,7 @@ var rootCmd = &cobra.Command{
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		if c, ok := ContainerOK(cmd.Context()); ok {
 			if err := c.DB.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to cleanly close database connections: %v\n", err)
+				cmd.PrintErrln("Warning: failed to cleanly close database connections:", err)
 			}
 		}
 	},
@@ -63,6 +71,9 @@ var rootCmd = &cobra.Command{
 
 func Execute(v string) {
 	rootCmd.Version = v
+	// Route cmd.Print* to stdout so data and errors (which cobra sends to
+	// stderr) are stream-separated for piping.
+	rootCmd.SetOut(os.Stdout)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
