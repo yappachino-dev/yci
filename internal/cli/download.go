@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/download"
 
 	"github.com/charmbracelet/huh"
@@ -18,6 +20,7 @@ import (
 
 const (
 	flagFile          = "file"
+	flagCookies       = "cookies"
 	flagQueueOnly     = "queue-only"
 	flagInteractive   = "interactive"
 	flagForcePlaylist = "force-playlist"
@@ -86,11 +89,9 @@ var downloadCmd = &cobra.Command{
 			return nil
 		}
 
-		delayFlag, _ := cmd.Flags().GetString(flagDelay)
-
 		cmd.Println()
 		cmd.Println("Processing queue...")
-		return executeDownloadLoop(cmd, delayFlag)
+		return executeDownloadLoop(cmd)
 	},
 }
 
@@ -206,10 +207,8 @@ var downloadResumeCmd = &cobra.Command{
 			return err
 		}
 
-		delayFlag, _ := cmd.Flags().GetString(flagDelay)
-
 		cmd.Println("Resuming queue...")
-		return executeDownloadLoop(cmd, delayFlag)
+		return executeDownloadLoop(cmd)
 	},
 }
 
@@ -218,7 +217,8 @@ func init() {
 
 	downloadCmd.AddCommand(downloadResumeCmd)
 	downloadCmd.AddCommand(downloadRetryCmd)
-	downloadCmd.PersistentFlags().String(flagDelay, defaultDelay, flagDelayComment)
+	downloadCmd.PersistentFlags().String(flagDelay, "", flagDelayComment+" (default: config or "+config.DefaultDelay+")")
+	downloadCmd.PersistentFlags().String(flagCookies, "", "Path to a cookies.txt export for age-restricted content (default: config)")
 	downloadCmd.Flags().String(flagFile, "", "Read a list of URLs from a text file (one per line)")
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
 	downloadCmd.Flags().Bool(flagInteractive, false, "Dynamically select channels upon downloading playlist")
@@ -281,15 +281,34 @@ func parseDelay(flagValue string) (minStr, maxStr string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func executeDownloadLoop(cmd *cobra.Command, delayFlag string) error {
+// resolveFlagOrConfig prefers an explicitly set flag over the resolved
+// config value.
+func resolveFlagOrConfig(cmd *cobra.Command, name, cfgValue string) string {
+	v, _ := cmd.Flags().GetString(name)
+	return cmp.Or(strings.TrimSpace(v), cfgValue)
+}
+
+func executeDownloadLoop(cmd *cobra.Command) error {
 	c := Container(cmd.Context())
 
-	minSleep, maxSleep, err := parseDelay(delayFlag)
+	delay := resolveFlagOrConfig(cmd, flagDelay, c.Config.DownloadDelay)
+	minSleep, maxSleep, err := parseDelay(delay)
 	if err != nil {
 		return err
 	}
 
-	result, err := c.DownloadService.ProcessQueue(cmd.Context(), minSleep, maxSleep, newConsoleReporter(cmd))
+	cookiesFile := resolveFlagOrConfig(cmd, flagCookies, c.Config.CookiesFile)
+	if cookiesFile != "" {
+		if _, err := os.Stat(cookiesFile); err != nil {
+			return fmt.Errorf("cookies file %q: %w", cookiesFile, err)
+		}
+	}
+
+	result, err := c.DownloadService.ProcessQueue(cmd.Context(), download.QueueRunConfig{
+		MinSleep:    minSleep,
+		MaxSleep:    maxSleep,
+		CookiesFile: cookiesFile,
+	}, newConsoleReporter(cmd))
 	if err != nil {
 		return err
 	}

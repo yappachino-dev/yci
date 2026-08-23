@@ -50,6 +50,13 @@ func TestLoadDefaultsWithoutConfigFile(t *testing.T) {
 	if want := filepath.Join(home, ".config", "yci"); cfg.ConfigDir() != want {
 		t.Errorf("ConfigDir = %q, want %q", cfg.ConfigDir(), want)
 	}
+
+	if cfg.DownloadDelay != DefaultDelay {
+		t.Errorf("DownloadDelay = %q, want %q", cfg.DownloadDelay, DefaultDelay)
+	}
+	if cfg.CookiesFile != "" {
+		t.Errorf("CookiesFile = %q, want empty", cfg.CookiesFile)
+	}
 }
 
 func TestLoadFromFile(t *testing.T) {
@@ -68,6 +75,47 @@ func TestLoadFromFile(t *testing.T) {
 	}
 	if cfg.StagingDir != "/tmp/inbox" {
 		t.Errorf("StagingDir = %q, want /tmp/inbox", cfg.StagingDir)
+	}
+}
+
+func TestLoadFromDownloadSection(t *testing.T) {
+	isolate(t)
+
+	writeConfig(t, filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "yci", "config.toml"),
+		"[download]\ndelay = \"60:180\"\ncookies_file = \"/tmp/cookies.txt\"\n")
+
+	cfg, err := Load(os.Getenv)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.DownloadDelay != "60:180" {
+		t.Errorf("DownloadDelay = %q, want 60:180", cfg.DownloadDelay)
+	}
+	if cfg.CookiesFile != "/tmp/cookies.txt" {
+		t.Errorf("CookiesFile = %q, want /tmp/cookies.txt", cfg.CookiesFile)
+	}
+}
+
+func TestLoadDownloadEnvOverrides(t *testing.T) {
+	isolate(t)
+
+	t.Setenv(EnvDownloadDelay, "90:120")
+	t.Setenv(EnvDownloadCookies, "/env/cookies.txt")
+
+	writeConfig(t, filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "yci", "config.toml"),
+		"[download]\ndelay = \"60:180\"\ncookies_file = \"/file/cookies.txt\"\n")
+
+	cfg, err := Load(os.Getenv)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.DownloadDelay != "90:120" {
+		t.Errorf("DownloadDelay = %q, want 90:120", cfg.DownloadDelay)
+	}
+	if cfg.CookiesFile != "/env/cookies.txt" {
+		t.Errorf("CookiesFile = %q, want /env/cookies.txt", cfg.CookiesFile)
 	}
 }
 

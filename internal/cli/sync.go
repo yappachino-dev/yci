@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/download"
 	"github.com/yappachino-dev/yci/internal/library"
 
@@ -27,7 +28,6 @@ var syncCmd = &cobra.Command{
 		recursive, _ := cmd.Flags().GetBool(flagRecursive)
 		dryRun, _ := cmd.Flags().GetBool(flagDryRun)
 		queueOnly, _ := cmd.Flags().GetBool(flagQueueOnly)
-		delayFlag, _ := cmd.Flags().GetString(flagDelay)
 
 		var missing []library.Track
 		var err error
@@ -89,7 +89,7 @@ var syncCmd = &cobra.Command{
 
 		cmd.Println()
 		cmd.Println("Processing queue...")
-		return executeDownloadLoop(cmd, delayFlag)
+		return executeDownloadLoop(cmd)
 	},
 }
 
@@ -101,7 +101,8 @@ func init() {
 	syncCmd.Flags().Bool(flagRecursive, true, "Include sub-folders when syncing (only applies with --folder)")
 	syncCmd.Flags().Bool(flagDryRun, false, "Print missing files without downloading them")
 	syncCmd.Flags().Bool(flagQueueOnly, false, "Enqueue missing files without starting the download")
-	syncCmd.Flags().String(flagDelay, defaultDelay, flagDelayComment)
+	syncCmd.Flags().String(flagDelay, "", flagDelayComment+" (default: config or "+config.DefaultDelay+")")
+	syncCmd.Flags().String(flagCookies, "", "Path to a cookies.txt export for age-restricted content (default: config)")
 	syncCmd.MarkFlagsMutuallyExclusive(flagArtist, flagFolder)
 	syncCmd.RegisterFlagCompletionFunc(flagArtist, artistIDCompletion)
 	syncCmd.RegisterFlagCompletionFunc(flagFolder, folderIDCompletion)

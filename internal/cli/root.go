@@ -16,7 +16,6 @@ import (
 	"github.com/yappachino-dev/yci/internal/app"
 	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/db"
-	"github.com/yappachino-dev/yci/internal/fs"
 
 	_ "modernc.org/sqlite"
 )
@@ -28,10 +27,6 @@ const (
 	flagArtist = "artist"
 	flagFolder = "folder"
 	flagDelay  = "delay"
-)
-
-const (
-	defaultDelay = "5:30"
 )
 
 const (
@@ -124,13 +119,13 @@ func initApplication(ctx context.Context, autoMigrate bool) (*app.Container, err
 		return nil, fmt.Errorf("load configuration: %w", err)
 	}
 
-	paths := fs.NewAppPaths(cfg.ConfigDir(), cfg.LibraryDir, cfg.StagingDir)
+	configDir := cfg.ConfigDir()
 
-	if err = os.MkdirAll(paths.ConfigDir(), 0o755); err != nil {
+	if err = os.MkdirAll(configDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create config directory: %w", err)
 	}
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(paths.ConfigDir(), "data.db"))
+	dbConn, err := sql.Open("sqlite", filepath.Join(configDir, "data.db"))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -152,7 +147,7 @@ func initApplication(ctx context.Context, autoMigrate bool) (*app.Container, err
 		}
 	}
 
-	c, err := app.NewContainer(dbConn, paths)
+	c, err := app.NewContainer(dbConn, cfg)
 	if err != nil {
 		dbConn.Close()
 		return nil, fmt.Errorf("initialize application container statements: %w", err)

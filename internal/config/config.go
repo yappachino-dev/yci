@@ -14,21 +14,36 @@ import (
 
 // Env var names; changing these is a user-facing breaking change.
 const (
-	EnvConfigPath  = "YCI_CONFIG_PATH"
-	EnvLibraryPath = "YCI_LIBRARY_PATH"
-	EnvStagingPath = "YCI_STAGING_PATH"
+	EnvConfigPath      = "YCI_CONFIG_PATH"
+	EnvLibraryPath     = "YCI_LIBRARY_PATH"
+	EnvStagingPath     = "YCI_STAGING_PATH"
+	EnvDownloadDelay   = "YCI_DOWNLOAD_DELAY"
+	EnvDownloadCookies = "YCI_DOWNLOAD_COOKIES"
 )
+
+// DefaultDelay is the built-in randomized delay between downloads when
+// neither config nor environment supply one.
+const DefaultDelay = "5:30"
+
+// DownloadSection mirrors the [download] table in the TOML file.
+type DownloadSection struct {
+	Delay       string `toml:"delay"`
+	CookiesFile string `toml:"cookies_file"`
+}
 
 // File mirrors the user-editable TOML structure. Empty values mean unset.
 type File struct {
-	Library string `toml:"library_dir"`
-	Staging string `toml:"staging_dir"`
+	Library  string          `toml:"library_dir"`
+	Staging  string          `toml:"staging_dir"`
+	Download DownloadSection `toml:"download"`
 }
 
-// Config holds fully resolved application paths.
+// Config holds fully resolved application settings.
 type Config struct {
-	LibraryDir string
-	StagingDir string
+	LibraryDir    string
+	StagingDir    string
+	DownloadDelay string
+	CookiesFile   string
 
 	dir string
 }
@@ -75,6 +90,15 @@ func Load(env LookupFunc) (Config, error) {
 			filepath.FromSlash(env(EnvStagingPath)),
 			filepath.FromSlash(fileCfg.Staging),
 			filepath.Join(home, "Music", "Staging"),
+		),
+		DownloadDelay: cmp.Or(
+			env(EnvDownloadDelay),
+			fileCfg.Download.Delay,
+			DefaultDelay,
+		),
+		CookiesFile: cmp.Or(
+			filepath.FromSlash(env(EnvDownloadCookies)),
+			filepath.FromSlash(fileCfg.Download.CookiesFile),
 		),
 		dir: filepath.Dir(cfgPath),
 	}, nil

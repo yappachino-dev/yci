@@ -350,7 +350,14 @@ func (s *Service) RetryFailed(ctx context.Context, ids []int) (RetryResult, erro
 	return result, nil
 }
 
-func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, reporter Reporter) (ProcessResult, error) {
+// QueueRunConfig holds per-run settings for ProcessQueue.
+type QueueRunConfig struct {
+	MinSleep    string
+	MaxSleep    string
+	CookiesFile string
+}
+
+func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter Reporter) (ProcessResult, error) {
 	if reporter == nil {
 		reporter = defaultNoOpReporter
 	}
@@ -397,8 +404,9 @@ func (s *Service) ProcessQueue(ctx context.Context, minSleep, maxSleep string, r
 		cfg := Config{
 			AbsoluteOutputPath: targetPath,
 			URL:                entry.SourceID,
-			MinSleep:           minSleep,
-			MaxSleep:           maxSleep,
+			MinSleep:           run.MinSleep,
+			MaxSleep:           run.MaxSleep,
+			CookiesFile:        run.CookiesFile,
 		}
 
 		if err := s.repo.Start(ctx, entry.ID); err != nil {

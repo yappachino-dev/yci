@@ -13,12 +13,14 @@ type Config struct {
 	URL                string
 	MinSleep           string
 	MaxSleep           string
+	CookiesFile        string
 }
 
-func Download(ctx context.Context, cfg Config) error {
+// buildArgs assembles the yt-dlp invocation. Cookies are only passed when
+// configured; otherwise scraping stays cookie-free.
+func buildArgs(cfg Config) []string {
 	args := []string{
 		"--ignore-config",
-		"--no-cookies",
 		"--abort-on-error",
 
 		"--extract-audio",
@@ -32,13 +34,25 @@ func Download(ctx context.Context, cfg Config) error {
 		"--no-playlist",
 		"--sleep-interval", cfg.MinSleep,
 		"--max-sleep-interval", cfg.MaxSleep,
+	}
 
+	if cfg.CookiesFile != "" {
+		args = append(args, "--cookies", cfg.CookiesFile)
+	} else {
+		args = append(args, "--no-cookies")
+	}
+
+	args = append(args,
 		// "--sponsorblock-remove music_off,intro,outro"
 		"--output", cfg.AbsoluteOutputPath,
 		"--", cfg.URL,
-	}
+	)
 
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	return args
+}
+
+func Download(ctx context.Context, cfg Config) error {
+	cmd := exec.CommandContext(ctx, "yt-dlp", buildArgs(cfg)...)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

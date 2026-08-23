@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/yappachino-dev/yci/internal/audit"
+	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/download"
 	"github.com/yappachino-dev/yci/internal/fs"
@@ -13,6 +14,8 @@ import (
 
 type Container struct {
 	DB              *sql.DB
+	Config          config.Config
+	Paths           fs.AppPaths
 	FolderService   *library.FolderService
 	ArtistService   *library.ArtistService
 	TrackService    *library.TrackService
@@ -21,10 +24,13 @@ type Container struct {
 	DownloadService *download.Service
 	AuditService    *audit.Service
 	FileActions     *db.FileActionExecutor
-	Paths           fs.AppPaths
 }
 
-func NewContainer(dbConn *sql.DB, paths fs.AppPaths) (*Container, error) {
+// NewContainer wires all services from a single resolved config. The
+// database connection must already be open and migrated.
+func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
+	paths := fs.NewAppPaths(cfg.ConfigDir(), cfg.LibraryDir, cfg.StagingDir)
+
 	queries := store.New(dbConn)
 
 	transactor := db.NewSQLiteTransactor(dbConn)
@@ -106,6 +112,7 @@ func NewContainer(dbConn *sql.DB, paths fs.AppPaths) (*Container, error) {
 		DownloadService: downloadService,
 		AuditService:    auditService,
 		FileActions:     fileActionExecutor,
+		Config:          cfg,
 		Paths:           paths,
 	}, nil
 }
