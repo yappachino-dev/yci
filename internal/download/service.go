@@ -12,6 +12,7 @@ const (
 	SkipReasonExists         = "already exists in database"
 	SkipReasonDuplicate      = "duplicate in current request"
 	SkipReasonAlreadyInQueue = "already in download queue"
+	SkipReasonUnrecognized   = "unrecognized url format"
 )
 
 type QueueEntry struct {
@@ -193,8 +194,10 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 		}
 
 		p, err := ParseURL(u)
-		if err != nil {
-			return result, err
+		if err != nil || p.Type == URLTypeUnknown {
+			reporter.OnEnqueueSkipped(u, SkipReasonUnrecognized)
+			result.Failed++
+			continue
 		}
 
 		switch p.Type {
