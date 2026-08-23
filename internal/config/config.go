@@ -3,6 +3,7 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -56,13 +57,8 @@ func Load(env LookupFunc) (Config, error) {
 		return Config{}, fmt.Errorf("resolve config directory: %w", err)
 	}
 
-	defaultPath := filepath.Join(conf, "yci", "config.toml")
 	envPath := filepath.FromSlash(env(EnvConfigPath))
-
-	cfgPath := defaultPath
-	if envPath != "" {
-		cfgPath = envPath
-	}
+	cfgPath := cmp.Or(envPath, filepath.Join(conf, "yci", "config.toml"))
 
 	fileCfg, err := readFile(cfgPath, envPath != "")
 	if err != nil {
@@ -70,16 +66,16 @@ func Load(env LookupFunc) (Config, error) {
 	}
 
 	return Config{
-		LibraryDir: prioritize(stringConfigValue{
-			def: filepath.Join(home, "Music", "Managed"),
-			cfg: filepath.FromSlash(fileCfg.Library),
-			env: filepath.FromSlash(env(EnvLibraryPath)),
-		}),
-		StagingDir: prioritize(stringConfigValue{
-			def: filepath.Join(home, "Music", "Staging"),
-			cfg: filepath.FromSlash(fileCfg.Staging),
-			env: filepath.FromSlash(env(EnvStagingPath)),
-		}),
+		LibraryDir: cmp.Or(
+			filepath.FromSlash(env(EnvLibraryPath)),
+			filepath.FromSlash(fileCfg.Library),
+			filepath.Join(home, "Music", "Managed"),
+		),
+		StagingDir: cmp.Or(
+			filepath.FromSlash(env(EnvStagingPath)),
+			filepath.FromSlash(fileCfg.Staging),
+			filepath.Join(home, "Music", "Staging"),
+		),
 		dir: filepath.Dir(cfgPath),
 	}, nil
 }
@@ -99,22 +95,4 @@ func readFile(path string, explicit bool) (File, error) {
 	}
 
 	return f, nil
-}
-
-type stringConfigValue struct {
-	def string
-	cfg string
-	env string
-}
-
-// prioritize returns the highest-precedence non-empty value.
-func prioritize(p stringConfigValue) string {
-	switch {
-	case p.env != "":
-		return p.env
-	case p.cfg != "":
-		return p.cfg
-	default:
-		return p.def
-	}
 }
