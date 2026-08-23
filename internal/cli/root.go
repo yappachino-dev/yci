@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yappachino-dev/yci/internal/app"
+	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/fs"
 
@@ -107,10 +108,12 @@ func ContainerOK(ctx context.Context) (*app.Container, bool) {
 }
 
 func initApplication(ctx context.Context, autoMigrate bool) (*app.Container, error) {
-	paths, err := fs.GetPaths()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
-		return nil, fmt.Errorf("load application paths: %w", err)
+		return nil, fmt.Errorf("load configuration: %w", err)
 	}
+
+	paths := fs.NewAppPaths(cfg.ConfigDir(), cfg.LibraryDir, cfg.StagingDir)
 
 	if err = os.MkdirAll(paths.ConfigDir(), 0o755); err != nil {
 		return nil, fmt.Errorf("create config directory: %w", err)
