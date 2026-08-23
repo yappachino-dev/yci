@@ -235,7 +235,7 @@ func (e *FileActionExecutor) ExecutePending(ctx context.Context) error {
 		}
 
 		if err := e.repo.markDone(ctx, row.ID); err != nil {
-			return err
+			return fmt.Errorf("mark file action #%d done: %w", row.ID, err)
 		}
 	}
 
