@@ -33,9 +33,14 @@ var deleteFolderCmd = &cobra.Command{
 			return fmt.Errorf("provide the folder ID as an argument or via --%s", flagID)
 		}
 
+		folderID, err := resolveFolderID(ctx, c, id)
+		if err != nil {
+			return err
+		}
+
 		force, _ := cmd.Flags().GetBool(flagForce)
 
-		confirmed, err := confirmDestructive(cmd, fmt.Sprintf("Delete folder %q?", id))
+		confirmed, err := confirmDestructive(cmd, fmt.Sprintf("Delete folder %q?", folderID))
 		if err != nil {
 			return err
 		}
@@ -44,7 +49,7 @@ var deleteFolderCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := c.FolderService.Delete(ctx, library.FolderID(id), library.DeleteOptions{Force: force}); err != nil {
+		if err := c.FolderService.Delete(ctx, folderID, library.DeleteOptions{Force: force}); err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrFolderNotFound: fmt.Sprintf("folder %q does not exist", id),
 			})
@@ -71,9 +76,14 @@ var deleteArtistCmd = &cobra.Command{
 			return fmt.Errorf("provide the artist ID as an argument or via --%s", flagID)
 		}
 
+		artistID, err := resolveArtistID(ctx, c, id)
+		if err != nil {
+			return err
+		}
+
 		prompt := fmt.Sprintf(
 			"Delete artist %q? Linked channels are removed and its tracks become orphaned.",
-			id,
+			artistID,
 		)
 
 		confirmed, err := confirmDestructive(cmd, prompt)
@@ -85,7 +95,7 @@ var deleteArtistCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := c.ArtistService.Delete(ctx, library.ArtistID(id)); err != nil {
+		if err := c.ArtistService.Delete(ctx, artistID); err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", id),
 			})

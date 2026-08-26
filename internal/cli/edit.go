@@ -44,6 +44,11 @@ var editFolderCmd = &cobra.Command{
 			return fmt.Errorf("provide the folder ID as an argument or via --%s", flagID)
 		}
 
+		folderID, err := resolveFolderID(cmd.Context(), c, oldID)
+		if err != nil {
+			return err
+		}
+
 		name, _ := cmd.Flags().GetString(flagName)
 		folder, _ := cmd.Flags().GetString(flagParent)
 		newID, _ := cmd.Flags().GetString(flagNewID)
@@ -56,7 +61,7 @@ var editFolderCmd = &cobra.Command{
 			RegenerateSlugID: newSlug,
 		}
 
-		f, err := c.FolderService.Update(cmd.Context(), library.FolderID(oldID), params)
+		f, err := c.FolderService.Update(cmd.Context(), folderID, params)
 		if err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrFolderNotFound: fmt.Sprintf("folder %q does not exist", oldID),
@@ -94,6 +99,11 @@ var editArtistCmd = &cobra.Command{
 			return fmt.Errorf("provide the artist ID as an argument or via --%s", flagID)
 		}
 
+		artistID, err := resolveArtistID(cmd.Context(), c, oldID)
+		if err != nil {
+			return err
+		}
+
 		name, _ := cmd.Flags().GetString(flagName)
 		folder, _ := cmd.Flags().GetString(flagFolder)
 		newID, _ := cmd.Flags().GetString(flagNewID)
@@ -106,7 +116,7 @@ var editArtistCmd = &cobra.Command{
 			RegenerateSlugID: newSlug,
 		}
 
-		a, err := c.ArtistService.Update(cmd.Context(), library.ArtistID(oldID), params)
+		a, err := c.ArtistService.Update(cmd.Context(), artistID, params)
 		if err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", oldID),

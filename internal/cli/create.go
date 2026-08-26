@@ -89,14 +89,19 @@ var createChannelCmd = &cobra.Command{
 		artistID = strings.TrimSpace(artistID)
 		channelName = strings.TrimSpace(channelName)
 
-		artist, err := c.ArtistService.ByID(cmd.Context(), library.ArtistID(artistID))
+		resolvedID, err := resolveArtistID(cmd.Context(), c, artistID)
+		if err != nil {
+			return err
+		}
+
+		artist, err := c.ArtistService.ByID(cmd.Context(), resolvedID)
 		if err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrArtistNotFound: fmt.Sprintf("artist %q does not exist", artistID),
 			})
 		}
 
-		if err := c.ChannelService.Link(cmd.Context(), library.ArtistID(artistID), library.ChannelName(channelName)); err != nil {
+		if err := c.ChannelService.Link(cmd.Context(), resolvedID, library.ChannelName(channelName)); err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrChannelAlreadyLinked: fmt.Sprintf("channel %q is already linked to an artist", channelName),
 			})

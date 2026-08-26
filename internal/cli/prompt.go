@@ -64,41 +64,86 @@ func idFromArgsOrFlag(cmd *cobra.Command, flagName string, args []string) (strin
 	}
 }
 
-// resolveTrackID expands an ID prefix to the unique matching track. Full
-// IDs pass through; ambiguous prefixes are rejected with the candidate list.
+// resolveIDByPrefix expands an ID prefix to the unique matching entity of
+// any ID type. Full IDs pass through unchanged; ambiguous prefixes are
+// rejected with the candidate list. An empty input never matches.
+func resolveIDByPrefix[T ~string](input string, all []T, kind string) (T, error) {
+	if input == "" {
+		return "", fmt.Errorf("no %s matches empty ID", kind)
+	}
+
+	hasExact := false
+	var matches []T
+	for _, id := range all {
+		if string(id) == input {
+			hasExact = true
+		}
+
+		if strings.HasPrefix(string(id), input) {
+			matches = append(matches, id)
+		}
+	}
+
+	if hasExact {
+		return T(input), nil
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no %s matches ID %q", kind, input)
+	case 1:
+		return matches[0], nil
+	default:
+		ids := make([]string, 0, len(matches))
+		for _, m := range matches {
+			ids = append(ids, string(m))
+		}
+
+		return "", fmt.Errorf("ambiguous ID prefix %q matches %d %ss: %s", input, len(matches), kind, strings.Join(ids, ", "))
+	}
+}
+
+// resolveTrackID expands an ID prefix to the unique matching track.
 func resolveTrackID(ctx context.Context, c *app.Container, input string) (library.TrackID, error) {
 	tracks, err := c.TrackService.All(ctx)
 	if err != nil {
 		return "", fmt.Errorf("search tracks: %w", err)
 	}
 
-	hasExact := false
-	var matches []library.Track
+	ids := make([]library.TrackID, 0, len(tracks))
 	for _, t := range tracks {
-		if string(t.ID) == input {
-			hasExact = true
-		}
-
-		if strings.HasPrefix(string(t.ID), input) {
-			matches = append(matches, t)
-		}
+		ids = append(ids, t.ID)
 	}
 
-	if hasExact {
-		return library.TrackID(input), nil
+	return resolveIDByPrefix(input, ids, "track")
+}
+
+// resolveArtistID expands an ID prefix to the unique matching artist.
+func resolveArtistID(ctx context.Context, c *app.Container, input string) (library.ArtistID, error) {
+	artists, err := c.ArtistService.All(ctx)
+	if err != nil {
+		return "", fmt.Errorf("search artists: %w", err)
 	}
 
-	switch len(matches) {
-	case 0:
-		return "", fmt.Errorf("no track matches ID %q", input)
-	case 1:
-		return matches[0].ID, nil
-	default:
-		ids := make([]string, 0, len(matches))
-		for _, m := range matches {
-			ids = append(ids, string(m.ID))
-		}
-
-		return "", fmt.Errorf("ambiguous ID prefix %q matches %d tracks: %s", input, len(matches), strings.Join(ids, ", "))
+	ids := make([]library.ArtistID, 0, len(artists))
+	for _, a := range artists {
+		ids = append(ids, a.ID)
 	}
+
+	return resolveIDByPrefix(input, ids, "artist")
+}
+
+// resolveFolderID expands an ID prefix to the unique matching folder.
+func resolveFolderID(ctx context.Context, c *app.Container, input string) (library.FolderID, error) {
+	folders, err := c.FolderService.All(ctx)
+	if err != nil {
+		return "", fmt.Errorf("search folders: %w", err)
+	}
+
+	ids := make([]library.FolderID, 0, len(folders))
+	for _, f := range folders {
+		ids = append(ids, f.ID)
+	}
+
+	return resolveIDByPrefix(input, ids, "folder")
 }
