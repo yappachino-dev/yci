@@ -9,6 +9,9 @@ import (
 
 // Transactor runs fn inside a database transaction, joining any transaction
 // already active on ctx.
+// Transactor is a consumer-side port: library services depend on this
+// minimal contract, satisfied by db.SQLiteTransactor. It is intentionally
+// not shared with the db package.
 type Transactor interface {
 	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }

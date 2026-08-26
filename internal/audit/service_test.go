@@ -35,9 +35,9 @@ func (p fakeLibraryPaths) LibraryDir() string { return p.dir }
 func newTestService(t *testing.T, provider *fakeTrackProvider) *Service {
 	t.Helper()
 
-	return NewService(Config{
+	return NewService(ServiceConfig{
 		TrackProvider: provider,
-		Config:        fakeLibraryPaths{dir: t.TempDir()},
+		Paths:         fakeLibraryPaths{dir: t.TempDir()},
 	})
 }
 
@@ -65,7 +65,7 @@ func TestServiceMissingAll(t *testing.T) {
 			{ID: "t3", Title: "Unsourceable", RelativePath: "Artist/Album/gone.opus"},
 		},
 	})
-	svc.config = fakeLibraryPaths{dir: dir}
+	svc.paths = fakeLibraryPaths{dir: dir}
 
 	missing, err := svc.MissingAll(context.Background())
 	if err != nil {
@@ -93,7 +93,7 @@ func TestServicePropagatesStatFailure(t *testing.T) {
 			{ID: "t1", RelativePath: "locked.opus", SourceID: "someid12345"},
 		},
 	})
-	svc.config = fakeLibraryPaths{dir: dir}
+	svc.paths = fakeLibraryPaths{dir: dir}
 
 	if _, err := svc.MissingAll(context.Background()); err == nil {
 		t.Fatal("MissingAll expected error when stat fails with non-NotExist error")

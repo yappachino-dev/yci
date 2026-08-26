@@ -59,7 +59,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		DiskMover:   journaledMover,
 		Transactor:  transactor,
 		RootFolder:  rootID,
-		Config:      paths,
+		Paths:       paths,
 	})
 
 	trackService := library.NewTrackService(library.TrackServiceConfig{
@@ -67,7 +67,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		FolderResolver: folderService,
 		DiskMover:      journaledMover,
 		Transactor:     transactor,
-		Config:         paths,
+		Paths:          paths,
 	})
 
 	artistService := library.NewArtistService(library.ArtistServiceConfig{
@@ -86,7 +86,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		MetaReader:     metaReader,
 		DiskMover:      journaledMover,
 		Transactor:     transactor,
-		Config:         paths,
+		Paths:          paths,
 	})
 
 	downloadService := download.NewService(download.ServiceConfig{
@@ -94,12 +94,12 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		TrackChecker: trackService,
 		DirReader:    diskReader,
 		Transactor:   transactor,
-		Config:       paths,
+		StagingDirs:  paths,
 	})
 
-	auditService := audit.NewService(audit.Config{
+	auditService := audit.NewService(audit.ServiceConfig{
 		TrackProvider: trackService,
-		Config:        paths,
+		Paths:         paths,
 	})
 
 	return &Container{

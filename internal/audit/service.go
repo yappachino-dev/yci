@@ -17,24 +17,26 @@ type TrackProvider interface {
 	ByFolder(ctx context.Context, id library.FolderID, recursive bool) ([]library.Track, error)
 }
 
-type LibraryConfig interface {
+// LibraryPaths supplies the library root directory. Satisfied by
+// fs.AppPaths.
+type LibraryPaths interface {
 	LibraryDir() string
 }
 
-type Config struct {
+type ServiceConfig struct {
 	TrackProvider TrackProvider
-	Config        LibraryConfig
+	Paths         LibraryPaths
 }
 
 type Service struct {
 	trackProvider TrackProvider
-	config        LibraryConfig
+	paths         LibraryPaths
 }
 
-func NewService(cfg Config) *Service {
+func NewService(cfg ServiceConfig) *Service {
 	return &Service{
 		trackProvider: cfg.TrackProvider,
-		config:        cfg.Config,
+		paths:         cfg.Paths,
 	}
 }
 
@@ -74,7 +76,7 @@ func (s *Service) filterMissing(tracks []library.Track) ([]library.Track, error)
 			continue
 		}
 
-		absPath := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
+		absPath := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(string(t.RelativePath)))
 		if _, err := os.Stat(absPath); err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
 				return nil, fmt.Errorf("stat track %q: %w", t.ID, err)

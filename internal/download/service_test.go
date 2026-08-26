@@ -68,9 +68,9 @@ func (fakeTransactor) WithinTransaction(ctx context.Context, fn func(context.Con
 	return fn(ctx)
 }
 
-type fakeStagingConfig struct{ dir string }
+type fakeStagingDirs struct{ dir string }
 
-func (f *fakeStagingConfig) StagingDir() string { return f.dir }
+func (f *fakeStagingDirs) StagingDir() string { return f.dir }
 
 type captureReporter struct {
 	skipped map[string]string
@@ -97,7 +97,7 @@ func newTestService(repo *fakeQueueRepo, checker *fakeTrackChecker, dirs *fakeDi
 		TrackChecker: checker,
 		DirReader:    dirs,
 		Transactor:   fakeTransactor{},
-		Config:       &fakeStagingConfig{dir: "/tmp/staging"},
+		StagingDirs:  &fakeStagingDirs{dir: "/tmp/staging"},
 	})
 }
 

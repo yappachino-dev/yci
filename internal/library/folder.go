@@ -76,7 +76,7 @@ type FolderService struct {
 	diskMover   PhysicalMover
 	transactor  Transactor
 	rootFolder  FolderID
-	config      StagingConfig
+	paths       PathsProvider
 }
 
 type FolderServiceConfig struct {
@@ -85,7 +85,7 @@ type FolderServiceConfig struct {
 	DiskMover   PhysicalMover
 	Transactor  Transactor
 	RootFolder  FolderID
-	Config      StagingConfig
+	Paths       PathsProvider
 }
 
 func NewFolderService(cfg FolderServiceConfig) *FolderService {
@@ -95,7 +95,7 @@ func NewFolderService(cfg FolderServiceConfig) *FolderService {
 		diskMover:   cfg.DiskMover,
 		transactor:  cfg.Transactor,
 		rootFolder:  cfg.RootFolder,
-		config:      cfg.Config,
+		paths:       cfg.Paths,
 	}
 }
 
@@ -262,8 +262,8 @@ func (s *FolderService) Update(ctx context.Context, oldID FolderID, params Folde
 
 			saved = updated
 
-			currentAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(currentPath))
-			draftAbs := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(draftPath))
+			currentAbs := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(currentPath))
+			draftAbs := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(draftPath))
 
 			if err := s.diskMover.MoveDirectory(txCtx, currentAbs, draftAbs); err != nil {
 				return err

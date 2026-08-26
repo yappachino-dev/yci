@@ -74,7 +74,9 @@ type PhysicalTrackMover interface {
 	DeleteFile(ctx context.Context, path string) error
 }
 
-type StagingConfig interface {
+// PathsProvider supplies the library's root directories. Satisfied by
+// fs.AppPaths.
+type PathsProvider interface {
 	StagingDir() string
 	LibraryDir() string
 }
@@ -85,7 +87,7 @@ type TrackService struct {
 	folderResolver FolderResolver
 	diskMover      PhysicalTrackMover
 	transactor     Transactor
-	config         StagingConfig
+	paths          PathsProvider
 }
 
 type TrackServiceConfig struct {
@@ -93,7 +95,7 @@ type TrackServiceConfig struct {
 	FolderResolver FolderResolver
 	DiskMover      PhysicalTrackMover
 	Transactor     Transactor
-	Config         StagingConfig
+	Paths          PathsProvider
 }
 
 func NewTrackService(cfg TrackServiceConfig) *TrackService {
@@ -102,7 +104,7 @@ func NewTrackService(cfg TrackServiceConfig) *TrackService {
 		folderResolver: cfg.FolderResolver,
 		diskMover:      cfg.DiskMover,
 		transactor:     cfg.Transactor,
-		config:         cfg.Config,
+		paths:          cfg.Paths,
 	}
 }
 
@@ -172,7 +174,7 @@ func (s *TrackService) MoveByArtist(ctx context.Context, id ArtistID, oldFolder,
 			return err
 		}
 
-		libDir := s.config.LibraryDir()
+		libDir := s.paths.LibraryDir()
 		for _, m := range moves {
 			oldAbs := filepath.Join(libDir, filepath.FromSlash(string(m.OldPath)))
 			newAbs := filepath.Join(libDir, filepath.FromSlash(string(m.NewPath)))
@@ -245,7 +247,7 @@ func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
 			return err
 		}
 
-		absPath := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(string(track.RelativePath)))
+		absPath := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(string(track.RelativePath)))
 
 		if err := s.diskMover.DeleteFile(txCtx, absPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to drop file on physical drive: %w", err)

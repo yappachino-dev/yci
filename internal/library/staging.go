@@ -62,7 +62,7 @@ type StagingService struct {
 	metaReader     MetadataReader
 	diskMover      PhysicalTrackMover
 	transactor     Transactor
-	config         StagingConfig
+	paths          PathsProvider
 }
 
 type StagingServiceConfig struct {
@@ -73,7 +73,7 @@ type StagingServiceConfig struct {
 	MetaReader     MetadataReader
 	DiskMover      PhysicalTrackMover
 	Transactor     Transactor
-	Config         StagingConfig
+	Paths          PathsProvider
 }
 
 func NewStagingService(cfg StagingServiceConfig) *StagingService {
@@ -85,7 +85,7 @@ func NewStagingService(cfg StagingServiceConfig) *StagingService {
 		metaReader:     cfg.MetaReader,
 		diskMover:      cfg.DiskMover,
 		transactor:     cfg.Transactor,
-		config:         cfg.Config,
+		paths:          cfg.Paths,
 	}
 }
 
@@ -100,7 +100,7 @@ type TrackMetadata struct {
 type LinkHandler func(channelName string, title string) (StagingResult, error)
 
 func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {
-	stagingDir := s.config.StagingDir()
+	stagingDir := s.paths.StagingDir()
 
 	files, err := os.ReadDir(stagingDir)
 	if err != nil {
@@ -195,7 +195,7 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, channelName 
 // planImport performs the decision phase for one staged file and computes
 // its destination paths.
 func (s *StagingService) planImport(ctx context.Context, fileName string, onUnknown LinkHandler) (*stagingImportPlan, error) {
-	oldPathNative := filepath.Join(s.config.StagingDir(), fileName)
+	oldPathNative := filepath.Join(s.paths.StagingDir(), fileName)
 
 	m, err := s.metaReader.Read(ctx, oldPathNative)
 	if err != nil {
@@ -229,7 +229,7 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 		relPath = path.Join(folderPath, newFilename)
 	}
 
-	absPathNative := filepath.Join(s.config.LibraryDir(), filepath.FromSlash(relPath))
+	absPathNative := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(relPath))
 
 	return &stagingImportPlan{
 		params: TrackCreateParams{

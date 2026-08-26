@@ -105,7 +105,9 @@ type QueueRepo interface {
 	RetryHardFailed(ctx context.Context) (int64, error)
 }
 
-type StagingConfig interface {
+// StagingDirProvider supplies the staging directory root. Satisfied by
+// fs.AppPaths.
+type StagingDirProvider interface {
 	StagingDir() string
 }
 
@@ -118,7 +120,7 @@ type ServiceConfig struct {
 	TrackChecker TrackChecker
 	DirReader    DirReader
 	Transactor   Transactor
-	Config       StagingConfig
+	StagingDirs  StagingDirProvider
 }
 
 type Service struct {
@@ -126,7 +128,7 @@ type Service struct {
 	trackChecker TrackChecker
 	dirReader    DirReader
 	transactor   Transactor
-	config       StagingConfig
+	stagingDirs  StagingDirProvider
 }
 
 func NewService(cfg ServiceConfig) *Service {
@@ -135,7 +137,7 @@ func NewService(cfg ServiceConfig) *Service {
 		trackChecker: cfg.TrackChecker,
 		dirReader:    cfg.DirReader,
 		transactor:   cfg.Transactor,
-		config:       cfg.Config,
+		stagingDirs:  cfg.StagingDirs,
 	}
 }
 
@@ -175,7 +177,7 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 	var result EnqueueResult
 	seenIDs := make(map[string]string)
 
-	stagedFiles, err := s.dirReader.ReadDir(s.config.StagingDir())
+	stagedFiles, err := s.dirReader.ReadDir(s.stagingDirs.StagingDir())
 	if err != nil {
 		return result, fmt.Errorf("read staged dir: %w", err)
 	}
@@ -367,7 +369,7 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 	}
 
 	var result ProcessResult
-	targetPath := filepath.Join(s.config.StagingDir(), "%(id)s.opus")
+	targetPath := filepath.Join(s.stagingDirs.StagingDir(), "%(id)s.opus")
 
 	if err := s.repo.ResetPending(ctx); err != nil {
 		return result, fmt.Errorf("reset interrupted downloads: %w", err)

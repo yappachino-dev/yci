@@ -94,7 +94,7 @@ func newLibraryDBConn(t *testing.T) *sql.DB {
 	return dbConn
 }
 
-// testPaths implements StagingConfig against temporary directories.
+// testPaths implements PathsProvider against temporary directories.
 type testPaths struct {
 	lib     string
 	staging string
@@ -152,14 +152,14 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 		DiskMover:   journaled,
 		Transactor:  env.txr,
 		RootFolder:  rootID,
-		Config:      env.paths,
+		Paths:       env.paths,
 	})
 	env.tracks = NewTrackService(TrackServiceConfig{
 		TrackRepo:      env.repos.tracks,
 		FolderResolver: env.folders,
 		DiskMover:      journaled,
 		Transactor:     env.txr,
-		Config:         env.paths,
+		Paths:          env.paths,
 	})
 	env.artists = NewArtistService(ArtistServiceConfig{
 		ArtistRepo:    env.repos.artists,
@@ -176,7 +176,7 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 		MetaReader:     NewTagMetadataReader(),
 		DiskMover:      journaled,
 		Transactor:     env.txr,
-		Config:         env.paths,
+		Paths:          env.paths,
 	})
 
 	return env
