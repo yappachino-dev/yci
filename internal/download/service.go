@@ -89,6 +89,9 @@ type TrackChecker interface {
 	ExistsBySourceID(ctx context.Context, id string) (bool, error)
 }
 
+// DirReader lists file names in a directory. Error contract: not-exist
+// failures satisfy errors.Is(err, fs.ErrNotExist) via wrapped stdlib
+// errors; callers decide whether absence is fatal.
 type DirReader interface {
 	ReadDir(path string) ([]string, error)
 }

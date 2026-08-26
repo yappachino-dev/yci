@@ -8,7 +8,9 @@ import (
 
 // OSDiskMover applies filesystem operations synchronously using the os
 // package. Contexts are accepted to satisfy db.DiskMover but ignored —
-// plain filesystem calls cannot be cancelled.
+// plain filesystem calls cannot be cancelled. Errors are returned as
+// returned by the os package (wrapped where noted); see the error
+// contract on db.DiskMover.
 type OSDiskMover struct{}
 
 func NewOSDiskMover() *OSDiskMover {

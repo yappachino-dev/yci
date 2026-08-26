@@ -40,6 +40,12 @@ type FileActionEntry struct {
 }
 
 // DiskMover applies journal entries to disk. Implemented by fs.OSDiskMover.
+//
+// Error contract: implementations return wrapped stdlib errors — callers
+// test with errors.Is(err, os.ErrNotExist) / os.ErrExist), never with
+// custom fs sentinels. NotExist means the source is gone (treat as
+// already-synced); any other error is a hard failure that must not be
+// swallowed.
 type DiskMover interface {
 	MoveFile(ctx context.Context, oldPath, newPath string) error
 	MoveDirectory(ctx context.Context, oldRootPath, newRootPath string) error
