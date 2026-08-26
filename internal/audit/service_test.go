@@ -35,10 +35,7 @@ func (p fakeLibraryPaths) LibraryDir() string { return p.dir }
 func newTestService(t *testing.T, provider *fakeTrackProvider) *Service {
 	t.Helper()
 
-	return NewService(ServiceConfig{
-		TrackProvider: provider,
-		Paths:         fakeLibraryPaths{dir: t.TempDir()},
-	})
+	return NewService(provider, fakeLibraryPaths{dir: t.TempDir()})
 }
 
 func writeLibraryFile(t *testing.T, dir, relPath string) {

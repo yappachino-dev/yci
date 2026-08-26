@@ -97,10 +97,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		StagingDirs:  paths,
 	})
 
-	auditService := audit.NewService(audit.ServiceConfig{
-		TrackProvider: trackService,
-		Paths:         paths,
-	})
+	auditService := audit.NewService(trackService, paths)
 
 	return &Container{
 		DB:              dbConn,

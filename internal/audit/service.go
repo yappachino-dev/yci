@@ -33,10 +33,12 @@ type Service struct {
 	paths         LibraryPaths
 }
 
-func NewService(cfg ServiceConfig) *Service {
+// NewService takes its two collaborators directly: at fewer than three
+// dependencies a config struct adds ritual without value (style-guide §2).
+func NewService(tracks TrackProvider, paths LibraryPaths) *Service {
 	return &Service{
-		trackProvider: cfg.TrackProvider,
-		paths:         cfg.Paths,
+		trackProvider: tracks,
+		paths:         paths,
 	}
 }
 
