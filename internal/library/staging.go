@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/yappachino-dev/yci/internal/fs"
@@ -192,6 +193,11 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, channelName 
 	return &decision, nil
 }
 
+// sourceIDPattern matches YouTube video IDs — the only staging filename
+// convention yci writes (<id>.opus). Anything else fails loudly instead of
+// being imported with the whole filename as its source ID.
+var sourceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
 // planImport performs the decision phase for one staged file and computes
 // its destination paths.
 func (s *StagingService) planImport(ctx context.Context, fileName string, onUnknown LinkHandler) (*stagingImportPlan, error) {
@@ -205,6 +211,10 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 	channelName := ChannelName(strings.TrimSpace(m.Artist))
 	title := strings.TrimSpace(m.Title)
 	sourceID := strings.TrimSuffix(fileName, ".opus")
+
+	if !sourceIDPattern.MatchString(sourceID) {
+		return nil, fmt.Errorf("file name is not a staged download (expected <video-id>.opus); move or rename it out of staging")
+	}
 
 	decision, err := s.resolveImportDecision(ctx, channelName, m, onUnknown)
 	if err != nil {

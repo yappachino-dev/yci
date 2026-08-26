@@ -25,7 +25,7 @@ func TestStagingImportEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sourceName := "abc123.opus"
+	sourceName := "dQw4w9WgXcQ.opus"
 	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), sourceName), "My Song", "An Artist")
 
 	handlerInvoked := false
@@ -54,7 +54,7 @@ func TestStagingImportEndToEnd(t *testing.T) {
 	if imported.Title != "My Song" {
 		t.Errorf("title = %q, want %q (from tags)", imported.Title, "My Song")
 	}
-	if imported.SourceID != "abc123" {
+	if imported.SourceID != "dQw4w9WgXcQ" {
 		t.Errorf("source ID = %q, want %q", imported.SourceID, "abc123")
 	}
 	if imported.RelativePath != "Music/My Song.opus" {
@@ -112,7 +112,7 @@ func TestStagingImportUnknownChannelHandlerDecisions(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "id1.opus"), "Song", "Unknown Channel")
+			writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "aBcDeFgHiJk.opus"), "Song", "Unknown Channel")
 
 			onUnknown := func(channelName, title string) (StagingResult, error) {
 				return tt.result, nil
@@ -139,7 +139,7 @@ func TestStagingImportUnknownChannelHandlerDecisions(t *testing.T) {
 			}
 
 			if tt.wantTracks == 1 {
-				stillThere, statErr := os.Stat(filepath.Join(env.paths.StagingDir(), "id1.opus"))
+				stillThere, statErr := os.Stat(filepath.Join(env.paths.StagingDir(), "aBcDeFgHiJk.opus"))
 				if statErr == nil && stillThere != nil {
 					t.Error("staged file not moved into library")
 				}
@@ -152,8 +152,8 @@ func TestStagingImportAbortStopsLoop(t *testing.T) {
 	env := newLibraryEnv(t)
 	ctx := t.Context()
 
-	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "one.opus"), "One", "Unknown Channel")
-	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "two.opus"), "Two", "Unknown Channel")
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "aBcDeFgHiJk.opus"), "One", "Unknown Channel")
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "lLkJhGfDsAp.opus"), "Two", "Unknown Channel")
 
 	calls := 0
 	onUnknown := func(channelName, title string) (StagingResult, error) {
@@ -187,7 +187,7 @@ func TestSanitizeFilenameInImportedTitle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "id1.opus"), `Weird/Title: Remix*`, "An Artist")
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "aBcDeFgHiJk.opus"), `Weird/Title: Remix*`, "An Artist")
 
 	onUnknown := func(channelName, title string) (StagingResult, error) {
 		return StagingResult{Action: ActionImport, Artist: artist.ID}, nil
@@ -206,5 +206,44 @@ func TestSanitizeFilenameInImportedTitle(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(env.paths.LibraryDir(), filepath.FromSlash(string(tracks[0].RelativePath)))); statErr != nil {
 		t.Errorf("sanitized file missing on disk: %v", statErr)
+	}
+}
+
+func TestStagingImportRejectsForeignFilenames(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	artist, err := env.artists.Create(ctx, "", "", "An Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A title-named file (as produced by another managed env) must not be
+	// imported with the whole filename as its source ID.
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "From The Start.opus"), "From The Start", "An Artist")
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "dQw4w9WgXcQ.opus"), "Real Song", "An Artist")
+
+	onUnknown := func(channelName, title string) (StagingResult, error) {
+		return StagingResult{Action: ActionImport, Artist: artist.ID}, nil
+	}
+
+	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+		t.Fatalf("process staging: %v", err)
+	}
+
+	tracks, err := env.tracks.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 1 {
+		t.Fatalf("tracks = %d, want 1 (only the well-formed staged file)", len(tracks))
+	}
+	if tracks[0].SourceID != "dQw4w9WgXcQ" {
+		t.Errorf("source ID = %q, want dQw4w9WgXcQ", tracks[0].SourceID)
+	}
+
+	// The rejected file stays in staging for the user to deal with.
+	if _, statErr := os.Stat(filepath.Join(env.paths.StagingDir(), "From The Start.opus")); statErr != nil {
+		t.Errorf("foreign file should remain untouched in staging: %v", statErr)
 	}
 }
