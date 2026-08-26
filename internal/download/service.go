@@ -15,11 +15,15 @@ const (
 	SkipReasonUnrecognized   = "unrecognized url format"
 )
 
-// Queue row states; typed treatment tracked separately (TD-04).
+// QueueStatus is the lifecycle state of a queue row. The SQL CHECK
+// constraint remains the defense in depth; this type catches typos at
+// compile time on the Go side.
+type QueueStatus string
+
 const (
-	statusPending    = "pending"
-	statusProcessing = "processing"
-	statusFailed     = "failed"
+	QueueStatusPending    QueueStatus = "pending"
+	QueueStatusProcessing QueueStatus = "processing"
+	QueueStatusFailed     QueueStatus = "failed"
 )
 
 // maxAttempts mirrors the SQL retry cap in GetNextActionableDownload.
@@ -27,13 +31,13 @@ const maxAttempts = 3
 
 // isActionable reports whether an entry will be picked up by Next.
 func isActionable(e QueueEntry) bool {
-	return (e.Status == statusPending || e.Status == statusFailed) && e.Attempts < maxAttempts
+	return (e.Status == QueueStatusPending || e.Status == QueueStatusFailed) && e.Attempts < maxAttempts
 }
 
 type QueueEntry struct {
 	ID       int
 	SourceID string
-	Status   string
+	Status   QueueStatus
 	Attempts int
 	ErrorMsg string
 }

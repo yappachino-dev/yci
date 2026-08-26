@@ -29,7 +29,7 @@ func (r *SQLiteQueueRepo) All(ctx context.Context) ([]QueueEntry, error) {
 		entries = append(entries, QueueEntry{
 			ID:       int(r.ID),
 			SourceID: r.SourceID,
-			Status:   r.Status,
+			Status:   QueueStatus(r.Status),
 			Attempts: int(r.Attempts),
 			ErrorMsg: db.FromNullString(r.ErrorMsg),
 		})
@@ -63,7 +63,7 @@ func (r *SQLiteQueueRepo) Next(ctx context.Context) (QueueEntry, bool, error) {
 	return QueueEntry{
 		ID:       int(entry.ID),
 		SourceID: entry.SourceID,
-		Status:   entry.Status,
+		Status:   QueueStatus(entry.Status),
 		Attempts: int(entry.Attempts),
 		ErrorMsg: db.FromNullString(entry.ErrorMsg),
 	}, true, nil
