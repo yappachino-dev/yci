@@ -49,7 +49,7 @@ type ChannelLinker interface {
 
 // MetadataReader reads tag metadata from an audio file.
 type MetadataReader interface {
-	Read(ctx context.Context, path string) (TrackMetadata, error)
+	Read(path string) (TrackMetadata, error)
 }
 
 // StagingService imports finished downloads from the staging directory
@@ -197,7 +197,7 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, channelName 
 func (s *StagingService) planImport(ctx context.Context, fileName string, onUnknown LinkHandler) (*stagingImportPlan, error) {
 	oldPathNative := filepath.Join(s.paths.StagingDir(), fileName)
 
-	m, err := s.metaReader.Read(ctx, oldPathNative)
+	m, err := s.metaReader.Read(oldPathNative)
 	if err != nil {
 		return nil, fmt.Errorf("extract track metadata: %w", err)
 	}
