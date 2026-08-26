@@ -1,6 +1,7 @@
 package library
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -28,6 +29,9 @@ var (
 	ErrTrackPathExists = errors.New("track path already exists")
 )
 
+// SourceYouTube is the only supported track source today.
+const SourceYouTube = "youtube"
+
 type Track struct {
 	ID           TrackID
 	Title        string
@@ -36,6 +40,9 @@ type Track struct {
 	FolderID     FolderID
 	RelativePath TrackPath
 	SourceID     string
+	// Source names the origin platform ("youtube" today). Kept as data
+	// now so adding sources later is a value change, not a migration.
+	Source string
 }
 
 type TrackCreateParams struct {
@@ -46,6 +53,9 @@ type TrackCreateParams struct {
 	FolderID     FolderID
 	RelativePath TrackPath
 	SourceID     string
+	// Source names the origin platform ("youtube" today). Kept as data
+	// now so adding sources later is a value change, not a migration.
+	Source string
 }
 
 type TrackPathMove struct {
@@ -125,6 +135,7 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (Tr
 		ArtistID:     params.ArtistID,
 		RelativePath: params.RelativePath,
 		SourceID:     strings.TrimSpace(params.SourceID),
+		Source:       cmp.Or(strings.TrimSpace(params.Source), SourceYouTube),
 	}
 
 	if err := s.repo.Create(ctx, t); err != nil {
@@ -281,6 +292,7 @@ func rowToTrack(row store.Track) Track {
 		FolderID:     FolderID(db.FromNullString(row.FolderID)),
 		RelativePath: TrackPath(row.RelativePath),
 		SourceID:     db.FromNullString(row.SourceID),
+		Source:       row.Source,
 	}
 }
 
@@ -293,6 +305,7 @@ func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 		FolderID:     db.ToNullString(string(t.FolderID)),
 		RelativePath: string(t.RelativePath),
 		SourceID:     db.ToNullString(t.SourceID),
+		Source:       t.Source,
 	})
 	if err != nil {
 		return db.MapSQLError(err, ErrTrackNotFound, ErrTrackPathExists)

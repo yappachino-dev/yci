@@ -56,4 +56,5 @@ type Track struct {
 	RelativePath string
 	SourceID     sql.NullString
 	FolderID     sql.NullString
+	Source       string
 }

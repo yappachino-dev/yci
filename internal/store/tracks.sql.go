@@ -38,7 +38,8 @@ tracks (
     folder_id,
     duration_sec,
     relative_path,
-    source_id
+    source_id,
+    source
 )
 VALUES
 (
@@ -49,7 +50,8 @@ VALUES
     ?5,
     ?6,
     ?7,
-    ?8
+    ?8,
+    ?9
 )
 `
 
@@ -62,6 +64,7 @@ type CreateTrackParams struct {
 	DurationSec  sql.NullInt64
 	RelativePath string
 	SourceID     sql.NullString
+	Source       string
 }
 
 func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error {
@@ -74,6 +77,7 @@ func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error 
 		arg.DurationSec,
 		arg.RelativePath,
 		arg.SourceID,
+		arg.Source,
 	)
 	return err
 }
@@ -93,7 +97,7 @@ func (q *Queries) DeleteTrack(ctx context.Context, id string) (int64, error) {
 }
 
 const getTrack = `-- name: GetTrack :one
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source
 FROM
     tracks
 WHERE
@@ -116,12 +120,13 @@ func (q *Queries) GetTrack(ctx context.Context, id string) (GetTrackRow, error) 
 		&i.Track.RelativePath,
 		&i.Track.SourceID,
 		&i.Track.FolderID,
+		&i.Track.Source,
 	)
 	return i, err
 }
 
 const getTracksByArtist = `-- name: GetTracksByArtist :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source
 FROM
     tracks
 WHERE
@@ -150,6 +155,7 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 			&i.Track.RelativePath,
 			&i.Track.SourceID,
 			&i.Track.FolderID,
+			&i.Track.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -165,7 +171,7 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 }
 
 const getTracksByPath = `-- name: GetTracksByPath :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source
 FROM
     tracks
 WHERE
@@ -194,6 +200,7 @@ func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]GetTracks
 			&i.Track.RelativePath,
 			&i.Track.SourceID,
 			&i.Track.FolderID,
+			&i.Track.Source,
 		); err != nil {
 			return nil, err
 		}

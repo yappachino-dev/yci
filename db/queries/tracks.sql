@@ -8,7 +8,8 @@ tracks (
     folder_id,
     duration_sec,
     relative_path,
-    source_id
+    source_id,
+    source
 )
 VALUES
 (
@@ -19,7 +20,8 @@ VALUES
     :folder_id,
     :duration_sec,
     :relative_path,
-    :source_id
+    :source_id,
+    :source
 );
 
 -- name: GetTrack :one

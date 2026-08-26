@@ -14,14 +14,21 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// newLibraryDB opens a database with the schema subset the repositories rely
-// on (mirrors migrations 001 + 004).
+// newLibraryDB opens a database carrying the full real migration chain.
 func newLibraryDB(t *testing.T) *store.Queries {
 	return store.New(newLibraryDBConn(t))
 }
 
+// newLibraryDBConn opens a database migrated with the real schema from
+// db/migrations — no hand-maintained fixture, so new columns and tables
+// cannot drift out from under the tests (the failure mode that motivated
+// this switch).
 func newLibraryDBConn(t *testing.T) *sql.DB {
 	t.Helper()
+
+	if err := db.SetUpMigrationContext(); err != nil {
+		t.Fatalf("set up migrations: %v", err)
+	}
 
 	dbConn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -29,66 +36,13 @@ func newLibraryDBConn(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { dbConn.Close() })
 
-	// Match initApplication: the FK actions in the schema below are only
-	// enforced while the pragma is on.
+	// Match initApplication: FK actions are only enforced while on.
 	if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 		t.Fatalf("enable foreign keys: %v", err)
 	}
 
-	const schema = `
-		CREATE TABLE folders (
-			id TEXT PRIMARY KEY,
-			display_name TEXT NOT NULL,
-			parent_id TEXT,
-			FOREIGN KEY (parent_id) REFERENCES folders (id) ON DELETE CASCADE ON UPDATE CASCADE
-		);
-
-		CREATE TABLE artists (
-			id TEXT PRIMARY KEY,
-			display_name TEXT NOT NULL,
-			folder_id TEXT,
-			FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL ON UPDATE CASCADE
-		);
-
-		CREATE TABLE channels (
-			id INTEGER PRIMARY KEY,
-			artist_id TEXT NOT NULL,
-			channel_name TEXT,
-			FOREIGN KEY (artist_id) REFERENCES artists (id),
-			UNIQUE (artist_id, channel_name)
-		);
-
-		CREATE TABLE tracks (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			album TEXT,
-			artist_id TEXT,
-			duration_sec INTEGER DEFAULT 0,
-			relative_path TEXT NOT NULL UNIQUE,
-			source_id TEXT,
-			folder_id TEXT,
-			FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE SET NULL ON UPDATE CASCADE,
-			FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL ON UPDATE CASCADE
-		);
-
-		CREATE TABLE fs_journal (
-			id INTEGER PRIMARY KEY,
-			op TEXT NOT NULL CHECK (op IN ('move_file', 'move_dir', 'delete_file')),
-			src TEXT NOT NULL,
-			dst TEXT,
-			status TEXT NOT NULL CHECK (status IN ('pending', 'done', 'failed')) DEFAULT 'pending',
-			error TEXT,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`
-
-	if _, err := dbConn.Exec(schema); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-
-	// Match migration 003: the root folder row exists.
-	if _, err := dbConn.Exec(`INSERT INTO folders (id, display_name, parent_id) VALUES ('root', 'Root', NULL)`); err != nil {
-		t.Fatalf("seed root folder: %v", err)
+	if err := db.RunMigrations(t.Context(), dbConn); err != nil {
+		t.Fatalf("run migrations: %v", err)
 	}
 
 	return dbConn
