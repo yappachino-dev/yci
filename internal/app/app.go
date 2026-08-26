@@ -21,6 +21,7 @@ type Container struct {
 	TrackService    *library.TrackService
 	ChannelService  *library.ChannelService
 	StagingService  *library.StagingService
+	PlaylistService *library.PlaylistService
 	DownloadService *download.Service
 	AuditService    *audit.Service
 	FileActions     *db.FileActionExecutor
@@ -47,6 +48,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 	trackRepo := library.NewSQLiteTrackRepository(queries)
 	channelRepo := library.NewSQLiteChannelRepository(queries)
 	queueRepo := download.NewSQLiteQueueRepo(queries)
+	playlistRepo := library.NewSQLitePlaylistRepository(queries)
 
 	diskReader := fs.NewOSDiskReader()
 	metaReader := library.NewTagMetadataReader()
@@ -97,6 +99,12 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		StagingDirs:  paths,
 	})
 
+	playlistService := library.NewPlaylistService(library.PlaylistServiceConfig{
+		Repo:   playlistRepo,
+		Tracks: trackService,
+		Paths:  paths,
+	})
+
 	auditService := audit.NewService(trackService, paths)
 
 	return &Container{
@@ -106,6 +114,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		TrackService:    trackService,
 		ChannelService:  channelService,
 		StagingService:  stagingService,
+		PlaylistService: playlistService,
 		DownloadService: downloadService,
 		AuditService:    auditService,
 		FileActions:     fileActionExecutor,

@@ -247,6 +247,11 @@ func (s *TrackService) ByFolder(ctx context.Context, folderID FolderID, recursiv
 	return exactMatches, nil
 }
 
+// ByID fetches a single track; satisfies TrackFinder.
+func (s *TrackService) ByID(ctx context.Context, id TrackID) (Track, error) {
+	return s.repo.ByID(ctx, id)
+}
+
 func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
 	track, err := s.repo.ByID(ctx, id)
 	if err != nil {

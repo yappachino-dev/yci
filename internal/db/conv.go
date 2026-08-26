@@ -17,3 +17,11 @@ func ToNullString(s string) sql.NullString {
 		return sql.NullString{String: s, Valid: true}
 	}
 }
+
+func FromNullInt64(n sql.NullInt64) int64 {
+	if n.Valid {
+		return n.Int64
+	} else {
+		return 0
+	}
+}

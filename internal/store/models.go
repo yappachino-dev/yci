@@ -47,6 +47,17 @@ type FsJournal struct {
 	CreatedAt time.Time
 }
 
+type Playlist struct {
+	ID   int64
+	Name string
+}
+
+type PlaylistTrack struct {
+	PlaylistID int64
+	TrackID    string
+	Position   int64
+}
+
 type Track struct {
 	ID           string
 	Title        string

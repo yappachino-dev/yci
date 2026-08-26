@@ -62,6 +62,7 @@ func (p testPaths) StagingDir() string { return p.staging }
 // through the transactor's post-commit hook.
 type libraryEnv struct {
 	dbConn   *sql.DB
+	queries  *store.Queries
 	txr      *db.SQLiteTransactor
 	actions  *db.FileActionExecutor
 	folders  *FolderService
@@ -82,7 +83,7 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 
 	dbConn := newLibraryDBConn(t)
 	queries := store.New(dbConn)
-	env := &libraryEnv{dbConn: dbConn}
+	env := &libraryEnv{dbConn: dbConn, queries: queries}
 
 	rootID := FolderID(RootID)
 	env.paths = testPaths{lib: t.TempDir(), staging: t.TempDir()}
