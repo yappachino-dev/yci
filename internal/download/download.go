@@ -2,10 +2,19 @@
 package download
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
+)
+
+var (
+	ErrForbidden = errors.New("access forbidden")
+	ErrExecution = errors.New("yt-dlp execution failed")
 )
 
 type Config struct {
@@ -42,8 +51,8 @@ func buildArgs(cfg Config) []string {
 		args = append(args, "--no-cookies")
 	}
 
-	args = append(args,
-		// "--sponsorblock-remove music_off,intro,outro"
+	args = append(
+		args,
 		"--output", cfg.AbsoluteOutputPath,
 		"--", cfg.URL,
 	)
@@ -54,12 +63,32 @@ func buildArgs(cfg Config) []string {
 func Download(ctx context.Context, cfg Config) error {
 	cmd := exec.CommandContext(ctx, "yt-dlp", buildArgs(cfg)...)
 
+	var stderrBuf bytes.Buffer
+
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 
 	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderrStr := strings.TrimSpace(stderrBuf.String())
+
+			return fmt.Errorf("execute yt-dlp: %w: %s", parseError(stderrStr), stderrStr)
+		}
+
 		return fmt.Errorf("execute yt-dlp: %w", err)
 	}
 
 	return nil
+}
+
+func parseError(stderr string) error {
+	s := strings.ToLower(stderr)
+
+	switch {
+	case strings.Contains(s, "http error 403") || strings.Contains(s, "403: forbidden"):
+		return ErrForbidden
+	default:
+		return ErrExecution
+	}
 }

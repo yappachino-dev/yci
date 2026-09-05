@@ -1,6 +1,7 @@
 package download
 
 import (
+	"errors"
 	"slices"
 	"testing"
 )
@@ -45,5 +46,26 @@ func TestBuildArgsWithCookies(t *testing.T) {
 	}
 	if slices.Contains(args, "--no-cookies") {
 		t.Error("--no-cookies must be absent when CookiesFile is set")
+	}
+}
+
+func TestParseYtDlpErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		stderr  string
+		wantErr error
+	}{
+		{"empty string", "", ErrExecution},
+		{"forbidden", "ERROR: unable to download video data: HTTP Error 403: Forbidden", ErrForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := parseError(tt.stderr)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("Err = %v, want %v", err, tt.wantErr)
+			}
+		})
 	}
 }
