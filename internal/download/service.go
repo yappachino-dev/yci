@@ -26,12 +26,12 @@ const (
 	QueueStatusFailed     QueueStatus = "failed"
 )
 
-// maxAttempts mirrors the SQL retry cap in GetNextActionableDownload.
+// maxAttempts is hardcoded amount of times to retry a download
 const maxAttempts = 3
 
 // isActionable reports whether an entry will be picked up by Next.
 func isActionable(e QueueEntry) bool {
-	return (e.Status == QueueStatusPending || e.Status == QueueStatusFailed) && e.Attempts < maxAttempts
+	return e.Status == QueueStatusPending
 }
 
 type QueueEntry struct {
@@ -99,13 +99,13 @@ type DirReader interface {
 type QueueRepo interface {
 	All(ctx context.Context) ([]QueueEntry, error)
 	Enqueue(ctx context.Context, sourceID string) (bool, error)
-	ResetPending(ctx context.Context) error
+	ResetPending(ctx context.Context, maxAttempts int) error
 	Next(ctx context.Context) (QueueEntry, bool, error)
 	Start(ctx context.Context, id int) error
 	Complete(ctx context.Context, id int) error
-	Fail(ctx context.Context, id int, err error) error
+	Fail(ctx context.Context, id int, status string, err error) error
 	RetryByID(ctx context.Context, id int) (bool, error)
-	RetryHardFailed(ctx context.Context) (int64, error)
+	RetryHardFailed(ctx context.Context, maxAttempts int) (int64, error)
 }
 
 // StagingDirProvider supplies the staging directory root. Satisfied by
@@ -335,7 +335,7 @@ type RetryResult struct {
 // only entries that exhausted their attempts are reset.
 func (s *Service) RetryFailed(ctx context.Context, ids []int) (RetryResult, error) {
 	if len(ids) == 0 {
-		n, err := s.repo.RetryHardFailed(ctx)
+		n, err := s.repo.RetryHardFailed(ctx, maxAttempts)
 		if err != nil {
 			return RetryResult{}, fmt.Errorf("retry hard-failed downloads: %w", err)
 		}
@@ -374,7 +374,7 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 	var result ProcessResult
 	targetPath := filepath.Join(s.stagingDirs.StagingDir(), "%(id)s.opus")
 
-	if err := s.repo.ResetPending(ctx); err != nil {
+	if err := s.repo.ResetPending(ctx, maxAttempts); err != nil {
 		return result, fmt.Errorf("reset interrupted downloads: %w", err)
 	}
 
@@ -432,7 +432,12 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 			reporter.OnTrackFailure(entry.SourceID, err)
 			result.Failed++
 
-			if err = s.repo.Fail(ctx, entry.ID, err); err != nil {
+			nextStatus := QueueStatusPending
+			if isTerminalError(err) || entry.Attempts >= maxAttempts {
+				nextStatus = QueueStatusFailed
+			}
+
+			if err = s.repo.Fail(ctx, entry.ID, string(nextStatus), err); err != nil {
 				return result, fmt.Errorf("fail queue entry %d: %w", entry.ID, err)
 			}
 

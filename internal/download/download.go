@@ -17,6 +17,10 @@ var (
 	ErrExecution = errors.New("yt-dlp execution failed")
 )
 
+func isTerminalError(err error) bool {
+	return errors.Is(err, ErrForbidden)
+}
+
 type Config struct {
 	AbsoluteOutputPath string
 	URL                string

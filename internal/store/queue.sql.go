@@ -58,8 +58,7 @@ SELECT
     download_queue.error_msg
 FROM download_queue
 WHERE
-    download_queue.status IN ('pending', 'failed')
-    AND download_queue.attempts < 3
+    download_queue.status = 'pending'
 ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
 LIMIT 1
 `
@@ -139,7 +138,7 @@ SET
     attempts = 0,
     error_msg = NULL,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = ?1 AND status = 'failed'
+WHERE id = ?1
 `
 
 func (q *Queries) ResetDownloadByID(ctx context.Context, id int64) (int64, error) {
@@ -157,11 +156,11 @@ SET
     attempts = 0,
     error_msg = NULL,
     updated_at = CURRENT_TIMESTAMP
-WHERE status = 'failed' AND attempts >= 3
+WHERE status = 'failed' AND attempts >= ?1
 `
 
-func (q *Queries) ResetHardFailedDownloads(ctx context.Context) (int64, error) {
-	result, err := q.db.ExecContext(ctx, resetHardFailedDownloads)
+func (q *Queries) ResetHardFailedDownloads(ctx context.Context, maxAttempts int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetHardFailedDownloads, maxAttempts)
 	if err != nil {
 		return 0, err
 	}
@@ -170,12 +169,21 @@ func (q *Queries) ResetHardFailedDownloads(ctx context.Context) (int64, error) {
 
 const resetOrphanedDownloads = `-- name: ResetOrphanedDownloads :exec
 UPDATE download_queue
-SET status = 'pending', updated_at = CURRENT_TIMESTAMP
+SET
+    status = CASE
+        WHEN attempts >= ?1 THEN 'failed'
+        ELSE 'pending'
+    END,
+    error_msg = CASE
+        WHEN attempts >= ?1 THEN 'interruped while processing (attempts exhausted)'
+        ELSE error_msg
+    END,
+    updated_at = CURRENT_TIMESTAMP
 WHERE status = 'processing'
 `
 
-func (q *Queries) ResetOrphanedDownloads(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, resetOrphanedDownloads)
+func (q *Queries) ResetOrphanedDownloads(ctx context.Context, maxAttempts int64) error {
+	_, err := q.db.ExecContext(ctx, resetOrphanedDownloads, maxAttempts)
 	return err
 }
 
@@ -190,5 +198,25 @@ WHERE id = ?1
 
 func (q *Queries) StartDownload(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, startDownload, id)
+	return err
+}
+
+const updateDownloadStatus = `-- name: UpdateDownloadStatus :exec
+UPDATE download_queue
+SET
+    status = ?1,
+    error_msg = ?2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?3
+`
+
+type UpdateDownloadStatusParams struct {
+	Status   string
+	ErrorMsg sql.NullString
+	ID       int64
+}
+
+func (q *Queries) UpdateDownloadStatus(ctx context.Context, arg UpdateDownloadStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateDownloadStatus, arg.Status, arg.ErrorMsg, arg.ID)
 	return err
 }

@@ -40,7 +40,7 @@ func (f *fakeQueueRepo) Enqueue(_ context.Context, sourceID string) (bool, error
 
 func (f *fakeQueueRepo) QueueLength(context.Context) (int, error) { return 0, nil }
 
-func (f *fakeQueueRepo) ResetPending(context.Context) error { return nil }
+func (f *fakeQueueRepo) ResetPending(context.Context, int) error { return nil }
 
 func (f *fakeQueueRepo) Next(context.Context) (QueueEntry, bool, error) {
 	return QueueEntry{}, false, nil
@@ -48,7 +48,7 @@ func (f *fakeQueueRepo) Next(context.Context) (QueueEntry, bool, error) {
 
 func (f *fakeQueueRepo) Start(context.Context, int) error    { return nil }
 func (f *fakeQueueRepo) Complete(context.Context, int) error { return nil }
-func (f *fakeQueueRepo) Fail(context.Context, int, error) error {
+func (f *fakeQueueRepo) Fail(context.Context, int, string, error) error {
 	return nil
 }
 
@@ -57,7 +57,7 @@ func (f *fakeQueueRepo) RetryByID(_ context.Context, id int) (bool, error) {
 	return f.failedIDs[id], nil
 }
 
-func (f *fakeQueueRepo) RetryHardFailed(context.Context) (int64, error) {
+func (f *fakeQueueRepo) RetryHardFailed(context.Context, int) (int64, error) {
 	f.hardRetried++
 	return int64(f.hardFailedCount), nil
 }

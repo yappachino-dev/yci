@@ -20,8 +20,7 @@ SELECT
     download_queue.error_msg
 FROM download_queue
 WHERE
-    download_queue.status IN ('pending', 'failed')
-    AND download_queue.attempts < 3
+    download_queue.status = 'pending'
 ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
 LIMIT 1;
 
@@ -44,7 +43,16 @@ WHERE id = :id;
 
 -- name: ResetOrphanedDownloads :exec
 UPDATE download_queue
-SET status = 'pending', updated_at = CURRENT_TIMESTAMP
+SET
+    status = CASE
+        WHEN attempts >= :max_attempts THEN 'failed'
+        ELSE 'pending'
+    END,
+    error_msg = CASE
+        WHEN attempts >= :max_attempts THEN 'interruped while processing (attempts exhausted)'
+        ELSE error_msg
+    END,
+    updated_at = CURRENT_TIMESTAMP
 WHERE status = 'processing';
 
 -- name: ResetHardFailedDownloads :execrows
@@ -54,7 +62,7 @@ SET
     attempts = 0,
     error_msg = NULL,
     updated_at = CURRENT_TIMESTAMP
-WHERE status = 'failed' AND attempts >= 3;
+WHERE status = 'failed' AND attempts >= :max_attempts;
 
 -- name: ResetDownloadByID :execrows
 UPDATE download_queue
@@ -63,4 +71,12 @@ SET
     attempts = 0,
     error_msg = NULL,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = :id AND status = 'failed';
+WHERE id = :id;
+
+-- name: UpdateDownloadStatus :exec
+UPDATE download_queue
+SET
+    status = :status,
+    error_msg = :error_msg,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = :id;

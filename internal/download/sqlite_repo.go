@@ -47,8 +47,8 @@ func (r *SQLiteQueueRepo) Enqueue(ctx context.Context, sourceID string) (bool, e
 	return rows > 0, nil
 }
 
-func (r *SQLiteQueueRepo) ResetPending(ctx context.Context) error {
-	return r.db(ctx).ResetOrphanedDownloads(ctx)
+func (r *SQLiteQueueRepo) ResetPending(ctx context.Context, maxAttempts int) error {
+	return r.db(ctx).ResetOrphanedDownloads(ctx, int64(maxAttempts))
 }
 
 func (r *SQLiteQueueRepo) Next(ctx context.Context) (QueueEntry, bool, error) {
@@ -77,9 +77,10 @@ func (r *SQLiteQueueRepo) Complete(ctx context.Context, id int) error {
 	return r.db(ctx).CompleteDownload(ctx, int64(id))
 }
 
-func (r *SQLiteQueueRepo) Fail(ctx context.Context, id int, err error) error {
-	return r.db(ctx).FailDownload(ctx, store.FailDownloadParams{
+func (r *SQLiteQueueRepo) Fail(ctx context.Context, id int, status string, err error) error {
+	return r.db(ctx).UpdateDownloadStatus(ctx, store.UpdateDownloadStatusParams{
 		ID:       int64(id),
+		Status:   status,
 		ErrorMsg: db.ToNullString(err.Error()),
 	})
 }
@@ -96,8 +97,8 @@ func (r *SQLiteQueueRepo) RetryByID(ctx context.Context, id int) (bool, error) {
 }
 
 // RetryHardFailed re-arms every entry that exhausted its attempts.
-func (r *SQLiteQueueRepo) RetryHardFailed(ctx context.Context) (int64, error) {
-	rows, err := r.db(ctx).ResetHardFailedDownloads(ctx)
+func (r *SQLiteQueueRepo) RetryHardFailed(ctx context.Context, maxAttempts int) (int64, error) {
+	rows, err := r.db(ctx).ResetHardFailedDownloads(ctx, int64(maxAttempts))
 	if err != nil {
 		return 0, fmt.Errorf("retry hard-failed queue entries: %w", err)
 	}

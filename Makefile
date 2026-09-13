@@ -9,7 +9,7 @@ FISH_COMP_DIR   ?= $(XDG_CONFIG_HOME)/fish/completions
 
 all: build
 
-build:
+build: sqlc
 	@echo "Building $(APP_NAME)..."
 	CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$$(git describe --tags --always --dirty)" -o $(APP_NAME) cmd/cli/main.go
 
