@@ -34,8 +34,10 @@ func (q *Queries) EnqueueDownload(ctx context.Context, sourceID string) (int64, 
 }
 
 const failDownload = `-- name: FailDownload :exec
-UPDATE download_queue
-SET status = 'failed', error_msg = ?1, updated_at = CURRENT_TIMESTAMP
+UPDATE download_queue SET
+    status = 'failed',
+    error_msg = ?1,
+    updated_at = CURRENT_TIMESTAMP
 WHERE id = ?2
 `
 
@@ -57,8 +59,7 @@ SELECT
     download_queue.attempts,
     download_queue.error_msg
 FROM download_queue
-WHERE
-    download_queue.status = 'pending'
+WHERE download_queue.status = 'pending'
 ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
 LIMIT 1
 `

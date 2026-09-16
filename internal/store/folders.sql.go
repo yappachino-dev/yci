@@ -25,15 +25,14 @@ func (q *Queries) CheckFolderExists(ctx context.Context, id string) (bool, error
 }
 
 const checkFolderHasChildren = `-- name: CheckFolderHasChildren :one
-SELECT EXISTS (
-    SELECT 1
-    FROM folders
-    WHERE (parent_id = ?1 OR (?1 IS NULL AND parent_id IS NULL))
-    UNION ALL
-    SELECT 1
-    FROM artists
-    WHERE (folder_id = ?1 OR (?1 IS NULL AND folder_id IS NULL))
-)
+SELECT
+    EXISTS (
+        SELECT 1 FROM folders
+        WHERE (parent_id = ?1 OR (?1 IS NULL AND parent_id IS NULL))
+        UNION ALL
+        SELECT 1 FROM artists
+        WHERE (folder_id = ?1 OR (?1 IS NULL AND folder_id IS NULL))
+    )
 `
 
 func (q *Queries) CheckFolderHasChildren(ctx context.Context, id sql.NullString) (bool, error) {
@@ -99,15 +98,12 @@ WITH RECURSIVE ancestor_chain AS (
         0 AS depth
     FROM folders
     WHERE folders.id = ?1
-
     UNION ALL
-
     SELECT
         f.id,
         f.parent_id,
         ac.depth + 1 AS depth
-    FROM folders AS f
-    INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
+    FROM folders AS f INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
 )
 
 SELECT id
@@ -148,16 +144,13 @@ WITH RECURSIVE ancestor_chain AS (
         0 AS depth
     FROM folders
     WHERE folders.id = ?1
-
     UNION ALL
-
     SELECT
         f.id,
         f.display_name,
         f.parent_id,
         ac.depth + 1 AS depth
-    FROM folders AS f
-    INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
+    FROM folders AS f INNER JOIN ancestor_chain AS ac ON f.id = ac.parent_id
 )
 
 SELECT display_name

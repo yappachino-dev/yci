@@ -11,14 +11,10 @@ import (
 )
 
 const checkTracksBySourceID = `-- name: CheckTracksBySourceID :one
-SELECT
-    EXISTS(
-        SELECT 1
-        FROM
-            tracks
-        WHERE
-            source_id = ?1
-    )
+SELECT EXISTS(
+    SELECT 1 FROM tracks
+    WHERE source_id = ?1
+)
 `
 
 func (q *Queries) CheckTracksBySourceID(ctx context.Context, sourceID sql.NullString) (bool, error) {
@@ -29,30 +25,8 @@ func (q *Queries) CheckTracksBySourceID(ctx context.Context, sourceID sql.NullSt
 }
 
 const createTrack = `-- name: CreateTrack :exec
-INSERT INTO
-tracks (
-    id,
-    title,
-    album,
-    artist_id,
-    folder_id,
-    duration_sec,
-    relative_path,
-    source_id,
-    source
-)
-VALUES
-(
-    ?1,
-    ?2,
-    ?3,
-    ?4,
-    ?5,
-    ?6,
-    ?7,
-    ?8,
-    ?9
-)
+INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 `
 
 type CreateTrackParams struct {
@@ -84,8 +58,7 @@ func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error 
 
 const deleteTrack = `-- name: DeleteTrack :execrows
 DELETE FROM tracks
-WHERE
-    id = ?1
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteTrack(ctx context.Context, id string) (int64, error) {
@@ -97,11 +70,8 @@ func (q *Queries) DeleteTrack(ctx context.Context, id string) (int64, error) {
 }
 
 const getTrack = `-- name: GetTrack :one
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source
-FROM
-    tracks
-WHERE
-    id = ?1
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source FROM tracks
+WHERE id = ?1
 `
 
 type GetTrackRow struct {
@@ -126,11 +96,8 @@ func (q *Queries) GetTrack(ctx context.Context, id string) (GetTrackRow, error) 
 }
 
 const getTracksByArtist = `-- name: GetTracksByArtist :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source
-FROM
-    tracks
-WHERE
-    artist_id = ?1
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source FROM tracks
+WHERE artist_id = ?1
 `
 
 type GetTracksByArtistRow struct {
@@ -171,11 +138,8 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 }
 
 const getTracksByPath = `-- name: GetTracksByPath :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source
-FROM
-    tracks
-WHERE
-    relative_path LIKE ?1
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source FROM tracks
+WHERE relative_path LIKE ?1
 `
 
 type GetTracksByPathRow struct {
@@ -226,8 +190,7 @@ SET
     duration_sec = ?6,
     relative_path = ?7,
     source_id = ?8
-WHERE
-    id = ?9
+WHERE id = ?9
 `
 
 type UpdateTrackParams struct {
@@ -258,11 +221,8 @@ func (q *Queries) UpdateTrack(ctx context.Context, arg UpdateTrackParams) error 
 }
 
 const updateTrackPath = `-- name: UpdateTrackPath :exec
-UPDATE tracks
-SET
-    relative_path = ?1
-WHERE
-    id = ?2
+UPDATE tracks SET relative_path = ?1
+WHERE id = ?2
 `
 
 type UpdateTrackPathParams struct {
@@ -276,11 +236,8 @@ func (q *Queries) UpdateTrackPath(ctx context.Context, arg UpdateTrackPathParams
 }
 
 const updateTrackPathsByPrefix = `-- name: UpdateTrackPathsByPrefix :exec
-UPDATE tracks
-SET
-    relative_path = ?1 || SUBSTR(relative_path, LENGTH(?2) + 1)
-WHERE
-    relative_path LIKE ?3
+UPDATE tracks SET relative_path = ?1 || SUBSTR(relative_path, LENGTH(?2) + 1)
+WHERE relative_path LIKE ?3
 `
 
 type UpdateTrackPathsByPrefixParams struct {

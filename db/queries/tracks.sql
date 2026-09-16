@@ -1,68 +1,30 @@
 -- name: CreateTrack :exec
-INSERT INTO
-tracks (
-    id,
-    title,
-    album,
-    artist_id,
-    folder_id,
-    duration_sec,
-    relative_path,
-    source_id,
-    source
-)
-VALUES
-(
-    :id,
-    :title,
-    :album,
-    :artist_id,
-    :folder_id,
-    :duration_sec,
-    :relative_path,
-    :source_id,
-    :source
-);
+INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source)
+VALUES (:id, :title, :album, :artist_id, :folder_id, :duration_sec, :relative_path, :source_id, :source);
 
 -- name: GetTrack :one
-SELECT sqlc.embed(tracks)
-FROM
-    tracks
-WHERE
-    id = :id;
+SELECT sqlc.embed(tracks) FROM tracks
+WHERE id = :id;
 
 -- name: GetTracksByArtist :many
-SELECT sqlc.embed(tracks)
-FROM
-    tracks
-WHERE
-    artist_id = :artist_id;
+SELECT sqlc.embed(tracks) FROM tracks
+WHERE artist_id = :artist_id;
 
 -- name: GetTracksByPath :many
-SELECT sqlc.embed(tracks)
-FROM
-    tracks
-WHERE
-    relative_path LIKE :path;
+SELECT sqlc.embed(tracks) FROM tracks
+WHERE relative_path LIKE :path;
 
 -- name: CheckTracksBySourceID :one
-SELECT
-    EXISTS(
-        SELECT 1
-        FROM
-            tracks
-        WHERE
-            source_id = :source_id
-    );
+SELECT EXISTS(
+    SELECT 1 FROM tracks
+    WHERE source_id = :source_id
+);
 
 -- name: UpdateTrackPathsByPrefix :exec
 -- Replaces only the leading prefix: SUBSTR keeps the remainder intact, so a
 -- repeated folder name deeper in the path survives renames.
-UPDATE tracks
-SET
-    relative_path = :new_prefix || SUBSTR(relative_path, LENGTH(:old_prefix) + 1)
-WHERE
-    relative_path LIKE :match_prefix;
+UPDATE tracks SET relative_path = :new_prefix || SUBSTR(relative_path, LENGTH(:old_prefix) + 1)
+WHERE relative_path LIKE :match_prefix;
 
 -- name: UpdateTrack :exec
 UPDATE tracks
@@ -75,17 +37,12 @@ SET
     duration_sec = :duration_sec,
     relative_path = :relative_path,
     source_id = :source_id
-WHERE
-    id = :old_id;
+WHERE id = :old_id;
 
 -- name: DeleteTrack :execrows
 DELETE FROM tracks
-WHERE
-    id = :id;
+WHERE id = :id;
 
 -- name: UpdateTrackPath :exec
-UPDATE tracks
-SET
-    relative_path = :relative_path
-WHERE
-    id = :id;
+UPDATE tracks SET relative_path = :relative_path
+WHERE id = :id;

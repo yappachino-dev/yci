@@ -19,8 +19,7 @@ SELECT
     download_queue.attempts,
     download_queue.error_msg
 FROM download_queue
-WHERE
-    download_queue.status = 'pending'
+WHERE download_queue.status = 'pending'
 ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
 LIMIT 1;
 
@@ -37,8 +36,10 @@ DELETE FROM download_queue
 WHERE id = :id;
 
 -- name: FailDownload :exec
-UPDATE download_queue
-SET status = 'failed', error_msg = :error_msg, updated_at = CURRENT_TIMESTAMP
+UPDATE download_queue SET
+    status = 'failed',
+    error_msg = :error_msg,
+    updated_at = CURRENT_TIMESTAMP
 WHERE id = :id;
 
 -- name: ResetOrphanedDownloads :exec

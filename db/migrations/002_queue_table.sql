@@ -3,9 +3,7 @@
 CREATE TABLE download_queue (
     id INTEGER PRIMARY KEY,
     source_id TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL CHECK (
-        status IN ('pending', 'processing', 'failed')
-    ) DEFAULT 'pending',
+    status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'failed')) DEFAULT 'pending',
     attempts INTEGER NOT NULL DEFAULT 0,
     error_msg TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

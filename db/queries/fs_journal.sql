@@ -1,6 +1,6 @@
 -- name: RecordFileAction :execrows
 INSERT INTO fs_journal (op, src, dst)
-VALUES (?1, ?2, ?3);
+VALUES (:op, :src, :dst);
 
 -- name: GetPendingFileActions :many
 SELECT
@@ -26,12 +26,12 @@ ORDER BY id ASC;
 -- name: CompleteFileAction :exec
 UPDATE fs_journal
 SET status = 'done', error = NULL
-WHERE id = ?1;
+WHERE id = :id;
 
 -- name: FailFileAction :exec
 UPDATE fs_journal
-SET status = 'failed', error = ?1
-WHERE id = ?2;
+SET status = 'failed', error = :error
+WHERE id = :id;
 
 -- name: ResetFailedFileActions :exec
 UPDATE fs_journal

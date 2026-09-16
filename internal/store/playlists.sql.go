@@ -11,7 +11,10 @@ import (
 
 const addTrackToPlaylist = `-- name: AddTrackToPlaylist :exec
 INSERT INTO playlist_tracks (playlist_id, track_id, position)
-SELECT ?1, ?2, COALESCE(MAX(position), 0) + 1
+SELECT
+    ?1,
+    ?2,
+    COALESCE(MAX(position), 0) + 1
 FROM playlist_tracks
 WHERE playlist_id = ?1
 `
@@ -56,7 +59,9 @@ func (q *Queries) DeletePlaylist(ctx context.Context, id int64) (int64, error) {
 }
 
 const getPlaylistByID = `-- name: GetPlaylistByID :one
-SELECT id, name
+SELECT
+    id,
+    name
 FROM playlists
 WHERE id = ?1
 `
@@ -69,9 +74,11 @@ func (q *Queries) GetPlaylistByID(ctx context.Context, id int64) (Playlist, erro
 }
 
 const getPlaylistByName = `-- name: GetPlaylistByName :one
-SELECT id, name
+SELECT
+    id,
+    name
 FROM playlists
-WHERE name = ?1 COLLATE NOCASE
+WHERE name = ?1
 `
 
 func (q *Queries) GetPlaylistByName(ctx context.Context, name string) (Playlist, error) {
@@ -82,9 +89,11 @@ func (q *Queries) GetPlaylistByName(ctx context.Context, name string) (Playlist,
 }
 
 const getPlaylistTracks = `-- name: GetPlaylistTracks :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, playlist_tracks.position
+SELECT
+    tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source,
+    playlist_tracks.position
 FROM playlist_tracks
-JOIN tracks ON tracks.id = playlist_tracks.track_id
+INNER JOIN tracks ON playlist_tracks.track_id = tracks.id
 WHERE playlist_tracks.playlist_id = ?1
 ORDER BY playlist_tracks.position
 `
@@ -129,7 +138,9 @@ func (q *Queries) GetPlaylistTracks(ctx context.Context, playlistID int64) ([]Ge
 }
 
 const getPlaylists = `-- name: GetPlaylists :many
-SELECT id, name
+SELECT
+    id,
+    name
 FROM playlists
 ORDER BY name
 `

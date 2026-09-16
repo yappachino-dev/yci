@@ -1,0 +1,8 @@
+[sqlfluff]
+dialect = sqlite
+templater = placeholder
+max_line_length = 120
+exclude_rules = ST06, AL03, RF02
+
+[sqlfluff:templater:placeholder]
+param_style = colon
