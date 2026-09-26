@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
 	"github.com/yappachino-dev/yci/internal/app"
 	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/db"
-	"os"
-	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
@@ -39,7 +41,7 @@ func ContainerOK(ctx context.Context) (*app.Container, bool) {
 	return c, ok
 }
 
-func initApplication(ctx context.Context, autoMigrate bool) (*app.Container, error) {
+func initApplication(ctx context.Context, autoMigrate bool, logOut io.Writer) (*app.Container, error) {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("load configuration: %w", err)
@@ -67,7 +69,7 @@ func initApplication(ctx context.Context, autoMigrate bool) (*app.Container, err
 	}
 
 	if autoMigrate {
-		if err = db.RunMigrations(ctx, dbConn); err != nil {
+		if _, err = db.Migrate(ctx, dbConn, logOut); err != nil {
 			dbConn.Close()
 			return nil, fmt.Errorf("execute database migration: %w", err)
 		}

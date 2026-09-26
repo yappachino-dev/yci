@@ -39,7 +39,7 @@ var rootCmd = &cobra.Command{
 
 		autoMigrate := !strings.HasPrefix(path, "yci debug migration")
 
-		c, err := initApplication(cmd.Context(), autoMigrate)
+		c, err := initApplication(cmd.Context(), autoMigrate, cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
