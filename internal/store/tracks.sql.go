@@ -25,8 +25,8 @@ func (q *Queries) CheckTracksBySourceID(ctx context.Context, sourceID sql.NullSt
 }
 
 const createTrack = `-- name: CreateTrack :exec
-INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source, raw_title, performer, version)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
 `
 
 type CreateTrackParams struct {
@@ -39,6 +39,9 @@ type CreateTrackParams struct {
 	RelativePath string
 	SourceID     sql.NullString
 	Source       string
+	RawTitle     sql.NullString
+	Performer    string
+	Version      string
 }
 
 func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error {
@@ -52,6 +55,9 @@ func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error 
 		arg.RelativePath,
 		arg.SourceID,
 		arg.Source,
+		arg.RawTitle,
+		arg.Performer,
+		arg.Version,
 	)
 	return err
 }
@@ -70,7 +76,7 @@ func (q *Queries) DeleteTrack(ctx context.Context, id string) (int64, error) {
 }
 
 const getTrack = `-- name: GetTrack :one
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source FROM tracks
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE id = ?1
 `
 
@@ -91,12 +97,15 @@ func (q *Queries) GetTrack(ctx context.Context, id string) (GetTrackRow, error) 
 		&i.Track.SourceID,
 		&i.Track.FolderID,
 		&i.Track.Source,
+		&i.Track.RawTitle,
+		&i.Track.Performer,
+		&i.Track.Version,
 	)
 	return i, err
 }
 
 const getTracksByArtist = `-- name: GetTracksByArtist :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source FROM tracks
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE artist_id = ?1
 `
 
@@ -123,6 +132,9 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 			&i.Track.SourceID,
 			&i.Track.FolderID,
 			&i.Track.Source,
+			&i.Track.RawTitle,
+			&i.Track.Performer,
+			&i.Track.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -138,7 +150,7 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 }
 
 const getTracksByPath = `-- name: GetTracksByPath :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source FROM tracks
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE relative_path LIKE ?1
 `
 
@@ -165,6 +177,9 @@ func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]GetTracks
 			&i.Track.SourceID,
 			&i.Track.FolderID,
 			&i.Track.Source,
+			&i.Track.RawTitle,
+			&i.Track.Performer,
+			&i.Track.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -250,5 +265,30 @@ type UpdateTrackPathsByPrefixParams struct {
 // repeated folder name deeper in the path survives renames.
 func (q *Queries) UpdateTrackPathsByPrefix(ctx context.Context, arg UpdateTrackPathsByPrefixParams) error {
 	_, err := q.db.ExecContext(ctx, updateTrackPathsByPrefix, arg.NewPrefix, arg.OldPrefix, arg.MatchPrefix)
+	return err
+}
+
+const updateTrackTitle = `-- name: UpdateTrackTitle :exec
+UPDATE tracks
+SET title = ?1, raw_title = ?2, performer = ?3, version = ?4
+WHERE id = ?5
+`
+
+type UpdateTrackTitleParams struct {
+	Title     string
+	RawTitle  sql.NullString
+	Performer string
+	Version   string
+	ID        string
+}
+
+func (q *Queries) UpdateTrackTitle(ctx context.Context, arg UpdateTrackTitleParams) error {
+	_, err := q.db.ExecContext(ctx, updateTrackTitle,
+		arg.Title,
+		arg.RawTitle,
+		arg.Performer,
+		arg.Version,
+		arg.ID,
+	)
 	return err
 }

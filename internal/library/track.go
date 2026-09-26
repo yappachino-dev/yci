@@ -43,6 +43,13 @@ type Track struct {
 	// Source names the origin platform ("youtube" today). Kept as data
 	// now so adding sources later is a value change, not a migration.
 	Source string
+	// RawTitle is the title exactly as the file's tags carried it. Empty
+	// means the row predates title parsing.
+	RawTitle string
+	// Performer and Version are parsed hints, not curated data: artist_id
+	// remains the confirmed link.
+	Performer string
+	Version   string
 }
 
 type TrackCreateParams struct {
@@ -56,6 +63,11 @@ type TrackCreateParams struct {
 	// Source names the origin platform ("youtube" today). Kept as data
 	// now so adding sources later is a value change, not a migration.
 	Source string
+	// RawTitle, Performer and Version carry title parsing results; see
+	// Track for their meaning.
+	RawTitle  string
+	Performer string
+	Version   string
 }
 
 type TrackPathMove struct {
@@ -67,6 +79,7 @@ type TrackPathMove struct {
 type TrackRepository interface {
 	Create(ctx context.Context, t Track) error
 	ByID(ctx context.Context, id TrackID) (Track, error)
+	UpdateTitle(ctx context.Context, id TrackID, title, rawTitle, performer, version string) error
 	ByArtistID(ctx context.Context, artistID ArtistID) ([]Track, error)
 	ByPathPattern(ctx context.Context, pattern string) ([]Track, error)
 	ExistsBySourceID(ctx context.Context, sourceID string) (bool, error)
@@ -136,6 +149,9 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (Tr
 		RelativePath: params.RelativePath,
 		SourceID:     strings.TrimSpace(params.SourceID),
 		Source:       cmp.Or(strings.TrimSpace(params.Source), SourceYouTube),
+		RawTitle:     strings.TrimSpace(params.RawTitle),
+		Performer:    strings.TrimSpace(params.Performer),
+		Version:      strings.TrimSpace(params.Version),
 	}
 
 	if err := s.repo.Create(ctx, t); err != nil {
@@ -298,6 +314,9 @@ func rowToTrack(row store.Track) Track {
 		RelativePath: TrackPath(row.RelativePath),
 		SourceID:     db.FromNullString(row.SourceID),
 		Source:       row.Source,
+		RawTitle:     db.FromNullString(row.RawTitle),
+		Performer:    row.Performer,
+		Version:      row.Version,
 	}
 }
 
@@ -311,6 +330,9 @@ func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 		RelativePath: string(t.RelativePath),
 		SourceID:     db.ToNullString(t.SourceID),
 		Source:       t.Source,
+		RawTitle:     db.ToNullString(t.RawTitle),
+		Performer:    t.Performer,
+		Version:      t.Version,
 	})
 	if err != nil {
 		return db.MapSQLError(err, ErrTrackNotFound, ErrTrackPathExists)
@@ -358,6 +380,21 @@ func (r *SQLiteTrackRepository) ByPathPattern(ctx context.Context, pattern strin
 
 func (r *SQLiteTrackRepository) ExistsBySourceID(ctx context.Context, sourceID string) (bool, error) {
 	return r.db(ctx).CheckTracksBySourceID(ctx, db.ToNullString(sourceID))
+}
+
+func (r *SQLiteTrackRepository) UpdateTitle(ctx context.Context, id TrackID, title, rawTitle, performer, version string) error {
+	err := r.db(ctx).UpdateTrackTitle(ctx, store.UpdateTrackTitleParams{
+		ID:        string(id),
+		Title:     title,
+		RawTitle:  db.ToNullString(rawTitle),
+		Performer: performer,
+		Version:   version,
+	})
+	if err != nil {
+		return fmt.Errorf("update title of track %q: %w", id, err)
+	}
+
+	return nil
 }
 
 func (r *SQLiteTrackRepository) Delete(ctx context.Context, id TrackID) error {

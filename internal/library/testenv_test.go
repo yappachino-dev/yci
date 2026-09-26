@@ -191,7 +191,9 @@ func writeTaggedAudio(t *testing.T, path, title, artist string) {
 	t.Helper()
 
 	frame := func(id, text string) []byte {
-		payload := append([]byte{0}, text...) // encoding byte + text
+		// 0x03 declares UTF-8; the default 0x00 would be ISO-8859-1 and
+		// mangle every non-ASCII tag, which the real corpus is full of.
+		payload := append([]byte{0x03}, []byte(text)...)
 		b := make([]byte, 0, 10+len(payload))
 		b = append(b, id...)
 		size := uint32(len(payload))

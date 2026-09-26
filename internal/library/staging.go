@@ -229,27 +229,25 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 		return nil, fmt.Errorf("failed resolving destination path: %w", err)
 	}
 
-	safeTitle := fs.SanitizeFilename(title)
-	newFilename := safeTitle + ".opus"
+	interpreted := InterpretTitle(title)
 
-	var relPath string
-	if folderPath == "" {
-		relPath = newFilename
-	} else {
-		relPath = path.Join(folderPath, newFilename)
+	relPath, absPathNative, err := s.resolveDestination(folderPath, interpreted.Title)
+	if err != nil {
+		return nil, err
 	}
-
-	absPathNative := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(relPath))
 
 	return &stagingImportPlan{
 		params: TrackCreateParams{
 			ID:           TrackID(uuid.New().String()),
-			Title:        title,
+			Title:        interpreted.Title,
 			Album:        m.Album,
 			ArtistID:     decision.artistID,
 			FolderID:     decision.folder,
 			RelativePath: TrackPath(relPath),
 			SourceID:     sourceID,
+			RawTitle:     title,
+			Performer:    interpreted.Performer,
+			Version:      interpreted.Version,
 		},
 		sourceAbs: oldPathNative,
 		destAbs:   absPathNative,
@@ -278,4 +276,39 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 	})
 
 	return txErr
+}
+
+// resolveDestination computes the library-relative and absolute paths for an
+// imported track. Cleaner titles collide more often than decorated ones
+// (two uploads of the same song lose the same decoration), so an occupied
+// destination gets a numeric suffix rather than overwriting the file that
+// is already there.
+func (s *StagingService) resolveDestination(folderPath, title string) (string, string, error) {
+	stem := fs.SanitizeFilename(title)
+	if stem == "" {
+		return "", "", fmt.Errorf("import track: title %q has no usable characters for a filename", title)
+	}
+
+	for attempt := 1; ; attempt++ {
+		candidate := stem
+		if attempt > 1 {
+			candidate = fmt.Sprintf("%s (%d)", stem, attempt)
+		}
+
+		filename := candidate + ".opus"
+
+		var relPath string
+		if folderPath == "" {
+			relPath = filename
+		} else {
+			relPath = path.Join(folderPath, filename)
+		}
+
+		absPath := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(relPath))
+		if _, err := os.Stat(absPath); errors.Is(err, os.ErrNotExist) {
+			return relPath, absPath, nil
+		} else if err != nil {
+			return "", "", fmt.Errorf("check destination %q: %w", absPath, err)
+		}
+	}
 }

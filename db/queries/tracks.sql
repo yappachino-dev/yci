@@ -1,6 +1,11 @@
 -- name: CreateTrack :exec
-INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source)
-VALUES (:id, :title, :album, :artist_id, :folder_id, :duration_sec, :relative_path, :source_id, :source);
+INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source, raw_title, performer, version)
+VALUES (:id, :title, :album, :artist_id, :folder_id, :duration_sec, :relative_path, :source_id, :source, :raw_title, :performer, :version);
+
+-- name: UpdateTrackTitle :exec
+UPDATE tracks
+SET title = :title, raw_title = :raw_title, performer = :performer, version = :version
+WHERE id = :id;
 
 -- name: GetTrack :one
 SELECT sqlc.embed(tracks) FROM tracks

@@ -90,7 +90,7 @@ func (q *Queries) GetPlaylistByName(ctx context.Context, name string) (Playlist,
 
 const getPlaylistTracks = `-- name: GetPlaylistTracks :many
 SELECT
-    tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source,
+    tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version,
     playlist_tracks.position
 FROM playlist_tracks
 INNER JOIN tracks ON playlist_tracks.track_id = tracks.id
@@ -122,6 +122,9 @@ func (q *Queries) GetPlaylistTracks(ctx context.Context, playlistID int64) ([]Ge
 			&i.Track.SourceID,
 			&i.Track.FolderID,
 			&i.Track.Source,
+			&i.Track.RawTitle,
+			&i.Track.Performer,
+			&i.Track.Version,
 			&i.Position,
 		); err != nil {
 			return nil, err

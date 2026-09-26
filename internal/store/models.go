@@ -68,4 +68,7 @@ type Track struct {
 	SourceID     sql.NullString
 	FolderID     sql.NullString
 	Source       string
+	RawTitle     sql.NullString
+	Performer    string
+	Version      string
 }
