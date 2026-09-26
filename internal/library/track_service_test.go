@@ -24,7 +24,6 @@ func TestTrackMoveByArtist(t *testing.T) {
 		ID:           "t1",
 		Title:        "Song",
 		ArtistID:     artist.ID,
-		FolderID:     folderA.ID,
 		RelativePath: "Source/song.opus",
 		SourceID:     "src1",
 	}); err != nil {
@@ -101,7 +100,6 @@ func TestTrackByFolderRecursiveVsExact(t *testing.T) {
 		if err := env.repos.tracks.Create(ctx, Track{
 			ID:           id,
 			Title:        title,
-			FolderID:     folder.ID,
 			RelativePath: TrackPath(s.rel),
 		}); err != nil {
 			t.Fatalf("seed track %q: %v", s.rel, err)

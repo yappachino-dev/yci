@@ -242,7 +242,6 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 			Title:        interpreted.Title,
 			Album:        m.Album,
 			ArtistID:     decision.artistID,
-			FolderID:     decision.folder,
 			RelativePath: TrackPath(relPath),
 			SourceID:     sourceID,
 			RawTitle:     title,

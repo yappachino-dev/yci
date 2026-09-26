@@ -1,6 +1,6 @@
 -- name: CreateTrack :exec
-INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source, raw_title, performer, version)
-VALUES (:id, :title, :album, :artist_id, :folder_id, :duration_sec, :relative_path, :source_id, :source, :raw_title, :performer, :version);
+INSERT INTO tracks (id, title, album, artist_id, duration_sec, relative_path, source_id, source, raw_title, performer, version)
+VALUES (:id, :title, :album, :artist_id, :duration_sec, :relative_path, :source_id, :source, :raw_title, :performer, :version);
 
 -- name: UpdateTrackTitle :exec
 UPDATE tracks
@@ -38,7 +38,6 @@ SET
     title = :title,
     album = :album,
     artist_id = :artist_id,
-    folder_id = :folder_id,
     duration_sec = :duration_sec,
     relative_path = :relative_path,
     source_id = :source_id

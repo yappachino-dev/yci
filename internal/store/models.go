@@ -66,7 +66,6 @@ type Track struct {
 	DurationSec  sql.NullInt64
 	RelativePath string
 	SourceID     sql.NullString
-	FolderID     sql.NullString
 	Source       string
 	RawTitle     sql.NullString
 	Performer    string

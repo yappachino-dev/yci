@@ -25,8 +25,8 @@ func (q *Queries) CheckTracksBySourceID(ctx context.Context, sourceID sql.NullSt
 }
 
 const createTrack = `-- name: CreateTrack :exec
-INSERT INTO tracks (id, title, album, artist_id, folder_id, duration_sec, relative_path, source_id, source, raw_title, performer, version)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+INSERT INTO tracks (id, title, album, artist_id, duration_sec, relative_path, source_id, source, raw_title, performer, version)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
 `
 
 type CreateTrackParams struct {
@@ -34,7 +34,6 @@ type CreateTrackParams struct {
 	Title        string
 	Album        sql.NullString
 	ArtistID     sql.NullString
-	FolderID     sql.NullString
 	DurationSec  sql.NullInt64
 	RelativePath string
 	SourceID     sql.NullString
@@ -50,7 +49,6 @@ func (q *Queries) CreateTrack(ctx context.Context, arg CreateTrackParams) error 
 		arg.Title,
 		arg.Album,
 		arg.ArtistID,
-		arg.FolderID,
 		arg.DurationSec,
 		arg.RelativePath,
 		arg.SourceID,
@@ -76,7 +74,7 @@ func (q *Queries) DeleteTrack(ctx context.Context, id string) (int64, error) {
 }
 
 const getTrack = `-- name: GetTrack :one
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE id = ?1
 `
 
@@ -95,7 +93,6 @@ func (q *Queries) GetTrack(ctx context.Context, id string) (GetTrackRow, error) 
 		&i.Track.DurationSec,
 		&i.Track.RelativePath,
 		&i.Track.SourceID,
-		&i.Track.FolderID,
 		&i.Track.Source,
 		&i.Track.RawTitle,
 		&i.Track.Performer,
@@ -105,7 +102,7 @@ func (q *Queries) GetTrack(ctx context.Context, id string) (GetTrackRow, error) 
 }
 
 const getTracksByArtist = `-- name: GetTracksByArtist :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE artist_id = ?1
 `
 
@@ -130,7 +127,6 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 			&i.Track.DurationSec,
 			&i.Track.RelativePath,
 			&i.Track.SourceID,
-			&i.Track.FolderID,
 			&i.Track.Source,
 			&i.Track.RawTitle,
 			&i.Track.Performer,
@@ -150,7 +146,7 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 }
 
 const getTracksByPath = `-- name: GetTracksByPath :many
-SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.folder_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE relative_path LIKE ?1
 `
 
@@ -175,7 +171,6 @@ func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]GetTracks
 			&i.Track.DurationSec,
 			&i.Track.RelativePath,
 			&i.Track.SourceID,
-			&i.Track.FolderID,
 			&i.Track.Source,
 			&i.Track.RawTitle,
 			&i.Track.Performer,
@@ -201,11 +196,10 @@ SET
     title = ?2,
     album = ?3,
     artist_id = ?4,
-    folder_id = ?5,
-    duration_sec = ?6,
-    relative_path = ?7,
-    source_id = ?8
-WHERE id = ?9
+    duration_sec = ?5,
+    relative_path = ?6,
+    source_id = ?7
+WHERE id = ?8
 `
 
 type UpdateTrackParams struct {
@@ -213,7 +207,6 @@ type UpdateTrackParams struct {
 	Title        string
 	Album        sql.NullString
 	ArtistID     sql.NullString
-	FolderID     sql.NullString
 	DurationSec  sql.NullInt64
 	RelativePath string
 	SourceID     sql.NullString
@@ -226,7 +219,6 @@ func (q *Queries) UpdateTrack(ctx context.Context, arg UpdateTrackParams) error 
 		arg.Title,
 		arg.Album,
 		arg.ArtistID,
-		arg.FolderID,
 		arg.DurationSec,
 		arg.RelativePath,
 		arg.SourceID,

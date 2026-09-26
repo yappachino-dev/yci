@@ -37,7 +37,6 @@ type Track struct {
 	Title        string
 	Album        string
 	ArtistID     ArtistID
-	FolderID     FolderID
 	RelativePath TrackPath
 	SourceID     string
 	// Source names the origin platform ("youtube" today). Kept as data
@@ -57,7 +56,6 @@ type TrackCreateParams struct {
 	Title        string
 	Album        string
 	ArtistID     ArtistID
-	FolderID     FolderID
 	RelativePath TrackPath
 	SourceID     string
 	// Source names the origin platform ("youtube" today). Kept as data
@@ -310,7 +308,6 @@ func rowToTrack(row store.Track) Track {
 		Title:        row.Title,
 		Album:        db.FromNullString(row.Album),
 		ArtistID:     ArtistID(db.FromNullString(row.ArtistID)),
-		FolderID:     FolderID(db.FromNullString(row.FolderID)),
 		RelativePath: TrackPath(row.RelativePath),
 		SourceID:     db.FromNullString(row.SourceID),
 		Source:       row.Source,
@@ -326,7 +323,6 @@ func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 		Title:        t.Title,
 		Album:        db.ToNullString(t.Album),
 		ArtistID:     db.ToNullString(string(t.ArtistID)),
-		FolderID:     db.ToNullString(string(t.FolderID)),
 		RelativePath: string(t.RelativePath),
 		SourceID:     db.ToNullString(t.SourceID),
 		Source:       t.Source,
