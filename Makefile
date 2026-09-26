@@ -5,7 +5,10 @@ BIN_DIR  := $(PREFIX)/bin
 XDG_CONFIG_HOME ?= $(HOME)/.config
 FISH_COMP_DIR   ?= $(XDG_CONFIG_HOME)/fish/completions
 
-.PHONY: all build install clean fmt fmt-check vet test check sqlc sqlc-check hooks
+# Scratch profile for destructive experiments; override to relocate.
+SANDBOX_DIR    ?= /tmp/yci-sandbox
+
+.PHONY: all build install clean fmt fmt-check vet test check sqlc sqlc-check hooks sandbox
 
 all: build
 
@@ -53,6 +56,28 @@ sqlc-check:
 	git diff --exit-code -- internal/store db/queries
 
 check: fmt-check vet build test sqlc-check
+
+# Copy the real database into a throwaway profile. Migrations and commands
+# that need to be tried destructively run here, never against live data:
+# rolling the schema back with a Down migration drops columns and the rows
+# written since, whereas restoring a copy of the database predates the
+# change entirely. Overwrite the profile from scratch on every run so a
+# previous experiment cannot leak into the next.
+sandbox:
+	@if [ ! -f "$(XDG_CONFIG_HOME)/yci/data.db" ]; then \
+		echo "No database at $(XDG_CONFIG_HOME)/yci/data.db — nothing to copy."; exit 1; \
+	fi
+	@rm -rf $(SANDBOX_DIR)
+	@mkdir -p $(SANDBOX_DIR)/.config/yci
+	@cp $(XDG_CONFIG_HOME)/yci/data.db $(SANDBOX_DIR)/.config/yci/data.db
+	@if [ -f "$(XDG_CONFIG_HOME)/yci/config.toml" ]; then \
+		cp $(XDG_CONFIG_HOME)/yci/config.toml $(SANDBOX_DIR)/.config/yci/config.toml; \
+	fi
+	@schema=$$(sqlite3 $(SANDBOX_DIR)/.config/yci/data.db "SELECT max(version_id) FROM goose_db_version WHERE is_applied=1;" 2>/dev/null); \
+	echo "Sandbox ready (schema $${schema:-?})."
+	@echo "Run commands against it with:"
+	@echo "  HOME=$(SANDBOX_DIR) XDG_CONFIG_HOME=$(SANDBOX_DIR)/.config ./$(APP_NAME) <command>"
+	@echo "The real database at $(XDG_CONFIG_HOME)/yci/data.db is untouched."
 
 hooks:
 	install -m 0755 scripts/hooks/pre-commit .git/hooks/pre-commit

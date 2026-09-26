@@ -156,18 +156,3 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 
 	return nil
 }
-
-func SetMigration(ctx context.Context, db *sql.DB, current int, target int) error {
-	switch {
-	case current > target:
-		if err := goose.DownToContext(ctx, db, ".", int64(target)); err != nil {
-			return fmt.Errorf("roll back schema migrations to %d: %w", target, err)
-		}
-	case current < target:
-		if err := goose.UpToContext(ctx, db, ".", int64(target)); err != nil {
-			return fmt.Errorf("apply schema migrations to %d: %w", target, err)
-		}
-	}
-
-	return nil
-}
