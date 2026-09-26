@@ -23,6 +23,10 @@ type LibraryPaths interface {
 	LibraryDir() string
 }
 
+// ErrLibraryRootUnavailable reports that the library root cannot be read, so
+// per-track presence is unknowable.
+var ErrLibraryRootUnavailable = errors.New("library root unavailable")
+
 type ServiceConfig struct {
 	TrackProvider TrackProvider
 	Paths         LibraryPaths
@@ -69,9 +73,31 @@ func (s *Service) MissingByFolder(ctx context.Context, id library.FolderID, recu
 	return s.filterMissing(tracks)
 }
 
+// requireRoot rejects an absent or non-directory library root before any
+// per-track stat. Without this check every track path fails with
+// fs.ErrNotExist and the whole library is reported missing, which turns an
+// unmounted drive or a mistyped library_dir into a full re-download.
+func (s *Service) requireRoot() error {
+	dir := s.paths.LibraryDir()
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("%w %q: %w; check the library_dir setting", ErrLibraryRootUnavailable, dir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%w %q: not a directory; check the library_dir setting", ErrLibraryRootUnavailable, dir)
+	}
+
+	return nil
+}
+
 // filterMissing keeps tracks whose physical file cannot be stat'd. Tracks
 // without a SourceID are skipped — they cannot be re-downloaded.
 func (s *Service) filterMissing(tracks []library.Track) ([]library.Track, error) {
+	if err := s.requireRoot(); err != nil {
+		return nil, err
+	}
+
 	var missing []library.Track
 	for _, t := range tracks {
 		if t.SourceID == "" {

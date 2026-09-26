@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yappachino-dev/yci/internal/library"
@@ -105,5 +106,83 @@ func TestServiceWrapsProviderErrors(t *testing.T) {
 
 	if _, err := svc.MissingAll(context.Background()); !errors.Is(err, wantErr) {
 		t.Errorf("error = %v, want wrapped provider error", err)
+	}
+}
+
+// TestServiceRejectsMissingRoot is the regression test for the failure that
+// reported a whole library as missing when the root was absent, which made
+// sync re-download every track after an unmounted drive or a bad
+// library_dir. An unknown root must be an error, never a clean miss.
+func TestServiceRejectsMissingRoot(t *testing.T) {
+	svc := newTestService(t, &fakeTrackProvider{
+		tracks: []library.Track{
+			{ID: "t1", RelativePath: "Artist/a.opus", SourceID: "someid12345"},
+		},
+	})
+	svc.paths = fakeLibraryPaths{dir: filepath.Join(t.TempDir(), "never-created")}
+
+	for name, call := range map[string]func() error{
+		"MissingAll": func() error {
+			_, err := svc.MissingAll(context.Background())
+			return err
+		},
+		"MissingByArtist": func() error {
+			_, err := svc.MissingByArtist(context.Background(), "artist1")
+			return err
+		},
+		"MissingByFolder": func() error {
+			_, err := svc.MissingByFolder(context.Background(), "folder1", true)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := call()
+			if !errors.Is(err, ErrLibraryRootUnavailable) {
+				t.Errorf("error = %v, want ErrLibraryRootUnavailable", err)
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("error = %v, want the underlying cause preserved", err)
+			}
+			if !strings.Contains(err.Error(), "library_dir") {
+				t.Errorf("error = %v, want a message naming the setting to check", err)
+			}
+		})
+	}
+}
+
+func TestServiceRejectsRootThatIsAFile(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(root, []byte("oops"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := newTestService(t, &fakeTrackProvider{
+		tracks: []library.Track{{ID: "t1", RelativePath: "a.opus", SourceID: "someid12345"}},
+	})
+	svc.paths = fakeLibraryPaths{dir: root}
+
+	if _, err := svc.MissingAll(context.Background()); !errors.Is(err, ErrLibraryRootUnavailable) {
+		t.Errorf("error = %v, want ErrLibraryRootUnavailable", err)
+	}
+}
+
+// TestServiceRejectsRootBeforeReporting keeps the guard ahead of the scan:
+// an absent root must not leak per-track results, since the caller would
+// enqueue them.
+func TestServiceRejectsRootBeforeReporting(t *testing.T) {
+	svc := newTestService(t, &fakeTrackProvider{
+		tracks: []library.Track{
+			{ID: "t1", RelativePath: "a.opus", SourceID: "someid12345"},
+			{ID: "t2", RelativePath: "b.opus", SourceID: "otherid1234"},
+		},
+	})
+	svc.paths = fakeLibraryPaths{dir: filepath.Join(t.TempDir(), "gone")}
+
+	missing, err := svc.MissingAll(context.Background())
+	if err == nil {
+		t.Fatal("MissingAll expected an error for an absent library root")
+	}
+	if len(missing) != 0 {
+		t.Errorf("missing = %+v, want no tracks reported alongside the error", missing)
 	}
 }
