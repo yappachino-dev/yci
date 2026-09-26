@@ -37,6 +37,8 @@ var rootCmd = &cobra.Command{
 	Use:   "yci",
 	Short: "A CLI to manage your local music library",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		silenceUsageOnRuntimeError(cmd)
+
 		path := cmd.CommandPath()
 
 		// Commands that never touch the library skip the boot sequence
@@ -93,6 +95,15 @@ func Container(ctx context.Context) *app.Container {
 	}
 
 	return c
+}
+
+// silenceUsageOnRuntimeError suppresses cobra's usage dump for errors raised
+// once a command is already running. Flag parsing and argument validation
+// both fail before this hook, so genuine usage mistakes keep their help text;
+// only failures from real work — an unreadable library root, a missing
+// yt-dlp — reach the user as a bare message they can act on.
+func silenceUsageOnRuntimeError(cmd *cobra.Command) {
+	cmd.SilenceUsage = true
 }
 
 // mapSentinels turns known domain sentinels into one clean user-facing
