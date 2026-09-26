@@ -125,8 +125,6 @@ func configKeyCompletion(cmd *cobra.Command, args []string, toComplete string) (
 }
 
 func init() {
-	rootCmd.AddCommand(configCmd)
-
 	configCmd.AddCommand(configPathCmd)
 	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configGetCmd)

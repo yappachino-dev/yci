@@ -183,8 +183,6 @@ var importStagingCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(importCmd)
-
 	importCmd.AddCommand(importStagingCmd)
 
 	importStagingCmd.Flags().Bool(flagSkipUnknown, false, "Automatically skip tracks with unknown channels")

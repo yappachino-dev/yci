@@ -146,7 +146,6 @@ func performMigration(cmd *cobra.Command, target int) error {
 }
 
 func init() {
-	rootCmd.AddCommand(debugCmd)
 	debugCmd.AddCommand(debugMigrationCmd)
 
 	debugMigrationCmd.AddCommand(debugMigrationGetCmd)

@@ -34,8 +34,8 @@ var playlistCreateCmd = &cobra.Command{
 	},
 }
 
-var playlistLsCmd = &cobra.Command{
-	Use:   "ls",
+var playlistListCmd = &cobra.Command{
+	Use:   "list",
 	Short: "List playlists",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -141,8 +141,8 @@ var playlistAddCmd = &cobra.Command{
 	},
 }
 
-var playlistRmCmd = &cobra.Command{
-	Use:   "rm <name> <track-id>...",
+var playlistRemoveCmd = &cobra.Command{
+	Use:   "remove <name> <track-id>...",
 	Short: "Remove one or more tracks from a playlist",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -254,13 +254,18 @@ var playlistExportCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(playlistCmd)
+	playlistCmd.AddCommand(
+		playlistCreateCmd,
+		playlistShowCmd,
+		playlistAddCmd,
+		playlistRemoveCmd,
+		playlistDeleteCmd,
+		playlistListCmd,
+		playlistExportCmd,
+	)
 
-	playlistCmd.AddCommand(playlistCreateCmd)
-	playlistCmd.AddCommand(playlistLsCmd)
-	playlistCmd.AddCommand(playlistShowCmd)
-	playlistCmd.AddCommand(playlistAddCmd)
-	playlistCmd.AddCommand(playlistRmCmd)
-	playlistCmd.AddCommand(playlistDeleteCmd)
-	playlistCmd.AddCommand(playlistExportCmd)
+	// Without this, playlist delete could never run non-interactively:
+	// confirmDestructive requires --yes, and the flag used to live on the
+	// top-level delete group that playlists never sat under.
+	playlistDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 }

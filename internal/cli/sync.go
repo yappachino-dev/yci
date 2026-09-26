@@ -94,7 +94,6 @@ var syncCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(syncCmd)
 
 	syncCmd.Flags().String(flagArtist, "", "Target a specific artist ID to sync")
 	syncCmd.Flags().String(flagFolder, "", "Target a specific folder ID to sync")

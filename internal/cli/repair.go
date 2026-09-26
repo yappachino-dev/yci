@@ -63,7 +63,6 @@ var repairCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(repairCmd)
 
 	repairCmd.Flags().Bool(flagDryRunRepair, false, "List journal entries without replaying them")
 }

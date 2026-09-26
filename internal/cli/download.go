@@ -181,7 +181,7 @@ var downloadRetryCmd = &cobra.Command{
 		for _, a := range args {
 			id, err := strconv.Atoi(a)
 			if err != nil {
-				return fmt.Errorf("invalid queue ID %q: must be an integer (see yci ls queue)", a)
+				return fmt.Errorf("invalid queue ID %q: must be an integer (see yci download queue)", a)
 			}
 
 			ids = append(ids, id)
@@ -212,9 +212,41 @@ var downloadResumeCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(downloadCmd)
+var downloadQueueCmd = &cobra.Command{
+	Use:   "queue",
+	Short: "List all queued for download tracks",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listQueue(cmd.Context(), cmd)
+	},
+}
 
+func listQueue(ctx context.Context, cmd *cobra.Command) error {
+	c := Container(ctx)
+
+	queue, err := c.DownloadService.All(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch queue: %w", err)
+	}
+
+	if len(queue) == 0 {
+		cmd.Println("Download queue is empty. Add items with `yci download` or `yci sync`.")
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
+	fmt.Fprintln(w, "ID\tSOURCE_ID\tSTATUS\tATTEMPTS\tERROR_MSG")
+	fmt.Fprintln(w, "--\t---------\t------\t--------\t---------")
+
+	for _, q := range queue {
+		fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\n", q.ID, q.SourceID, q.Status, q.Attempts, q.ErrorMsg)
+	}
+
+	w.Flush()
+	return nil
+}
+
+func init() {
+	downloadCmd.AddCommand(downloadQueueCmd)
 	downloadCmd.AddCommand(downloadResumeCmd)
 	downloadCmd.AddCommand(downloadRetryCmd)
 	downloadCmd.PersistentFlags().String(flagDelay, "", flagDelayComment+" (default: config or "+config.DefaultDelay+")")
