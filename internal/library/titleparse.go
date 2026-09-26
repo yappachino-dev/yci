@@ -6,9 +6,13 @@ import (
 	"unicode"
 )
 
-// TitleConfidence says how much of TitleParts the parser actually
-// understands. Callers may show low-confidence results for confirmation;
-// none means the title was left as-is.
+// TitleConfidence reports how much of TitleParts the parser actually
+// understood: none means nothing was found and the raw title stands.
+//
+// It is deliberately not used to gate writes. It was measured against
+// Western upload titles and reported high confidence while swapping artist
+// and song, so it describes parse hygiene rather than correctness. Treat
+// the parts it describes as hints, or ignore it.
 type TitleConfidence int
 
 const (
@@ -28,7 +32,11 @@ func (c TitleConfidence) String() string {
 	}
 }
 
-// TitleParts is the interpreted structure of a raw video title.
+// TitleParts is the parser's guess at a raw video title's structure.
+//
+// Frozen: the rule set behind it is not being extended, and no part of it
+// writes to a display title. The values are hints, and the only reason they
+// are stored at all is that they were free to compute at import.
 type TitleParts struct {
 	Raw        string
 	Song       string
@@ -101,7 +109,7 @@ func ParseTitle(raw string) TitleParts {
 	remaining, weakHint, versions := peelLeading(remaining, nil)
 	remaining, strongHint, versions := peelTrailing(remaining, versions)
 
-	remaining, bare := peelBareVersion(remaining, versions)
+	remaining, bare := peelBareVersion(remaining)
 	if bare != "" {
 		versions = append(versions, bare)
 	}
@@ -209,8 +217,8 @@ func peelTrailing(s string, versions []string) (string, string, []string) {
 }
 
 // peelBareVersion handles an unbracketed trailing version token, as in
-// "... ・Ayunda Risu COVER".
-func peelBareVersion(s string, versions []string) (string, string) {
+// "... ・Ayunda Risu COVER". The caller records the returned marker.
+func peelBareVersion(s string) (string, string) {
 	fields := strings.Fields(s)
 	if len(fields) < 2 {
 		return s, ""

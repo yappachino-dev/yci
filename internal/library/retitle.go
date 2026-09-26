@@ -5,34 +5,32 @@ import (
 	"fmt"
 )
 
-// TitleInterpretation is the outcome of applying the title parser to one
-// track's raw title.
+// TitleInterpretation is the outcome of interpreting one track's raw title.
 type TitleInterpretation struct {
-	// Title is the display title to store: the parsed song when the parse
-	// is trustworthy, otherwise the raw title unchanged.
-	Title     string
+	// Title is the display title: the raw title with decoration and
+	// version markers removed. Structure is never inferred here, so this
+	// value can only be less noisy than the original, never rearranged.
+	Title string
+	// Performer and Version are the parser's guesses. They are untrusted:
+	// the confidence that once gated them was measured to be unreliable
+	// (it reported high confidence while swapping artist and song), so
+	// they are recorded as hints for a future consumer to weigh, and are
+	// never written into Title.
 	Performer string
 	Version   string
 }
 
-// InterpretTitle applies the parser conservatively: a parsed song replaces
-// the raw title only at high confidence, so a heuristic can never make a
-// title worse than the original. Performer and version are recorded
-// whenever the parser found them, at any confidence.
+// InterpretTitle strips decoration from the title and records the parser's
+// structural guesses alongside it as hints. Stripping is unconditional;
+// inference contributes nothing to the stored title.
 func InterpretTitle(rawTitle string) TitleInterpretation {
 	parts := ParseTitle(rawTitle)
 
-	interpreted := TitleInterpretation{
-		Title:     rawTitle,
+	return TitleInterpretation{
+		Title:     StripTitle(rawTitle),
 		Performer: parts.Performer,
 		Version:   parts.Version,
 	}
-
-	if parts.Confidence == ConfidenceHigh && parts.Song != "" {
-		interpreted.Title = parts.Song
-	}
-
-	return interpreted
 }
 
 // TitleChange records one retitling decision for reporting.

@@ -3,7 +3,6 @@ package library
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -25,13 +24,13 @@ func (e *libraryEnv) seedRaw(t *testing.T, id, rawTitle string) Track {
 	return track
 }
 
-func TestRetitleAppliesHighConfidenceParsesOnly(t *testing.T) {
+func TestRetitleStripsDecorationWithoutInferringStructure(t *testing.T) {
 	env := newLibraryEnv(t)
 	ctx := t.Context()
 
 	noisy := env.seedRaw(t, "t1", "【MV】See the world / IRyS【Original Song】")
 	clean := env.seedRaw(t, "t2", "the boy is mine")
-	ambiguous := env.seedRaw(t, "t3", "Crazy:B「Honeycomb Summer」 / 戌亥とこ × 星街すいせい")
+	compound := env.seedRaw(t, "t3", "Crazy:B「Honeycomb Summer」 / 戌亥とこ × 星街すいせい")
 
 	report, err := env.tracks.Retitle(ctx, false)
 	if err != nil {
@@ -40,32 +39,23 @@ func TestRetitleAppliesHighConfidenceParsesOnly(t *testing.T) {
 	if report.Scanned != 3 {
 		t.Errorf("scanned = %d, want 3", report.Scanned)
 	}
-	if report.Retitled != 1 {
-		t.Errorf("retitled = %d, want 1 (only the high-confidence title)", report.Retitled)
-	}
-	// The bare title is already fully interpreted and is skipped entirely.
-	if report.Updated != 2 {
-		t.Errorf("updated = %d, want 2", report.Updated)
-	}
 
 	got, err := env.tracks.ByID(ctx, noisy.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Title != "See the world" {
-		t.Errorf("title = %q, want %q", got.Title, "See the world")
+	// Decoration is gone; the separator and the name inside it are not,
+	// because deciding where the song ends is inference, not stripping.
+	if got.Title != "See the world / IRyS" {
+		t.Errorf("title = %q, want decoration stripped only", got.Title)
 	}
-	if got.Performer != "IRyS" {
-		t.Errorf("performer = %q, want %q", got.Performer, "IRyS")
-	}
-	if got.Version != "original" {
-		t.Errorf("version = %q, want %q", got.Version, "original")
+	if got.Performer != "IRyS" || got.Version != "original" {
+		t.Errorf("hints = (%q, %q), want (IRyS, original)", got.Performer, got.Version)
 	}
 	if got.RawTitle != "【MV】See the world / IRyS【Original Song】" {
 		t.Errorf("raw title was not preserved: %q", got.RawTitle)
 	}
 
-	// A title the parser cannot improve keeps its stored form.
 	untouched, err := env.tracks.ByID(ctx, clean.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -74,16 +64,13 @@ func TestRetitleAppliesHighConfidenceParsesOnly(t *testing.T) {
 		t.Errorf("bare title was rewritten to %q", untouched.Title)
 	}
 
-	// Low confidence never replaces a title, but hints are still recorded.
-	low, err := env.tracks.ByID(ctx, ambiguous.ID)
+	// Mid-string decoration is not recognizable noise and stays put.
+	kept, err := env.tracks.ByID(ctx, compound.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if low.Title != ambiguous.Title {
-		t.Errorf("low-confidence title was replaced: %q -> %q", ambiguous.Title, low.Title)
-	}
-	if low.Performer == "" {
-		t.Error("low-confidence parse recorded no performer hint")
+	if kept.Title != compound.Title {
+		t.Errorf("title = %q, want it unchanged", kept.Title)
 	}
 }
 
@@ -112,8 +99,11 @@ func TestRetitleBackfillsRowsWithoutProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Title != "月に向かって撃て" {
-		t.Errorf("title = %q, want the parsed song", got.Title)
+	if got.Title != "月に向かって撃て / 星街すいせい" {
+		t.Errorf("title = %q, want the version marker stripped only", got.Title)
+	}
+	if got.Performer != "星街すいせい" || got.Version != "official" {
+		t.Errorf("hints = (%q, %q), want (星街すいせい, official)", got.Performer, got.Version)
 	}
 	if got.RawTitle != "月に向かって撃て / 星街すいせい(official)" {
 		t.Errorf("raw title = %q, want the pre-parse title preserved", got.RawTitle)
@@ -189,8 +179,8 @@ func TestImportStoresParsedTitleAndProvenance(t *testing.T) {
 	}
 
 	imported := tracks[0]
-	if imported.Title != "Turing Love" {
-		t.Errorf("title = %q, want the parsed song %q", imported.Title, "Turing Love")
+	if imported.Title != "Turing Love / Gigi Murin" {
+		t.Errorf("title = %q, want decoration stripped only", imported.Title)
 	}
 	if imported.Performer != "Gigi Murin" {
 		t.Errorf("performer = %q, want %q", imported.Performer, "Gigi Murin")
@@ -202,9 +192,10 @@ func TestImportStoresParsedTitleAndProvenance(t *testing.T) {
 		t.Errorf("raw title = %q, want %q", imported.RawTitle, rawTitle)
 	}
 
-	// The filename follows the clean title, since it is derived at import.
-	if !strings.HasSuffix(string(imported.RelativePath), "/Turing Love.opus") {
-		t.Errorf("relative path = %q, want it named after the clean title", imported.RelativePath)
+	// The filename is derived from the stored title, so it inherits the
+	// stripped form — the sanitizer turns " / " into " _ ".
+	if want := "Music/Turing Love _ Gigi Murin.opus"; imported.RelativePath != TrackPath(want) {
+		t.Errorf("relative path = %q, want %q", imported.RelativePath, want)
 	}
 }
 
@@ -221,9 +212,10 @@ func TestImportDoesNotOverwriteOccupiedDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Two different uploads that clean down to the same song title.
+	// Two uploads whose titles differ only in decoration, so both strip to
+	// the same filename.
 	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "dQw4w9WgXcQ.opus"), "【MV】Melt / A(Cover)", "An Artist")
-	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "aaaaaaaaaaa.opus"), "【MV】Melt / B(Cover)", "An Artist")
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "aaaaaaaaaaa.opus"), "Melt / A(Cover)", "An Artist")
 
 	skip := func(channelName, title string) (StagingResult, error) {
 		return StagingResult{Action: ActionSkip}, nil

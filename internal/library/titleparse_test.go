@@ -1,11 +1,6 @@
 package library
 
-import (
-	"bufio"
-	"os"
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestParseTitle(t *testing.T) {
 	tests := []struct {
@@ -164,42 +159,20 @@ func TestParseTitle(t *testing.T) {
 }
 
 // TestParseTitleCorpus guards properties every real title must satisfy:
-// parsing never empties the song, never panics, and never invents a
-// performer for a title with no structure at all.
+// parsing never empties the song and never panics.
 func TestParseTitleCorpus(t *testing.T) {
-	f, err := os.Open("testdata/titles.txt")
-	if err != nil {
-		t.Fatalf("open corpus: %v", err)
-	}
-	defer f.Close()
-
 	stats := map[TitleConfidence]int{}
-	lines := 0
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		raw := strings.TrimSpace(scanner.Text())
-		if raw == "" {
-			continue
-		}
-		lines++
-
+	for _, raw := range loadTitleCorpus(t) {
 		got := ParseTitle(raw)
 		if got.Song == "" {
 			t.Errorf("empty song for %q", raw)
 		}
 		stats[got.Confidence]++
 	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan corpus: %v", err)
-	}
 
-	if lines == 0 {
-		t.Fatal("corpus is empty")
-	}
-
-	t.Logf("parsed %d titles: %d high, %d low, %d none",
-		lines, stats[ConfidenceHigh], stats[ConfidenceLow], stats[ConfidenceNone])
+	t.Logf("parsed %d titles: %d high, %d low, %d none (hints only; nothing gates on these)",
+		len(loadTitleCorpus(t)), stats[ConfidenceHigh], stats[ConfidenceLow], stats[ConfidenceNone])
 }
 
 // TestParseTitleNoStructureStaysHonest pins the failure mode that matters
