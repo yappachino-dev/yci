@@ -2,12 +2,14 @@ package library
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/store"
 )
@@ -53,7 +55,7 @@ func NewSQLitePlaylistRepository(q *store.Queries) *SQLitePlaylistRepository {
 }
 
 func (r *SQLitePlaylistRepository) Create(ctx context.Context, name string) (Playlist, error) {
-	row, err := r.q.CreatePlaylist(ctx, name)
+	row, err := r.db(ctx).CreatePlaylist(ctx, name)
 	if err != nil {
 		return Playlist{}, db.MapSQLError(err, nil, ErrPlaylistAlreadyExists)
 	}
@@ -62,7 +64,7 @@ func (r *SQLitePlaylistRepository) Create(ctx context.Context, name string) (Pla
 }
 
 func (r *SQLitePlaylistRepository) All(ctx context.Context) ([]Playlist, error) {
-	rows, err := r.q.GetPlaylists(ctx)
+	rows, err := r.db(ctx).GetPlaylists(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list playlists: %w", err)
 	}
@@ -75,8 +77,18 @@ func (r *SQLitePlaylistRepository) All(ctx context.Context) ([]Playlist, error) 
 	return out, nil
 }
 
+// db resolves the queries to the transaction carried by ctx, falling back to
+// the pool. Every other repository has this; without it a multi-row write
+// deadlocks against SQLite's single writer.
+func (r *SQLitePlaylistRepository) db(ctx context.Context) *store.Queries {
+	if tx, ok := appctx.TxFromContext[*sql.Tx](ctx); ok {
+		return r.q.WithTx(tx)
+	}
+	return r.q
+}
+
 func (r *SQLitePlaylistRepository) ByName(ctx context.Context, name string) (Playlist, error) {
-	row, err := r.q.GetPlaylistByName(ctx, name)
+	row, err := r.db(ctx).GetPlaylistByName(ctx, name)
 	if err != nil {
 		return Playlist{}, db.MapSQLError(err, ErrPlaylistNotFound, nil)
 	}
@@ -85,7 +97,7 @@ func (r *SQLitePlaylistRepository) ByName(ctx context.Context, name string) (Pla
 }
 
 func (r *SQLitePlaylistRepository) Delete(ctx context.Context, id int64) error {
-	n, err := r.q.DeletePlaylist(ctx, id)
+	n, err := r.db(ctx).DeletePlaylist(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete playlist %d: %w", id, err)
 	}
@@ -97,7 +109,7 @@ func (r *SQLitePlaylistRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *SQLitePlaylistRepository) AddTrack(ctx context.Context, playlistID int64, trackID TrackID) error {
-	err := r.q.AddTrackToPlaylist(ctx, store.AddTrackToPlaylistParams{
+	err := r.db(ctx).AddTrackToPlaylist(ctx, store.AddTrackToPlaylistParams{
 		PlaylistID: playlistID,
 		TrackID:    string(trackID),
 	})
@@ -109,7 +121,7 @@ func (r *SQLitePlaylistRepository) AddTrack(ctx context.Context, playlistID int6
 }
 
 func (r *SQLitePlaylistRepository) RemoveTrack(ctx context.Context, playlistID int64, trackID TrackID) error {
-	n, err := r.q.RemoveTrackFromPlaylist(ctx, store.RemoveTrackFromPlaylistParams{
+	n, err := r.db(ctx).RemoveTrackFromPlaylist(ctx, store.RemoveTrackFromPlaylistParams{
 		PlaylistID: playlistID,
 		TrackID:    string(trackID),
 	})
@@ -124,7 +136,7 @@ func (r *SQLitePlaylistRepository) RemoveTrack(ctx context.Context, playlistID i
 }
 
 func (r *SQLitePlaylistRepository) Tracks(ctx context.Context, playlistID int64) ([]PlaylistEntry, error) {
-	rows, err := r.q.GetPlaylistTracks(ctx, playlistID)
+	rows, err := r.db(ctx).GetPlaylistTracks(ctx, playlistID)
 	if err != nil {
 		return nil, fmt.Errorf("list playlist tracks: %w", err)
 	}
@@ -147,25 +159,28 @@ type TrackFinder interface {
 	ByID(ctx context.Context, id TrackID) (Track, error)
 }
 
-// PlaylistServiceConfig follows the config-struct rule: three collaborators.
+// PlaylistServiceConfig follows the config-struct rule: four collaborators.
 type PlaylistServiceConfig struct {
-	Repo   PlaylistRepository
-	Tracks TrackFinder
-	Paths  PathsProvider
+	Repo       PlaylistRepository
+	Tracks     TrackFinder
+	Paths      PathsProvider
+	Transactor Transactor
 }
 
 // PlaylistService manages playlist entities and renders them to .m3u files.
 type PlaylistService struct {
-	repo   PlaylistRepository
-	tracks TrackFinder
-	paths  PathsProvider
+	repo       PlaylistRepository
+	tracks     TrackFinder
+	paths      PathsProvider
+	transactor Transactor
 }
 
 func NewPlaylistService(cfg PlaylistServiceConfig) *PlaylistService {
 	return &PlaylistService{
-		repo:   cfg.Repo,
-		tracks: cfg.Tracks,
-		paths:  cfg.Paths,
+		repo:       cfg.Repo,
+		tracks:     cfg.Tracks,
+		paths:      cfg.Paths,
+		transactor: cfg.Transactor,
 	}
 }
 
@@ -208,20 +223,34 @@ func (s *PlaylistService) Delete(ctx context.Context, name string) error {
 
 // AddTrack appends an existing track to the end of the playlist.
 func (s *PlaylistService) AddTrack(ctx context.Context, name string, trackID TrackID) error {
+	return s.AddTracks(ctx, name, []TrackID{trackID})
+}
+
+// AddTracks materializes a whole playlist in one transaction. Building a
+// playlist from a matched set adds dozens of rows, and committing them
+// individually would leave a half-built playlist behind on any failure,
+// which reads as a deliberate partial result.
+func (s *PlaylistService) AddTracks(ctx context.Context, name string, trackIDs []TrackID) error {
+	if len(trackIDs) == 0 {
+		return nil
+	}
+
 	p, err := s.repo.ByName(ctx, strings.TrimSpace(name))
 	if err != nil {
 		return fmt.Errorf("find playlist %q: %w", name, err)
 	}
 
-	if _, err := s.tracks.ByID(ctx, trackID); err != nil {
-		return fmt.Errorf("find track %s: %w", trackID, err)
-	}
-
-	if err := s.repo.AddTrack(ctx, p.ID, trackID); err != nil {
-		return fmt.Errorf("add track %s to playlist %q: %w", trackID, name, err)
-	}
-
-	return nil
+	return s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		for _, trackID := range trackIDs {
+			if _, err := s.tracks.ByID(txCtx, trackID); err != nil {
+				return fmt.Errorf("find track %s: %w", trackID, err)
+			}
+			if err := s.repo.AddTrack(txCtx, p.ID, trackID); err != nil {
+				return fmt.Errorf("add track %s to playlist %q: %w", trackID, name, err)
+			}
+		}
+		return nil
+	})
 }
 
 func (s *PlaylistService) RemoveTrack(ctx context.Context, name string, trackID TrackID) error {

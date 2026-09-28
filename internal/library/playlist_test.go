@@ -12,9 +12,10 @@ func newPlaylistEnv(t *testing.T) (*libraryEnv, *PlaylistService) {
 
 	env := newLibraryEnv(t)
 	svc := NewPlaylistService(PlaylistServiceConfig{
-		Repo:   NewSQLitePlaylistRepository(env.queries),
-		Tracks: env.tracks,
-		Paths:  env.paths,
+		Repo:       NewSQLitePlaylistRepository(env.queries),
+		Tracks:     env.tracks,
+		Paths:      env.paths,
+		Transactor: env.txr,
 	})
 
 	return env, svc
@@ -159,5 +160,107 @@ func TestPlaylistExportWritesRelativePaths(t *testing.T) {
 	raw, _ = os.ReadFile(path)
 	if strings.Contains(string(raw), "Song One") {
 		t.Error("stale track survived re-export; render is not wholesale")
+	}
+}
+
+// TestPlaylistAddTracksIsAtomic is the reason AddTracks exists. Adding rows
+// one commit at a time would leave a partial playlist behind on failure, and
+// a partial playlist is indistinguishable from a deliberate one.
+func TestPlaylistAddTracksIsAtomic(t *testing.T) {
+	env, svc := newPlaylistEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	artist, err := env.artists.Create(ctx, "", folder.ID, "An Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make([]TrackID, 0, 3)
+	for i, name := range []string{"one", "two", "three"} {
+		id := TrackID("t" + string(rune('1'+i)))
+		if err := env.repos.tracks.Create(ctx, Track{
+			ID:           id,
+			Title:        name,
+			ArtistID:     artist.ID,
+			RelativePath: TrackPath("Music/" + name + ".opus"),
+			SourceID:     "src" + name,
+		}); err != nil {
+			t.Fatalf("seed track %s: %v", name, err)
+		}
+		ids = append(ids, id)
+	}
+
+	playlist, err := svc.Create(ctx, "Atomic")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The last track does not exist, so the whole unit must roll back.
+	err = svc.AddTracks(ctx, playlist.Name, []TrackID{ids[0], ids[1], "missing"})
+	if err == nil {
+		t.Fatal("AddTracks succeeded despite an unknown track")
+	}
+
+	entries, err := svc.Entries(ctx, playlist.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("playlist has %d entries after rollback, want 0: %v", len(entries), entries)
+	}
+
+	// The happy path still works, and order is preserved.
+	if err := svc.AddTracks(ctx, playlist.Name, ids); err != nil {
+		t.Fatalf("AddTracks: %v", err)
+	}
+	entries, err = svc.Entries(ctx, playlist.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("got %d entries, want 3", len(entries))
+	}
+	for i, e := range entries {
+		if e.Track.ID != ids[i] {
+			t.Errorf("position %d = %s, want %s", i, e.Track.ID, ids[i])
+		}
+	}
+}
+
+// TestPlaylistAddTracksDuplicateIsRejected covers the unique constraint: a
+// matched set that contains the same track twice must not silently
+// half-insert.
+func TestPlaylistAddTracksDuplicateIsRejected(t *testing.T) {
+	env, svc := newPlaylistEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	artist, err := env.artists.Create(ctx, "", folder.ID, "An Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.repos.tracks.Create(ctx, Track{
+		ID: "t1", Title: "one", ArtistID: artist.ID,
+		RelativePath: TrackPath("Music/one.opus"), SourceID: "src1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	playlist, err := svc.Create(ctx, "Dupes")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.AddTracks(ctx, playlist.Name, []TrackID{"t1", "t1"}); err == nil {
+		t.Fatal("AddTracks accepted a duplicate track")
+	}
+
+	entries, err := svc.Entries(ctx, playlist.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("playlist has %d entries after rollback, want 0", len(entries))
 	}
 }

@@ -100,9 +100,10 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 	})
 
 	playlistService := library.NewPlaylistService(library.PlaylistServiceConfig{
-		Repo:   playlistRepo,
-		Tracks: trackService,
-		Paths:  paths,
+		Repo:       playlistRepo,
+		Tracks:     trackService,
+		Paths:      paths,
+		Transactor: transactor,
 	})
 
 	auditService := audit.NewService(trackService, paths)
