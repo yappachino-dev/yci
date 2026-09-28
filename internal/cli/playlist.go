@@ -17,9 +17,27 @@ var playlistCmd = &cobra.Command{
 
 var playlistCreateCmd = &cobra.Command{
 	Use:   "create <name>",
-	Short: "Create a new empty playlist",
-	Args:  cobra.ExactArgs(1),
+	Short: "Create a new playlist, optionally seeded from an existing track",
+	Long: `Create an empty playlist, or seed one from a track you already have.
+
+Seeding derives a fragment from the seed's title, shows which tracks it
+matches, and adds the accepted set as a static playlist. The fragment is a
+token set: it matches a track only when every chosen token is present, so
+spacing differences do not matter.
+
+In an interactive session you pick which title tokens to match on. Elsewhere,
+pass --accept-all to take the derived fragment, or --fragment to state one
+explicitly.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		seedInput, _ := cmd.Flags().GetString(flagFromTrack)
+		fragmentFlag, _ := cmd.Flags().GetString(flagFragment)
+		acceptAll, _ := cmd.Flags().GetBool(flagAcceptAll)
+
+		if seedInput != "" {
+			return seedPlaylist(cmd, args[0], seedInput, fragmentFlag, acceptAll)
+		}
+
 		c := Container(cmd.Context())
 
 		p, err := c.PlaylistService.Create(cmd.Context(), args[0])
@@ -32,6 +50,13 @@ var playlistCreateCmd = &cobra.Command{
 		cmd.Printf("Created playlist: %s\n", p.Name)
 		return nil
 	},
+}
+
+func init() {
+	playlistCreateCmd.Flags().String(flagFromTrack, "", "Seed the playlist from this track ID (prefix allowed)")
+	playlistCreateCmd.Flags().String(flagFragment, "", "Match on these title tokens instead of choosing them")
+	playlistCreateCmd.Flags().Bool(flagAcceptAll, false, "Use the derived fragment without prompting (non-interactive)")
+	playlistCreateCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 }
 
 var playlistListCmd = &cobra.Command{
