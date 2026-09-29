@@ -89,7 +89,10 @@ device.`,
 
 func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedReport) {
 	cmd.Printf("Playlist %q  (seed: %s)\n", name, truncateCell(report.SeedTitle, 50))
-	cmd.Printf("Recipe: %s\n", library.FormatTokens(report.Recipe))
+	cmd.Printf("Recipe: %s\n", library.FormatTokens(report.Recipe, report.MatchMode))
+	if report.MatchMode == library.MatchAny {
+		cmd.Printf("Matching: ANY token — wider than the AND default\n")
+	}
 	cmd.Printf("Matches %d track(s) now; playlist holds %d, of which %d already match.\n\n",
 		report.Matched, report.Current, report.Unchanged)
 

@@ -70,26 +70,64 @@ func TestParseTokenSelectionRejects(t *testing.T) {
 	}
 }
 
-func TestDefaultSelectionPreservesTitleOrder(t *testing.T) {
+func TestSuggestedIndicesArePromptPositions(t *testing.T) {
 	all := []string{"Cry", "Baby", "星街すいせい", "Cover"}
 
 	tests := []struct {
 		name      string
 		suggested []string
-		want      []string
+		want      []int
 	}{
-		{"one suggestion", []string{"星街すいせい"}, []string{"星街すいせい"}},
-		{"two suggestions", []string{"Baby", "Cry"}, []string{"Cry", "Baby"}},
+		{"one suggestion", []string{"星街すいせい"}, []int{3}},
+		{"two suggestions keep title order", []string{"Baby", "Cry"}, []int{1, 2}},
 		{"suggestion not in the list", []string{"Ghost"}, nil},
 		{"no suggestion", nil, nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := defaultSelection(tt.suggested, all); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("defaultSelection(%q) = %q, want %q", tt.suggested, got, tt.want)
+			got := suggestedIndices(tt.suggested, all)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("suggestedIndices(%q) = %v, want %v", tt.suggested, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestAcceptingTheSuggestionParses is the regression test for a bug that only
+// showed up in the terminal: the default answer was built from token *text*
+// and fed to a parser expecting *positions*, so accepting the suggestion
+// errored with `星街すいせい is not a token number`.
+//
+// It walks the same path the wizard takes on empty input, because the earlier
+// test asserted the helper's return type rather than the behaviour the user
+// depends on.
+func TestAcceptingTheSuggestionParses(t *testing.T) {
+	tokens := []string{"Cry", "Baby", "星街すいせい", "Cover"}
+
+	for _, suggested := range [][]string{
+		{"星街すいせい"},
+		{"Cry", "星街すいせい"},
+		{"Cry", "Baby", "星街すいせい", "Cover"},
+	} {
+		answer := formatIndices(suggestedIndices(suggested, tokens))
+
+		selected, err := parseTokenSelection(answer, tokens)
+		if err != nil {
+			t.Fatalf("accepting suggestion %v produced answer %q, which does not parse: %v", suggested, answer, err)
+		}
+		if !reflect.DeepEqual(selected, suggested) {
+			t.Errorf("accepting %v selected %q, want %q", suggested, selected, suggested)
+		}
+	}
+}
+
+func TestFormatIndicesIsEmptyWhenNoSuggestion(t *testing.T) {
+	if got := formatIndices(suggestedIndices(nil, []string{"a"})); got != "" {
+		t.Errorf("formatIndices = %q, want empty so the caller can detect it", got)
+	}
+	if got := formatIndices([]int{1, 3}); got != "1,3" {
+		t.Errorf("formatIndices([1 3]) = %q, want \"1,3\"", got)
 	}
 }
 
@@ -157,7 +195,7 @@ func TestSeedPlaylistAcceptAll(t *testing.T) {
 	)
 
 	cmd, out := seedCmdWith(t, c, true)
-	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true); err != nil {
+	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true, library.MatchAll); err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}
 
@@ -191,7 +229,7 @@ func TestSeedPlaylistExplicitFragment(t *testing.T) {
 	)
 
 	cmd, out := seedCmdWith(t, c, true)
-	if err := seedPlaylist(cmd, "Calliope", string(ids[0]), "Mori Calliope", true); err != nil {
+	if err := seedPlaylist(cmd, "Calliope", string(ids[0]), "Mori Calliope", true, library.MatchAll); err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}
 
@@ -212,7 +250,7 @@ func TestSeedPlaylistNoMatchIsRefused(t *testing.T) {
 	ids := seedTracks(t, c, "Espresso", "From The Start")
 
 	cmd, _ := seedCmd(t, c)
-	if err := seedPlaylist(cmd, "Nothing", string(ids[0]), "zzzznotpresent", true); err == nil {
+	if err := seedPlaylist(cmd, "Nothing", string(ids[0]), "zzzznotpresent", true, library.MatchAll); err == nil {
 		t.Fatal("seedPlaylist accepted a fragment that matches nothing")
 	}
 
@@ -233,7 +271,7 @@ func TestSeedPlaylistRequiresConfirmationFlag(t *testing.T) {
 	// Tests are non-interactive, so without --yes the command must refuse
 	// rather than assume approval.
 	cmd, _ := seedCmd(t, c)
-	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true); err == nil {
+	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true, library.MatchAll); err == nil {
 		t.Fatal("seedPlaylist succeeded without confirmation in a non-interactive session")
 	}
 

@@ -33,9 +33,10 @@ explicitly.`,
 		seedInput, _ := cmd.Flags().GetString(flagFromTrack)
 		fragmentFlag, _ := cmd.Flags().GetString(flagFragment)
 		acceptAll, _ := cmd.Flags().GetBool(flagAcceptAll)
+		match, _ := cmd.Flags().GetString(flagMatch)
 
 		if seedInput != "" {
-			return seedPlaylist(cmd, args[0], seedInput, fragmentFlag, acceptAll)
+			return seedPlaylist(cmd, args[0], seedInput, fragmentFlag, acceptAll, library.ParseMatchMode(match))
 		}
 
 		c := Container(cmd.Context())
@@ -56,6 +57,7 @@ func init() {
 	playlistCreateCmd.Flags().String(flagFromTrack, "", "Seed the playlist from this track ID (prefix allowed)")
 	playlistCreateCmd.Flags().String(flagFragment, "", "Match on these title tokens instead of choosing them")
 	playlistCreateCmd.Flags().Bool(flagAcceptAll, false, "Use the derived fragment without prompting (non-interactive)")
+	playlistCreateCmd.Flags().String(flagMatch, "all", `How tokens combine: "all" requires every token, "any" requires at least one`)
 	playlistCreateCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 }
 
@@ -282,6 +284,7 @@ func init() {
 	playlistCmd.AddCommand(
 		playlistCreateCmd,
 		playlistReseedCmd,
+		playlistEditCmd,
 		playlistShowCmd,
 		playlistAddCmd,
 		playlistRemoveCmd,

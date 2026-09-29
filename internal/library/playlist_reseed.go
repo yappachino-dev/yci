@@ -23,6 +23,8 @@ type ReseedChange struct {
 type ReseedReport struct {
 	// Recipe is the stored token set that produced the derivation.
 	Recipe []string
+	// MatchMode is how the recipe's tokens combine.
+	MatchMode MatchMode
 	// SeedTitle is the seed track's current title, for the report header.
 	SeedTitle string
 	// Current counts the tracks the playlist holds right now, which is not
@@ -76,6 +78,7 @@ func (s *PlaylistService) CreateFromSeed(
 	name string,
 	seedTrackID TrackID,
 	tokens []string,
+	mode MatchMode,
 	trackIDs []TrackID,
 ) (Playlist, error) {
 	if seedTrackID == "" || len(tokens) == 0 {
@@ -97,7 +100,7 @@ func (s *PlaylistService) CreateFromSeed(
 		}
 		created = p
 
-		if err := s.repo.SetRecipe(txCtx, p.ID, seedTrackID, string(encoded)); err != nil {
+		if err := s.repo.SetRecipe(txCtx, p.ID, seedTrackID, string(encoded), mode); err != nil {
 			return err
 		}
 
@@ -119,7 +122,7 @@ func (s *PlaylistService) CreateFromSeed(
 // Derive resolves a recipe against the current library, returning the
 // matching tracks. It is the single definition of what a recipe means, used
 // by both seeding and reseeding so the two can never disagree.
-func (s *PlaylistService) Derive(ctx context.Context, tokens []string) ([]Track, error) {
+func (s *PlaylistService) Derive(ctx context.Context, tokens []string, mode MatchMode) ([]Track, error) {
 	all, err := s.tracks.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks: %w", err)
@@ -127,7 +130,7 @@ func (s *PlaylistService) Derive(ctx context.Context, tokens []string) ([]Track,
 
 	matched := make([]Track, 0, len(all))
 	for _, t := range all {
-		if MatchesFragment(t.Title, tokens) {
+		if MatchesTokens(t.Title, tokens, mode) {
 			matched = append(matched, t)
 		}
 	}
@@ -161,7 +164,7 @@ func (s *PlaylistService) ReseedPlan(ctx context.Context, name string) (ReseedRe
 		return report, &MissingSeedError{Playlist: p.Name, SeedTrackID: p.SeedTrackID}
 	}
 
-	matched, err := s.Derive(ctx, p.FragmentTokens)
+	matched, err := s.Derive(ctx, p.FragmentTokens, p.MatchMode)
 	if err != nil {
 		return report, err
 	}
@@ -195,6 +198,7 @@ func (s *PlaylistService) ReseedPlan(ctx context.Context, name string) (ReseedRe
 	}
 
 	report.Recipe = p.FragmentTokens
+	report.MatchMode = p.MatchMode
 	report.SeedTitle = seed.Title
 	report.Matched = len(matched)
 	report.Unmatched = report.Removed()

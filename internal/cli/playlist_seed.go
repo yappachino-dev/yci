@@ -15,6 +15,7 @@ const (
 	flagFromTrack = "from-track"
 	flagFragment  = "fragment"
 	flagAcceptAll = "accept-all"
+	flagMatch     = "match"
 )
 
 // seedMatchPreviewCap bounds how many matched tracks are listed. A
@@ -33,7 +34,7 @@ const seedFormWidth = 72
 // substring, so "Mori Calliope" also reaches the run-together
 // "MoriCalliope" spelling. Nothing is written until the user confirms, and
 // the whole membership is added in one transaction.
-func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acceptAll bool) error {
+func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acceptAll bool, mode library.MatchMode) error {
 	ctx := cmd.Context()
 	c := Container(ctx)
 
@@ -57,6 +58,9 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 	var tokens []string
 	suggested := library.DeriveFragment(seedTitleOf(tracks, seed), corpus)
 
+	// The suggestion is derived for AND semantics. Under ANY the same
+	// tokens mean something wider, so the quoted count below is
+	// recomputed for the mode actually in force rather than reused.
 	switch {
 	case fragmentFlag != "":
 		tokens = library.Tokenize(fragmentFlag)
@@ -65,14 +69,19 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 		}
 	case acceptAll:
 		tokens = suggested.Tokens
-		cmd.Printf("Fragment: %s (%d matches, %s)\n\n",
-			suggested.FragmentText(), suggested.Recurrence, confidenceNote(suggested))
+		if mode == library.MatchAny {
+			cmd.Printf("Fragment: %s, matching ANY (wider than the derived selection)\n\n",
+				library.FormatTokens(tokens, mode))
+		} else {
+			cmd.Printf("Fragment: %s (%d matches, %s)\n\n",
+				suggested.FragmentText(), suggested.Recurrence, confidenceNote(suggested))
+		}
 	default:
 		if !stdinIsTTY() {
 			return fmt.Errorf("non-interactive session: pass --%s to use the derived fragment, or --%s to choose tokens", flagAcceptAll, flagFragment)
 		}
 
-		tokens, err = pickFragmentTokens(cmd, seedTitleOf(tracks, seed), suggested, corpus)
+		tokens, mode, err = pickFragmentTokens(cmd, seedTitleOf(tracks, seed), suggested, corpus, mode)
 		if err != nil {
 			return err
 		}
@@ -80,13 +89,13 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 
 	// Derive goes through the service so seeding and reseeding cannot
 	// disagree about what a token set means.
-	matched, err := c.PlaylistService.Derive(ctx, tokens)
+	matched, err := c.PlaylistService.Derive(ctx, tokens, mode)
 	if err != nil {
 		return err
 	}
 
 	if len(matched) == 0 {
-		return fmt.Errorf("no track matches the fragment %q", strings.Join(tokens, " "))
+		return fmt.Errorf("no track matches the fragment %s", describeTokens(tokens, mode))
 	}
 
 	printSeedMatches(cmd, matched)
@@ -108,14 +117,14 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 	// Membership and the recipe that explains it are written together, so a
 	// playlist never exists holding rows that `playlist reseed` cannot
 	// reproduce.
-	playlist, err := c.PlaylistService.CreateFromSeed(ctx, name, seed, tokens, ids)
+	playlist, err := c.PlaylistService.CreateFromSeed(ctx, name, seed, tokens, mode, ids)
 	if err != nil {
 		return mapSentinels(err, map[error]string{
 			library.ErrPlaylistAlreadyExists: fmt.Sprintf("playlist %q already exists", name),
 		})
 	}
 
-	cmd.Printf("\nCreated playlist %q with %d tracks.\n", playlist.Name, len(ids))
+	cmd.Printf("\nCreated playlist %q with %d tracks (%s).\n", playlist.Name, len(ids), describeTokens(tokens, mode))
 	cmd.Printf("Re-derive it later with: yci playlist reseed %s\n", playlist.Name)
 	cmd.Printf("Export it with: yci playlist export %s\n", playlist.Name)
 
@@ -157,11 +166,14 @@ func printSeedMatches(cmd *cobra.Command, matched []library.Track) {
 // ones identify the family. The default is the derived selection; typing
 // nothing accepts it. The match count is shown for every attempt, so a bad
 // choice is visible immediately rather than after the playlist is written.
-func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.Fragment, corpus []string) ([]string, error) {
+// pickFragmentTokens asks which tokens to match on and in which mode. The
+// mode is passed in (from --match) and can be flipped at the prompt, so a
+// caller who already chose ANY is not asked to re-assert it.
+func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.Fragment, corpus []string, mode library.MatchMode) ([]string, library.MatchMode, error) {
 	tokens := library.Tokenize(seedTitle)
 
 	if len(tokens) == 0 {
-		return nil, fmt.Errorf("seed title %q has no tokens to choose from", seedTitle)
+		return nil, mode, fmt.Errorf("seed title %q has no tokens to choose from", seedTitle)
 	}
 
 	cmd.Println("Title tokens:")
@@ -172,13 +184,14 @@ func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.
 		}
 		cmd.Printf("  %s %d) %s\n", marker, i+1, t)
 	}
-	cmd.Printf("\nSuggested: %s (%d matches)\n", suggested.FragmentText(), suggested.Recurrence)
+	cmd.Printf("\nSuggested: %s (%d matches, %s)\n", suggested.FragmentText(), suggested.Recurrence, mode)
 
 	for {
 		var answer string
 		prompt := huh.NewInput().
 			Title("Token numbers to match on (comma separated, empty to accept the suggestion)").
-			Description(fmt.Sprintf("Suggested: %s", strings.Join(defaultSelection(suggested.Tokens, tokens), ", "))).
+			Description(fmt.Sprintf("Suggested: %s   |   matching: %s (type AND or ANY to change)",
+				formatIndices(suggestedIndices(suggested.Tokens, tokens)), mode)).
 			CharLimit(64).
 			Value(&answer)
 
@@ -188,12 +201,35 @@ func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.
 		form := huh.NewForm(huh.NewGroup(prompt)).WithTheme(huh.ThemeBase()).WithWidth(seedFormWidth)
 
 		if err := form.Run(); err != nil {
-			return nil, fmt.Errorf("read token selection: %w", err)
+			return nil, mode, fmt.Errorf("read token selection: %w", err)
 		}
 
 		answer = strings.TrimSpace(answer)
+
+		// A bare mode word is not a selection; it changes the mode and
+		// leaves the tokens to their suggested values. This is what makes
+		// the mode reachable without restarting the command.
+		switch strings.ToUpper(answer) {
+		case "AND", "ALL":
+			if mode != library.MatchAll {
+				mode = library.MatchAll
+				cmd.Printf("Matching mode: %s\n", mode)
+			}
+			answer = ""
+		case "ANY", "OR":
+			if mode != library.MatchAny {
+				mode = library.MatchAny
+				cmd.Printf("Matching mode: %s (this widens the selection)\n", mode)
+			}
+			answer = ""
+		}
+
 		if answer == "" {
-			answer = strings.Join(defaultSelection(suggested.Tokens, tokens), ",")
+			answer = formatIndices(suggestedIndices(suggested.Tokens, tokens))
+		}
+		if answer == "" {
+			cmd.Println("No suggested tokens; type the numbers to match on.")
+			continue
 		}
 
 		selected, err := parseTokenSelection(answer, tokens)
@@ -204,26 +240,39 @@ func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.
 
 		matches := 0
 		for _, title := range corpus {
-			if library.MatchesFragment(title, selected) {
+			if library.MatchesTokens(title, selected, mode) {
 				matches++
 			}
 		}
 
-		cmd.Printf("Fragment %q matches %d tracks.\n", strings.Join(selected, " "), matches)
+		cmd.Printf("Fragment %s matches %d tracks.\n", describeTokens(selected, mode), matches)
 		if matches == 0 {
 			cmd.Println("That selection matches nothing. Try again.")
 			continue
 		}
 
-		return selected, nil
+		return selected, mode, nil
 	}
 }
 
-func defaultSelection(suggested, all []string) []string {
-	var out []string
-	for _, t := range all {
+// describeTokens renders a token set with the mode spelled out, because
+// `"Mori", "Calliope"` alone does not say whether the two must both appear.
+func describeTokens(tokens []string, mode library.MatchMode) string {
+	return fmt.Sprintf("%s %s", mode, library.FormatTokens(tokens, mode))
+}
+
+// suggestedIndices returns the 1-based positions of the tokens the derivation
+// suggested, in title order.
+//
+// Positions, not token text: the prompt asks for numbers, so feeding it a
+// token name produces "not a token number" the moment the user accepts the
+// default. Title order is preserved so the echoed default matches the
+// numbered list the user is looking at.
+func suggestedIndices(suggested, all []string) []int {
+	var out []int
+	for i, t := range all {
 		if containsString(suggested, t) {
-			out = append(out, t)
+			out = append(out, i+1)
 		}
 	}
 	return out
@@ -274,6 +323,16 @@ func parseTokenSelection(input string, tokens []string) ([]string, error) {
 	}
 
 	return selected, nil
+}
+
+// formatIndices renders positions for the prompt, or an empty string when
+// there are none so the caller can tell "no suggestion" from "index 0".
+func formatIndices(indices []int) string {
+	parts := make([]string, 0, len(indices))
+	for _, i := range indices {
+		parts = append(parts, strconv.Itoa(i))
+	}
+	return strings.Join(parts, ",")
 }
 
 func containsString(haystack []string, needle string) bool {

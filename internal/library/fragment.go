@@ -13,9 +13,11 @@ import (
 // otherwise fall back to the most recurrent token. On labelled performer
 // seeds that scored 1.00 precision and 1.00 recall.
 //
-// Selection is a token set with AND semantics rather than a joined substring:
-// a track matches only if every selected token is present. Joining would make
-// "星街 すいせい" fail to match "星街すいせい".
+// Selection is a token set rather than a joined substring, so "星街 すいせい"
+// still matches "星街すいせい". How the tokens combine is a mode: AND (every
+// token present) is the default and is what the derivation proposes, because
+// it is what keeps unrelated titles out. ANY (at least one token present) is
+// available for deliberately widening a selection.
 
 // foldFragment normalises a title for comparison: ASCII and fullwidth letters
 // fold to one case, so "Mori Calliope" and "calliope" share a family.
@@ -157,19 +159,66 @@ func DeriveFragment(seedTitle string, corpus []string) Fragment {
 
 // MatchesFragment reports whether a title satisfies every token in the
 // selection. An empty selection matches nothing rather than everything.
+// MatchMode decides how a token set combines.
+type MatchMode string
+
+const (
+	// MatchAll requires every token to be present. This is the default: it
+	// is what the derivation proposes, and it is why a seed like
+	// "Cry Baby / 星街すいせい" does not also select every 星街すいせい
+	// collab.
+	MatchAll MatchMode = "all"
+	// MatchAny requires at least one token. Deliberately wider, so it will
+	// pull in titles that share only one word; useful when the goal is
+	// "anything mentioning this at all", never as a default.
+	MatchAny MatchMode = "any"
+)
+
+// ParseMatchMode maps stored and user-facing text to a mode, defaulting to
+// MatchAll so an absent or unrecognized value keeps the conservative
+// behaviour rather than silently widening a selection.
+func ParseMatchMode(s string) MatchMode {
+	if MatchMode(strings.ToLower(strings.TrimSpace(s))) == MatchAny {
+		return MatchAny
+	}
+	return MatchAll
+}
+
+func (m MatchMode) String() string {
+	if m == MatchAny {
+		return string(MatchAny)
+	}
+	return string(MatchAll)
+}
+
+// MatchesFragment reports whether a title satisfies an AND token set.
 func MatchesFragment(corpusTitle string, tokens []string) bool {
+	return MatchesTokens(corpusTitle, tokens, MatchAll)
+}
+
+// MatchesTokens reports whether a title satisfies a token set under mode.
+//
+// An empty token set never matches: a playlist with no criteria must not
+// silently select the whole library, which is the one outcome a user would
+// never notice and never want.
+func MatchesTokens(corpusTitle string, tokens []string, mode MatchMode) bool {
 	if len(tokens) == 0 {
 		return false
 	}
 
 	haystack := foldFragment(StripTitle(corpusTitle))
+
 	for _, t := range tokens {
-		if !strings.Contains(haystack, foldFragment(t)) {
+		found := strings.Contains(haystack, foldFragment(t))
+		if mode == MatchAny && found {
+			return true
+		}
+		if mode == MatchAll && !found {
 			return false
 		}
 	}
 
-	return true
+	return mode == MatchAll
 }
 
 func countMatching(corpus []string, tokens []string) int {
@@ -184,10 +233,10 @@ func countMatching(corpus []string, tokens []string) int {
 
 // FormatTokens renders a token set for display.
 //
-// %q on a []string is unreadable at a glance, and strings.Join loses the
-// distinction between a one-token set and a two-token set. Quoting each
-// token makes both the members and the count visible.
-func FormatTokens(tokens []string) string {
+// Quoting each token makes the members and the count visible, and the
+// joining operator is taken from the mode so the rendered recipe cannot
+// contradict how it is actually evaluated.
+func FormatTokens(tokens []string, mode MatchMode) string {
 	if len(tokens) == 0 {
 		return "(none)"
 	}
@@ -197,5 +246,12 @@ func FormatTokens(tokens []string) string {
 		quoted = append(quoted, strconv.Quote(t))
 	}
 
-	return strings.Join(quoted, " AND ")
+	// The operator has to follow the mode, or an ANY recipe is displayed
+	// as though its tokens all had to be present.
+	joiner := " AND "
+	if mode == MatchAny {
+		joiner = " OR "
+	}
+
+	return strings.Join(quoted, joiner)
 }

@@ -1,14 +1,14 @@
 -- name: CreatePlaylist :one
 INSERT INTO playlists (name)
 VALUES (:name)
-RETURNING id, name, seed_track_id, fragment_tokens;
+RETURNING id, name, seed_track_id, fragment_tokens, fragment_mode;
 
 -- The recipe is written immediately after creation, in the same
 -- transaction as the seeded membership, so a playlist is never left
 -- holding membership it cannot explain.
 -- name: SetPlaylistRecipe :exec
 UPDATE playlists
-SET seed_track_id = :seed_track_id, fragment_tokens = :fragment_tokens
+SET seed_track_id = :seed_track_id, fragment_tokens = :fragment_tokens, fragment_mode = :fragment_mode
 WHERE id = :id;
 
 -- name: GetPlaylists :many
@@ -16,7 +16,8 @@ SELECT
     id,
     name,
     seed_track_id,
-    fragment_tokens
+    fragment_tokens,
+    fragment_mode
 FROM playlists
 ORDER BY name;
 
@@ -25,7 +26,8 @@ SELECT
     id,
     name,
     seed_track_id,
-    fragment_tokens
+    fragment_tokens,
+    fragment_mode
 FROM playlists
 WHERE id = :id;
 
@@ -34,7 +36,8 @@ SELECT
     id,
     name,
     seed_track_id,
-    fragment_tokens
+    fragment_tokens,
+    fragment_mode
 FROM playlists
 WHERE name = :name;
 
@@ -66,3 +69,13 @@ FROM playlist_tracks
 INNER JOIN tracks ON playlist_tracks.track_id = tracks.id
 WHERE playlist_tracks.playlist_id = :playlist_id
 ORDER BY playlist_tracks.position;
+
+-- name: RenamePlaylist :exec
+UPDATE playlists
+SET name = :name
+WHERE id = :id;
+
+-- name: SetPlaylistMode :exec
+UPDATE playlists
+SET fragment_mode = :fragment_mode
+WHERE id = :id;

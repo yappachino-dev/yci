@@ -52,6 +52,7 @@ type Playlist struct {
 	Name           string
 	SeedTrackID    sql.NullString
 	FragmentTokens string
+	FragmentMode   string
 }
 
 type PlaylistTrack struct {

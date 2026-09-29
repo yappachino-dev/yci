@@ -36,7 +36,7 @@ func (q *Queries) AddTrackToPlaylist(ctx context.Context, arg AddTrackToPlaylist
 const createPlaylist = `-- name: CreatePlaylist :one
 INSERT INTO playlists (name)
 VALUES (?1)
-RETURNING id, name, seed_track_id, fragment_tokens
+RETURNING id, name, seed_track_id, fragment_tokens, fragment_mode
 `
 
 func (q *Queries) CreatePlaylist(ctx context.Context, name string) (Playlist, error) {
@@ -47,6 +47,7 @@ func (q *Queries) CreatePlaylist(ctx context.Context, name string) (Playlist, er
 		&i.Name,
 		&i.SeedTrackID,
 		&i.FragmentTokens,
+		&i.FragmentMode,
 	)
 	return i, err
 }
@@ -69,7 +70,8 @@ SELECT
     id,
     name,
     seed_track_id,
-    fragment_tokens
+    fragment_tokens,
+    fragment_mode
 FROM playlists
 WHERE id = ?1
 `
@@ -82,6 +84,7 @@ func (q *Queries) GetPlaylistByID(ctx context.Context, id int64) (Playlist, erro
 		&i.Name,
 		&i.SeedTrackID,
 		&i.FragmentTokens,
+		&i.FragmentMode,
 	)
 	return i, err
 }
@@ -91,7 +94,8 @@ SELECT
     id,
     name,
     seed_track_id,
-    fragment_tokens
+    fragment_tokens,
+    fragment_mode
 FROM playlists
 WHERE name = ?1
 `
@@ -104,6 +108,7 @@ func (q *Queries) GetPlaylistByName(ctx context.Context, name string) (Playlist,
 		&i.Name,
 		&i.SeedTrackID,
 		&i.FragmentTokens,
+		&i.FragmentMode,
 	)
 	return i, err
 }
@@ -164,7 +169,8 @@ SELECT
     id,
     name,
     seed_track_id,
-    fragment_tokens
+    fragment_tokens,
+    fragment_mode
 FROM playlists
 ORDER BY name
 `
@@ -183,6 +189,7 @@ func (q *Queries) GetPlaylists(ctx context.Context) ([]Playlist, error) {
 			&i.Name,
 			&i.SeedTrackID,
 			&i.FragmentTokens,
+			&i.FragmentMode,
 		); err != nil {
 			return nil, err
 		}
@@ -215,15 +222,48 @@ func (q *Queries) RemoveTrackFromPlaylist(ctx context.Context, arg RemoveTrackFr
 	return result.RowsAffected()
 }
 
+const renamePlaylist = `-- name: RenamePlaylist :exec
+UPDATE playlists
+SET name = ?1
+WHERE id = ?2
+`
+
+type RenamePlaylistParams struct {
+	Name string
+	ID   int64
+}
+
+func (q *Queries) RenamePlaylist(ctx context.Context, arg RenamePlaylistParams) error {
+	_, err := q.db.ExecContext(ctx, renamePlaylist, arg.Name, arg.ID)
+	return err
+}
+
+const setPlaylistMode = `-- name: SetPlaylistMode :exec
+UPDATE playlists
+SET fragment_mode = ?1
+WHERE id = ?2
+`
+
+type SetPlaylistModeParams struct {
+	FragmentMode string
+	ID           int64
+}
+
+func (q *Queries) SetPlaylistMode(ctx context.Context, arg SetPlaylistModeParams) error {
+	_, err := q.db.ExecContext(ctx, setPlaylistMode, arg.FragmentMode, arg.ID)
+	return err
+}
+
 const setPlaylistRecipe = `-- name: SetPlaylistRecipe :exec
 UPDATE playlists
-SET seed_track_id = ?1, fragment_tokens = ?2
-WHERE id = ?3
+SET seed_track_id = ?1, fragment_tokens = ?2, fragment_mode = ?3
+WHERE id = ?4
 `
 
 type SetPlaylistRecipeParams struct {
 	SeedTrackID    sql.NullString
 	FragmentTokens string
+	FragmentMode   string
 	ID             int64
 }
 
@@ -231,6 +271,11 @@ type SetPlaylistRecipeParams struct {
 // transaction as the seeded membership, so a playlist is never left
 // holding membership it cannot explain.
 func (q *Queries) SetPlaylistRecipe(ctx context.Context, arg SetPlaylistRecipeParams) error {
-	_, err := q.db.ExecContext(ctx, setPlaylistRecipe, arg.SeedTrackID, arg.FragmentTokens, arg.ID)
+	_, err := q.db.ExecContext(ctx, setPlaylistRecipe,
+		arg.SeedTrackID,
+		arg.FragmentTokens,
+		arg.FragmentMode,
+		arg.ID,
+	)
 	return err
 }

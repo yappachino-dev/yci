@@ -260,3 +260,56 @@ func TestDeriveFragmentOnWholeCorpus(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchesTokensAnyIsWiderThanAll(t *testing.T) {
+	tokens := []string{"Mori", "Calliope"}
+
+	// Present in both spellings; a track carrying only one token is the
+	// whole difference between the modes.
+	cases := map[string]struct {
+		all, any bool
+	}{
+		"BRAIN - Mori Calliope (cover)":  {true, true},
+		"【MV】Orpheus - Mori Calliope":    {true, true},
+		"星街すいせい x Mori (cover)":          {false, true},
+		"completely unrelated synthwave": {false, false},
+	}
+
+	for title, want := range cases {
+		t.Run(title, func(t *testing.T) {
+			if got := MatchesTokens(title, tokens, MatchAll); got != want.all {
+				t.Errorf("MatchAll = %v, want %v", got, want.all)
+			}
+			if got := MatchesTokens(title, tokens, MatchAny); got != want.any {
+				t.Errorf("MatchAny = %v, want %v", got, want.any)
+			}
+		})
+	}
+}
+
+func TestMatchesTokensEmptySetNeverMatches(t *testing.T) {
+	// The one outcome a user would never notice and never want: a recipe
+	// with no tokens silently selecting the whole library.
+	for _, mode := range []MatchMode{MatchAll, MatchAny, MatchMode("nonsense")} {
+		if MatchesTokens("anything at all", nil, mode) {
+			t.Errorf("empty token set matched under mode %q", mode)
+		}
+	}
+}
+
+func TestParseMatchModeDefaultsToAll(t *testing.T) {
+	tests := map[string]MatchMode{
+		"any":     MatchAny,
+		"ANY":     MatchAny,
+		" Any  ":  MatchAny,
+		"all":     MatchAll,
+		"":        MatchAll,
+		"garbage": MatchAll,
+	}
+
+	for in, want := range tests {
+		if got := ParseMatchMode(in); got != want {
+			t.Errorf("ParseMatchMode(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

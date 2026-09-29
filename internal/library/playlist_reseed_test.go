@@ -34,7 +34,7 @@ func TestCreateFromSeedStoresRecipe(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, ids[:2]); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, MatchAll, ids[:2]); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,7 +85,7 @@ func TestReseedPlanIsNoOpWhenNothingChanged(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, ids[:2]); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, MatchAll, ids[:2]); err != nil {
 		t.Fatal(err)
 	}
 
@@ -114,7 +114,7 @@ func TestReseedPlanDetectsNewlyMatchingTrack(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, []TrackID{ids[0]}); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, MatchAll, []TrackID{ids[0]}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,7 +166,7 @@ func TestReseedPlanDetectsTrackThatStoppedMatching(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, MatchAll, ids); err != nil {
 		t.Fatal(err)
 	}
 
@@ -211,7 +211,7 @@ func TestReseedPlanFailsClearlyWhenSeedIsGone(t *testing.T) {
 	env, ids := seedPlaylist(t, "comet / 星街すいせい(official)")
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Seeded", ids[0], []string{"星街すいせい"}, MatchAll, ids); err != nil {
 		t.Fatal(err)
 	}
 
@@ -246,10 +246,10 @@ func TestCreateFromSeedRequiresBothSeedAndTokens(t *testing.T) {
 	env, _ := seedPlaylist(t, "comet")
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "X", "", []string{"a"}, nil); err == nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "X", "", []string{"a"}, MatchAll, nil); err == nil {
 		t.Error("accepted a recipe with no seed track")
 	}
-	if _, err := env.playlists.CreateFromSeed(ctx, "Y", "a-track", nil, nil); err == nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Y", "a-track", nil, MatchAll, nil); err == nil {
 		t.Error("accepted a recipe with no tokens")
 	}
 }
@@ -260,7 +260,7 @@ func TestCreateFromSeedLeavesNothingOnFailure(t *testing.T) {
 
 	// A track that does not exist must roll the whole thing back, so a
 	// failed seed cannot leave a playlist holding a recipe and no members.
-	if _, err := env.playlists.CreateFromSeed(ctx, "Doomed", "missing", []string{"a"}, []TrackID{"missing"}); err == nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Doomed", "missing", []string{"a"}, MatchAll, []TrackID{"missing"}); err == nil {
 		t.Fatal("expected failure seeding with an unknown track")
 	}
 
@@ -278,7 +278,7 @@ func TestRecipeTokensSurviveMixedScripts(t *testing.T) {
 	ctx := context.Background()
 
 	want := []string{"Mori", "Calliope", "星街すいせい"}
-	if _, err := env.playlists.CreateFromSeed(ctx, "Tokens", "a-track", want, nil); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Tokens", "a-track", want, MatchAll, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,7 +306,7 @@ func TestDeriveMatchesOnTokensNotJoinedSubstring(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	matched, err := env.playlists.Derive(ctx, []string{"Mori", "Calliope"})
+	matched, err := env.playlists.Derive(ctx, []string{"Mori", "Calliope"}, MatchAll)
 	if err != nil {
 		t.Fatal(err)
 	}

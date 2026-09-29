@@ -36,6 +36,10 @@ type Playlist struct {
 	// recipe: re-deriving membership means re-running this token set, not
 	// re-evaluating a stored rule.
 	FragmentTokens []string
+	// MatchMode is how those tokens combine. Defaults to MatchAll for a
+	// playlist written before the column existed, so an old recipe does not
+	// silently change meaning.
+	MatchMode MatchMode
 }
 
 // HasRecipe reports whether the playlist was seeded at all.
@@ -65,7 +69,9 @@ type PlaylistEntry struct {
 // PlaylistRepository persists playlists and their membership.
 type PlaylistRepository interface {
 	Create(ctx context.Context, name string) (Playlist, error)
-	SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string) error
+	SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string, mode MatchMode) error
+	Rename(ctx context.Context, id int64, name string) error
+	SetMode(ctx context.Context, id int64, mode MatchMode) error
 	All(ctx context.Context) ([]Playlist, error)
 	ByName(ctx context.Context, name string) (Playlist, error)
 	Delete(ctx context.Context, id int64) error
@@ -129,15 +135,31 @@ func (r *SQLitePlaylistRepository) ByName(ctx context.Context, name string) (Pla
 // SetRecipe records how the playlist was seeded. It runs inside the same
 // transaction as the seeded membership, so a playlist never exists holding
 // rows it cannot explain.
-func (r *SQLitePlaylistRepository) SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string) error {
+func (r *SQLitePlaylistRepository) SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string, mode MatchMode) error {
 	if err := r.db(ctx).SetPlaylistRecipe(ctx, store.SetPlaylistRecipeParams{
 		ID:             id,
 		SeedTrackID:    db.ToNullString(string(seedTrackID)),
 		FragmentTokens: tokensJSON,
+		FragmentMode:   mode.String(),
 	}); err != nil {
 		return fmt.Errorf("set playlist recipe: %w", err)
 	}
 	return nil
+}
+
+// Rename changes a playlist's name. The unique constraint is
+// COLLATE NOCASE, so a conflict maps to the same sentinel as creation.
+func (r *SQLitePlaylistRepository) Rename(ctx context.Context, id int64, name string) error {
+	if err := r.db(ctx).RenamePlaylist(ctx, store.RenamePlaylistParams{ID: id, Name: name}); err != nil {
+		return db.MapSQLError(err, nil, ErrPlaylistAlreadyExists)
+	}
+	return nil
+}
+
+// SetMode changes how the recipe's tokens combine, without touching
+// membership.
+func (r *SQLitePlaylistRepository) SetMode(ctx context.Context, id int64, mode MatchMode) error {
+	return r.db(ctx).SetPlaylistMode(ctx, store.SetPlaylistModeParams{ID: id, FragmentMode: mode.String()})
 }
 
 // playlistFromRow decodes the stored recipe. A corrupt token column means
@@ -148,6 +170,8 @@ func playlistFromRow(row store.Playlist) (Playlist, error) {
 		ID:          row.ID,
 		Name:        row.Name,
 		SeedTrackID: TrackID(db.FromNullString(row.SeedTrackID)),
+		// An empty mode means a row written before the column existed.
+		MatchMode: ParseMatchMode(row.FragmentMode),
 	}
 
 	if row.FragmentTokens != "" && row.FragmentTokens != "[]" {
