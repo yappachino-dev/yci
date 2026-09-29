@@ -107,7 +107,11 @@ func (s *TrackService) BackfillDuration(
 
 	for r := range results {
 		switch {
-		case r.err != nil && errors.Is(r.err, context.Canceled):
+		// Both ways a context can end abort the whole pass. Testing only
+		// for Canceled let a deadline fall through to the generic failure
+		// branch, so a run stopped by its deadline reported N corrupt files
+		// instead of saying it ran out of time.
+		case r.err != nil && isContextEnd(r.err):
 			return result, r.err
 
 		case r.err != nil && errors.Is(r.err, probe.ErrUnavailable):
@@ -139,6 +143,13 @@ func (s *TrackService) BackfillDuration(
 }
 
 var errTrackFileMissing = errors.New("track file is not on disk")
+
+// isContextEnd reports whether an error is the context being cancelled or
+// running out of time, either of which means the pass should stop rather
+// than blame the file.
+func isContextEnd(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
 
 func probeTrackDuration(ctx context.Context, prober probe.Prober, track Track, libraryDir string) (int64, bool, error) {
 	// A zero-length row that genuinely is zero-length does not exist in

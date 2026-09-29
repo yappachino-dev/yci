@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fast local gate mirroring CI. Install with `make hooks`.
+# Local gate mirroring CI. Install with `make hooks`.
 set -e
 cd "$(git rev-parse --show-toplevel)"
 
@@ -11,6 +11,22 @@ if [ -n "$out" ]; then
 fi
 
 go vet ./... > /dev/null
-go test ./... > /dev/null
 
-echo "pre-commit checks passed"
+# -race, not a plain run. A data race in a test helper passed this hook
+# cleanly and was committed, because a plain `go test` does not detect
+# concurrent access. The documented gate for this project is
+# `go test -race ./...`; the hook now matches it, and the sqlc drift check
+# runs here too so generated code cannot fall behind the queries.
+go test -race ./... > /dev/null
+
+if ! go tool sqlc generate 2>/dev/null; then
+    echo "pre-commit: sqlc generate failed" >&2
+    exit 1
+fi
+if ! git diff --quiet -- internal/store; then
+    echo "pre-commit: internal/store is stale; run 'go tool sqlc generate' and commit the result" >&2
+    git diff --stat -- internal/store >&2
+    exit 1
+fi
+
+echo "pre-commit checks passed (gofmt, vet, race tests, sqlc drift)"
