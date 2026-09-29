@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"testing"
 
 	"github.com/pressly/goose/v3"
@@ -17,7 +16,7 @@ import (
 // is what makes it true rather than assumed. Restoring a database copy is
 // the supported way back; see `make sandbox`.
 func TestMigrationsRoundTrip(t *testing.T) {
-	dbConn, err := sql.Open("sqlite", ":memory:")
+	dbConn, err := Open(":memory:")
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
@@ -65,7 +64,7 @@ func TestMigrationsRoundTrip(t *testing.T) {
 // state Up cannot build on — a dropped index, or a table recreated with
 // different columns.
 func TestMigrationsReapplyCleanly(t *testing.T) {
-	dbConn, err := sql.Open("sqlite", ":memory:")
+	dbConn, err := Open(":memory:")
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}

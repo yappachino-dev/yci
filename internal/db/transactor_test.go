@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/yappachino-dev/yci/internal/appctx"
-
-	_ "modernc.org/sqlite"
 )
 
 // txFromCtx resolves the active transaction exactly like the repositories
@@ -29,7 +27,7 @@ func txFromCtx(t *testing.T, ctx context.Context) *sql.Tx {
 func newTransactorTestDB(t *testing.T) (*sql.DB, *SQLiteTransactor) {
 	t.Helper()
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	dbConn, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

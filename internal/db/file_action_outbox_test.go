@@ -11,14 +11,12 @@ import (
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/store"
-
-	_ "modernc.org/sqlite"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	dbConn, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

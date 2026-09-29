@@ -11,8 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/yappachino-dev/yci/internal/app"
 	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/db"
@@ -129,15 +127,11 @@ func TestIDFromArgsOrFlag(t *testing.T) {
 func openSQLite(t *testing.T) (*sql.DB, error) {
 	t.Helper()
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	dbConn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		return nil, err
 	}
 	t.Cleanup(func() { dbConn.Close() })
-
-	if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		return nil, err
-	}
 
 	return dbConn, nil
 }

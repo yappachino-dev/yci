@@ -8,22 +8,17 @@ import (
 	"strings"
 
 	"testing"
-
-	_ "modernc.org/sqlite"
 )
 
 func openMigratedDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	dbConn, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
 	t.Cleanup(func() { dbConn.Close() })
 
-	if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		t.Fatalf("enable foreign keys: %v", err)
-	}
 	if err := SetUpMigrationContext(); err != nil {
 		t.Fatalf("set up migrations: %v", err)
 	}
@@ -62,7 +57,7 @@ func TestSnapshotCopiesTheDatabase(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.db")
 
-	dbConn, err := sql.Open("sqlite", path)
+	dbConn, err := Open(path)
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
@@ -93,7 +88,7 @@ func TestSnapshotCopiesTheDatabase(t *testing.T) {
 	}
 
 	// The copy must be independently readable and complete.
-	copyConn, err := sql.Open("sqlite", snapshot)
+	copyConn, err := Open(snapshot)
 	if err != nil {
 		t.Fatalf("open snapshot: %v", err)
 	}
@@ -117,7 +112,7 @@ func TestSnapshotCopiesTheDatabase(t *testing.T) {
 }
 
 func TestSnapshotSkipsInMemory(t *testing.T) {
-	dbConn, err := sql.Open("sqlite", ":memory:")
+	dbConn, err := Open(":memory:")
 	if err != nil {
 		t.Fatalf("open in-memory database: %v", err)
 	}
@@ -182,7 +177,7 @@ func TestSnapshotTwiceDoesNotBlock(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.db")
 
-	dbConn, err := sql.Open("sqlite", path)
+	dbConn, err := Open(path)
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
@@ -215,7 +210,7 @@ func TestSnapshotTwiceDoesNotBlock(t *testing.T) {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("snapshot %q missing: %v", p, err)
 		}
-		conn, err := sql.Open("sqlite", p)
+		conn, err := Open(p)
 		if err != nil {
 			t.Fatalf("open %q: %v", p, err)
 		}
@@ -246,7 +241,7 @@ func TestMigrateIsNotBlockedByAnExistingSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbConn, err := sql.Open("sqlite", path)
+	dbConn, err := Open(path)
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}

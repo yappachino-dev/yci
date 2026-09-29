@@ -11,8 +11,6 @@ import (
 	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/probe"
 	"github.com/yappachino-dev/yci/internal/store"
-
-	_ "modernc.org/sqlite"
 )
 
 // newLibraryDB opens a database carrying the full real migration chain.
@@ -31,16 +29,11 @@ func newLibraryDBConn(t *testing.T) *sql.DB {
 		t.Fatalf("set up migrations: %v", err)
 	}
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	dbConn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	t.Cleanup(func() { dbConn.Close() })
-
-	// Match initApplication: FK actions are only enforced while on.
-	if _, err := dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		t.Fatalf("enable foreign keys: %v", err)
-	}
 
 	if err := db.RunMigrations(t.Context(), dbConn); err != nil {
 		t.Fatalf("run migrations: %v", err)
@@ -218,5 +211,61 @@ func writeTaggedAudio(t *testing.T, path, title, artist string) {
 
 	if err := os.WriteFile(path, append(append(header, body...), []byte("audio-bytes")...), 0o644); err != nil {
 		t.Fatalf("write tagged audio %q: %v", path, err)
+	}
+}
+
+// TestLibraryFixtureEnforcesForeignKeys guards the test harness itself.
+//
+// Every library test used to enable foreign keys with a one-off
+// `dbConn.Exec("PRAGMA foreign_keys = ON")` in this file. That sets the
+// pragma on whichever pooled connection served the call and no other, so
+// tests that depended on cascading deletes were exercising a schema whose
+// constraints were off — and would have kept passing while the constraint
+// they were testing never fired. Fixtures now go through db.Open, which sets
+// it per connection; this asserts that rather than trusting it.
+func TestLibraryFixtureEnforcesForeignKeys(t *testing.T) {
+	dbConn := newLibraryDBConn(t)
+
+	enabled, err := db.ForeignKeysEnabled(dbConn)
+	if err != nil {
+		t.Fatalf("ForeignKeysEnabled: %v", err)
+	}
+	if !enabled {
+		t.Fatal("test fixture has foreign_keys disabled; cascade assertions below are meaningless")
+	}
+
+	// Assert the real behaviour on the real schema, not just the pragma.
+	// playlist_tracks cascades from playlists.
+	if _, err := dbConn.Exec(`INSERT INTO playlists (name) VALUES ('p');`); err != nil {
+		t.Fatalf("insert playlist: %v", err)
+	}
+	var playlistID int64
+	if err := dbConn.QueryRow(`SELECT id FROM playlists WHERE name = 'p';`).Scan(&playlistID); err != nil {
+		t.Fatalf("read playlist id: %v", err)
+	}
+	if _, err := dbConn.Exec(
+		`INSERT INTO tracks (id, title, relative_path) VALUES ('t', 'T', 'a/t.mp3');`,
+	); err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+	if _, err := dbConn.Exec(
+		`INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, 't', 0);`,
+		playlistID,
+	); err != nil {
+		t.Fatalf("insert membership: %v", err)
+	}
+
+	if _, err := dbConn.Exec(`DELETE FROM playlists WHERE id = ?;`, playlistID); err != nil {
+		t.Fatalf("delete playlist: %v", err)
+	}
+
+	var remaining int
+	if err := dbConn.QueryRow(
+		`SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = ?;`, playlistID,
+	).Scan(&remaining); err != nil {
+		t.Fatalf("count membership: %v", err)
+	}
+	if remaining != 0 {
+		t.Errorf("ON DELETE CASCADE did not fire: %d membership row(s) survived", remaining)
 	}
 }

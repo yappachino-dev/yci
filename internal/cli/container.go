@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -11,8 +10,6 @@ import (
 	"github.com/yappachino-dev/yci/internal/app"
 	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/db"
-
-	_ "modernc.org/sqlite"
 )
 
 type containerKey struct{}
@@ -53,14 +50,13 @@ func initApplication(ctx context.Context, autoMigrate bool, logOut io.Writer) (*
 		return nil, fmt.Errorf("create config directory: %w", err)
 	}
 
-	dbConn, err := sql.Open("sqlite", filepath.Join(configDir, "data.db"))
+	// db.Open, not sql.Open: the foreign key and busy-timeout pragmas are
+	// SQLite connection settings, and issuing them once with Exec would
+	// apply them to a single pooled connection. Every other connection
+	// would then enforce nothing, silently.
+	dbConn, err := db.Open(filepath.Join(configDir, "data.db"))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
-	}
-
-	if _, err = dbConn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		dbConn.Close()
-		return nil, fmt.Errorf("enable foreign key constraints: %w", err)
 	}
 
 	if err = db.SetUpMigrationContext(); err != nil {
