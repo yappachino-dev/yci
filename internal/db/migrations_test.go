@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
+
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -77,11 +79,15 @@ func TestSnapshotCopiesTheDatabase(t *testing.T) {
 		t.Fatalf("insert row: %v", err)
 	}
 
-	if err := Snapshot(dbConn); err != nil {
+	snapshotPath, err := Snapshot(dbConn, 0)
+	if err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
 
-	snapshot := filepath.Join(dir, SnapshotName)
+	snapshot := snapshotPath
+	if snapshot != filepath.Join(dir, SnapshotName) {
+		t.Errorf("first snapshot went to %q, want the default name", snapshot)
+	}
 	if _, err := os.Stat(snapshot); err != nil {
 		t.Fatalf("snapshot not written beside the database: %v", err)
 	}
@@ -126,8 +132,12 @@ func TestSnapshotSkipsInMemory(t *testing.T) {
 
 	// An in-memory database has no file to copy; this must be a no-op
 	// rather than an error, since the test suite migrates in memory.
-	if err := Snapshot(dbConn); err != nil {
+	path, err := Snapshot(dbConn, 0)
+	if err != nil {
 		t.Errorf("Snapshot on an in-memory database: %v", err)
+	}
+	if path != "" {
+		t.Errorf("in-memory Snapshot reported path %q, want none", path)
 	}
 }
 
@@ -160,5 +170,117 @@ func TestPendingMigrationsCountsForward(t *testing.T) {
 		if before[i].Version <= before[i-1].Version {
 			t.Fatalf("migrations out of order: %d follows %d", before[i].Version, before[i-1].Version)
 		}
+	}
+}
+
+// TestSnapshotTwiceDoesNotBlock is the regression test for a failure that
+// bricked the CLI: VACUUM INTO refuses to write onto an existing file, and
+// that was treated as fatal, so the sequence "migrate once, get interrupted,
+// run again" left every later run blocked before it reached the migrations.
+// A recovery mechanism that can itself become the outage is worse than none.
+func TestSnapshotTwiceDoesNotBlock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.db")
+
+	dbConn, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer dbConn.Close()
+
+	if err := SetUpMigrationContext(); err != nil {
+		t.Fatalf("set up migrations: %v", err)
+	}
+	if err := RunMigrations(t.Context(), dbConn); err != nil {
+		t.Fatalf("initial migration: %v", err)
+	}
+
+	first, err := Snapshot(dbConn, 8)
+	if err != nil {
+		t.Fatalf("first Snapshot: %v", err)
+	}
+
+	second, err := Snapshot(dbConn, 10)
+	if err != nil {
+		t.Fatalf("second Snapshot blocked: %v", err)
+	}
+
+	if second == first {
+		t.Errorf("second snapshot overwrote the first: both %q", first)
+	}
+
+	// Both must survive and be readable: the earlier one is the only record
+	// of the state before migrations that have already landed.
+	for _, p := range []string{first, second} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("snapshot %q missing: %v", p, err)
+		}
+		conn, err := sql.Open("sqlite", p)
+		if err != nil {
+			t.Fatalf("open %q: %v", p, err)
+		}
+		var check string
+		if err := conn.QueryRow("PRAGMA integrity_check;").Scan(&check); err != nil {
+			t.Errorf("read %q: %v", p, err)
+		} else if check != "ok" {
+			t.Errorf("integrity of %q: %s", p, check)
+		}
+		conn.Close()
+	}
+
+	if got := filepath.Base(second); got != "pre-migration-v10.bak.db" {
+		t.Errorf("second snapshot named %q, want a version-qualified name", got)
+	}
+}
+
+// TestMigrateIsNotBlockedByAnExistingSnapshot covers the end-to-end symptom:
+// a database with pending migrations must still migrate when a snapshot from
+// an earlier run is sitting beside it.
+func TestMigrateIsNotBlockedByAnExistingSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.db")
+
+	// A leftover snapshot beside a database that still has migrations to
+	// apply: exactly the state that bricked the CLI.
+	if err := os.WriteFile(filepath.Join(dir, SnapshotName), []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dbConn, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer dbConn.Close()
+
+	if err := SetUpMigrationContext(); err != nil {
+		t.Fatalf("set up migrations: %v", err)
+	}
+
+	var out bytes.Buffer
+	applied, err := Migrate(t.Context(), dbConn, &out)
+	if err != nil {
+		t.Fatalf("Migrate blocked by an existing snapshot: %v", err)
+	}
+	if applied == 0 {
+		t.Fatal("Migrate applied nothing despite pending migrations")
+	}
+
+	// The pre-existing file must not have been silently clobbered: it is
+	// the only record of the state before the migrations that already ran.
+	if b, err := os.ReadFile(filepath.Join(dir, SnapshotName)); err != nil {
+		t.Error("the pre-existing snapshot was destroyed")
+	} else if string(b) != "stale" {
+		t.Error("the pre-existing snapshot was overwritten")
+	}
+
+	// A new snapshot must have been written alongside it, and the report
+	// must name the file actually written rather than the default name.
+	versioned := filepath.Join(dir, "pre-migration-v0.bak.db")
+	if _, err := os.Stat(versioned); err != nil {
+		t.Errorf("no versioned snapshot written: %v", err)
+	}
+
+	if msg := out.String(); !strings.Contains(msg, "pre-migration-v") {
+		t.Errorf("migration report does not name the snapshot it wrote: %q", msg)
 	}
 }

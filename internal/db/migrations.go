@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/yappachino-dev/yci/db/migrations"
 
@@ -108,7 +110,8 @@ func Migrate(ctx context.Context, database *sql.DB, w io.Writer) (int, error) {
 		return 0, err
 	}
 
-	if err := Snapshot(database); err != nil {
+	snapshotPath, err := Snapshot(database, int64(current))
+	if err != nil {
 		return 0, err
 	}
 
@@ -116,8 +119,10 @@ func Migrate(ctx context.Context, database *sql.DB, w io.Writer) (int, error) {
 		return 0, fmt.Errorf("run schema migrations: %w", err)
 	}
 
+	// Report the file that was actually written, not the constant: a second
+	// run at the same schema version lands on a different name.
 	fmt.Fprintf(w, "Applied %d migration(s): schema %d → %d (snapshot: %s)\n",
-		len(pending), current, pending[len(pending)-1].Version, SnapshotName)
+		len(pending), current, pending[len(pending)-1].Version, filepath.Base(snapshotPath))
 
 	return len(pending), nil
 }
@@ -130,23 +135,94 @@ const SnapshotName = "pre-migration.bak.db"
 // Restoring that copy is the supported way back: rolling the schema back
 // with a Down migration discards the rows written since it applied, whereas
 // the snapshot predates the change entirely.
-func Snapshot(database *sql.DB) error {
+//
+// It returns the path written. The file is written under a temporary name
+// and renamed into place, so an interrupted snapshot leaves any previous one
+// intact rather than truncated.
+//
+// current is the schema version about to be migrated from; it is only used to
+// name a second snapshot distinctly.
+func Snapshot(database *sql.DB, current int64) (string, error) {
 	// database_list is (seq, name, file); file is empty for in-memory.
 	var seq int
 	var name, file string
 	if err := database.QueryRow("PRAGMA database_list;").Scan(&seq, &name, &file); err != nil {
-		return fmt.Errorf("locate database file: %w", err)
+		return "", fmt.Errorf("locate database file: %w", err)
 	}
 	if file == "" {
-		return nil
+		return "", nil
 	}
 
-	snapshot := filepath.Join(filepath.Dir(file), SnapshotName)
-	if _, err := database.Exec("VACUUM INTO ?", snapshot); err != nil {
-		return fmt.Errorf("snapshot database to %q: %w", snapshot, err)
+	dir := filepath.Dir(file)
+	target, err := freeSnapshotPath(dir, current)
+	if err != nil {
+		return "", err
 	}
 
-	return nil
+	// VACUUM INTO refuses to write onto an existing file. Renaming the
+	// finished temporary over the target is how the replacement happens
+	// atomically, and it is also what keeps a crash from leaving a
+	// truncated backup where a good one used to be.
+	tmp, err := os.CreateTemp(dir, SnapshotName+".tmp-*")
+	if err != nil {
+		return "", fmt.Errorf("create temporary snapshot file: %w", err)
+	}
+	tmpName := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return "", fmt.Errorf("close temporary snapshot file: %w", err)
+	}
+	// VACUUM INTO needs the path not to exist.
+	if err := os.Remove(tmpName); err != nil {
+		return "", fmt.Errorf("clear temporary snapshot path: %w", err)
+	}
+
+	if _, err := database.Exec("VACUUM INTO ?", tmpName); err != nil {
+		os.Remove(tmpName)
+		return "", fmt.Errorf("snapshot database: %w", err)
+	}
+
+	if err := os.Rename(tmpName, target); err != nil {
+		os.Remove(tmpName)
+		return "", fmt.Errorf("install snapshot at %q: %w", target, err)
+	}
+
+	return target, nil
+}
+
+// freeSnapshotPath picks a name that does not exist yet.
+//
+// A snapshot must never be the reason a migration cannot run. An earlier
+// implementation used a fixed name and treated "output file already exists" as
+// fatal, which meant: migrate once, let anything interrupt it, and every
+// subsequent run was blocked before it reached the migrations — a recovery
+// mechanism that could itself become the outage. An existing snapshot is kept
+// rather than overwritten, because the one from a previous run is the only
+// record of the state before the migrations that have already landed.
+func freeSnapshotPath(dir string, current int64) (string, error) {
+	// The versioned name is offered even for 0: "pre-migration-v0" is a
+	// meaningful label (nothing had been applied yet) and keeps a fresh
+	// database from having no free name.
+	candidates := []string{SnapshotName, fmt.Sprintf("pre-migration-v%d.bak.db", current)}
+
+	for _, candidate := range candidates {
+		path := filepath.Join(dir, candidate)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return path, nil
+		} else if err != nil {
+			return "", fmt.Errorf("check snapshot path %q: %w", path, err)
+		}
+	}
+
+	// Every deterministic name is taken, which means several runs have
+	// happened at the same schema version. A timestamp keeps each one.
+	stamped := fmt.Sprintf("pre-migration-v%d-%d.bak.db", current, time.Now().Unix())
+	path := filepath.Join(dir, stamped)
+	if _, err := os.Stat(path); err == nil {
+		return "", fmt.Errorf("snapshot %q already exists and no free name remains", path)
+	}
+
+	return path, nil
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB) error {
