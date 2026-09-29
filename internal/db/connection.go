@@ -30,15 +30,22 @@ import (
 // the same fix. Without it a writer that finds the database locked fails
 // immediately with SQLITE_BUSY instead of waiting.
 //
-// journal_mode is deliberately not set. WAL would remove reader/writer
-// contention outright, but it is persistent, it adds -wal and -shm sidecar
-// files, and `make sandbox` copies only data.db — so a WAL database would
-// silently lose recent commits in every sandbox. That trade is real and is
-// worth revisiting, but it is not a decision to make silently inside a
-// connection string.
+// journal_mode is set to WAL. It is the one pragma here that is persistent
+// rather than per-connection, so it only takes effect the first time a
+// database is opened, and it adds -wal and -shm sidecars beside the database.
+//
+// It is worth having: yci is the only writer, and WAL removes the
+// reader-blocks-writer contention that produces SQLITE_BUSY, which this
+// project has already hit once. The sidecar hazard is handled by `make
+// sandbox`, which snapshots with VACUUM INTO rather than copying data.db —
+// a plain copy would have silently produced a stale sandbox.
+//
+// A side effect is that the config directory gains data.db-wal and
+// data.db-shm. They are transient: SQLite removes them on a clean close.
 const (
 	pragmaForeignKeys = "foreign_keys(1)"
 	pragmaBusyTimeout = "busy_timeout(5000)"
+	pragmaJournalMode = "journal_mode(WAL)"
 )
 
 // DSN builds the sqlite connection string for path.
@@ -69,6 +76,7 @@ func DSN(path string) string {
 	q := url.Values{}
 	q.Add("_pragma", pragmaForeignKeys)
 	q.Add("_pragma", pragmaBusyTimeout)
+	q.Add("_pragma", pragmaJournalMode)
 
 	sep := "?"
 	if strings.Contains(base, "?") {

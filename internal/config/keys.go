@@ -9,6 +9,17 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// DirPerm is the mode for the config directory.
+//
+// The config file itself is written 0600, so a 0755 directory around it left
+// the profile readable to other users on a shared machine while the file
+// inside it was not. The profile holds the database and the cookies file
+// path, which is more than nothing.
+//
+// MkdirAll only applies this to a directory it creates, so a pre-existing one
+// keeps whatever mode it has; chmod it if you want it tightened.
+const DirPerm = 0o700
+
 // keySpec describes one user-configurable key: its dotted TOML path, how to
 // validate a candidate value, and how to read it back from a Config.
 type keySpec struct {
@@ -110,7 +121,7 @@ func Set(env LookupFunc, key, value string) error {
 	}
 	table[parts[len(parts)-1]] = value
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerm); err != nil {
 		return fmt.Errorf("create config directory: %w", err)
 	}
 

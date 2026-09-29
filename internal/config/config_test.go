@@ -254,3 +254,12 @@ func TestLoadMalformedConfigFails(t *testing.T) {
 		t.Fatal("Load succeeded on malformed TOML")
 	}
 }
+
+// TestConfigDirectoryIsNotWorldReadable pins the directory mode, which had
+// drifted to 0755 while the config file inside it was written 0600. The
+// mismatch was only visible on a multi-user machine, so nothing caught it.
+func TestConfigDirectoryIsNotWorldReadable(t *testing.T) {
+	if DirPerm&0o077 != 0 {
+		t.Errorf("DirPerm = %#o, which is readable by group or other", DirPerm)
+	}
+}

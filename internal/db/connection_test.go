@@ -167,3 +167,58 @@ func TestDSNEscapesFilenamesThatLookLikeQueries(t *testing.T) {
 		}
 	}
 }
+
+// TestWALSurvivesPooling pins the journal mode alongside the other settings.
+//
+// WAL is the one pragma here that is persistent rather than per-connection,
+// and it is the reason `make sandbox` snapshots with VACUUM INTO instead of
+// copying data.db: under WAL a plain copy silently yields a stale database
+// because the recent commits live in the -wal sidecar.
+func TestWALSurvivesPooling(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wal.db")
+
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer database.Close()
+
+	// Widening the pool first, so a per-connection setting set only on the
+	// first connection would be caught.
+	var wg sync.WaitGroup
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, err := database.Conn(context.Background())
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			if rows, err := conn.QueryContext(context.Background(), "SELECT 1"); err == nil {
+				rows.Close()
+			}
+		}()
+	}
+	wg.Wait()
+
+	var mode string
+	if err := database.QueryRow("PRAGMA journal_mode;").Scan(&mode); err != nil {
+		t.Fatalf("read journal_mode: %v", err)
+	}
+	if mode != "wal" {
+		t.Errorf("journal_mode = %q, want wal", mode)
+	}
+
+	if enabled, err := ForeignKeysEnabled(database); err != nil || !enabled {
+		t.Errorf("foreign_keys = %v (err %v), want enabled alongside WAL", enabled, err)
+	}
+
+	var timeout int
+	if err := database.QueryRow("PRAGMA busy_timeout;").Scan(&timeout); err != nil {
+		t.Fatalf("read busy_timeout: %v", err)
+	}
+	if timeout <= 0 {
+		t.Error("busy_timeout was lost")
+	}
+}

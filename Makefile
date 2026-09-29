@@ -69,7 +69,12 @@ sandbox:
 	fi
 	@rm -rf $(SANDBOX_DIR)
 	@mkdir -p $(SANDBOX_DIR)/.config/yci
-	@cp $(XDG_CONFIG_HOME)/yci/data.db $(SANDBOX_DIR)/.config/yci/data.db
+	@# VACUUM INTO rather than cp: it takes a consistent snapshot even if a
+	@# write is in flight, and it produces a single file whether the source
+	@# is in WAL mode (where a plain cp would miss the -wal sidecar and
+	@# silently copy a stale database) or not.
+	@sqlite3 "$(XDG_CONFIG_HOME)/yci/data.db" "VACUUM INTO '$(SANDBOX_DIR)/.config/yci/data.db';" \
+		|| { echo "Failed to snapshot the database."; exit 1; }
 	@if [ -f "$(XDG_CONFIG_HOME)/yci/config.toml" ]; then \
 		cp $(XDG_CONFIG_HOME)/yci/config.toml $(SANDBOX_DIR)/.config/yci/config.toml; \
 	fi

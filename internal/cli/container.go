@@ -46,7 +46,7 @@ func initApplication(ctx context.Context, autoMigrate bool, logOut io.Writer) (*
 
 	configDir := cfg.ConfigDir()
 
-	if err = os.MkdirAll(configDir, 0o755); err != nil {
+	if err = os.MkdirAll(configDir, config.DirPerm); err != nil {
 		return nil, fmt.Errorf("create config directory: %w", err)
 	}
 
