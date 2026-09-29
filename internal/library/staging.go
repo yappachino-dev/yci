@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/yappachino-dev/yci/internal/fs"
 
@@ -49,8 +50,38 @@ type ChannelLinker interface {
 }
 
 // MetadataReader reads tag metadata from an audio file.
+//
+// It takes a context because extraction is no longer purely in-process: the
+// production reader also probes the stream, which forks a decoder and must be
+// cancellable.
 type MetadataReader interface {
-	Read(path string) (TrackMetadata, error)
+	Read(ctx context.Context, path string) (TrackMetadata, error)
+}
+
+// supportedImportExtensions are the containers the import path accepts.
+//
+// Measured against real encoded files, dhowden/tag reads tags from all of
+// these. WAV is deliberately absent: it is a raw PCM container and dhowden
+// returns "no tags found" for it, so importing one would fail with no title
+// rather than importing it. Supporting WAV means writing a LIST/INFO reader;
+// until then, a staged .wav is reported instead of being silently skipped.
+var supportedImportExtensions = []string{".opus", ".ogg", ".flac", ".mp3", ".m4a"}
+
+// SupportedImportExtensions exposes the accepted set for error messages and
+// tests.
+func SupportedImportExtensions() []string {
+	out := make([]string, len(supportedImportExtensions))
+	copy(out, supportedImportExtensions)
+	return out
+}
+
+func isSupportedImportExtension(ext string) bool {
+	for _, candidate := range supportedImportExtensions {
+		if ext == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 // StagingService imports finished downloads from the staging directory
@@ -95,6 +126,14 @@ type TrackMetadata struct {
 	Title  string
 	Album  string
 	Artist string
+
+	// Media holds derived stream properties. Zero when unavailable.
+	Media TrackMediaInfo
+	// MediaUnavailable records that no prober was installed, so an absent
+	// Media is explained rather than silently "a file with no length".
+	MediaUnavailable bool
+	// MediaErr records a probe failure against an otherwise readable file.
+	MediaErr error
 }
 
 // LinkHandler decides the fate of a file whose channel has no linked artist.
@@ -109,7 +148,18 @@ func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandl
 	}
 
 	for _, file := range files {
-		if file.IsDir() || filepath.Ext(file.Name()) != ".opus" {
+		if file.IsDir() {
+			continue
+		}
+
+		ext := strings.ToLower(filepath.Ext(file.Name()))
+		if !isSupportedImportExtension(ext) {
+			// Report rather than skip silently: a misconfigured download
+			// command would otherwise look like "nothing to import".
+			if ext != "" {
+				fmt.Printf("Skipping staging file %s: unsupported format %q (supported: %s)\n",
+					file.Name(), ext, strings.Join(supportedImportExtensions, ", "))
+			}
 			continue
 		}
 
@@ -203,17 +253,21 @@ var sourceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 func (s *StagingService) planImport(ctx context.Context, fileName string, onUnknown LinkHandler) (*stagingImportPlan, error) {
 	oldPathNative := filepath.Join(s.paths.StagingDir(), fileName)
 
-	m, err := s.metaReader.Read(oldPathNative)
+	m, err := s.metaReader.Read(ctx, oldPathNative)
 	if err != nil {
 		return nil, fmt.Errorf("extract track metadata: %w", err)
 	}
 
 	channelName := ChannelName(strings.TrimSpace(m.Artist))
 	title := strings.TrimSpace(m.Title)
-	sourceID := strings.TrimSuffix(fileName, ".opus")
+	// The extension is stripped generically rather than by naming one format:
+	// a staged download is <video-id>.<ext>, and the container it arrived in
+	// is preserved through to the library.
+	ext := strings.ToLower(filepath.Ext(fileName))
+	sourceID := strings.TrimSuffix(fileName, ext)
 
 	if !sourceIDPattern.MatchString(sourceID) {
-		return nil, fmt.Errorf("file name is not a staged download (expected <video-id>.opus); move or rename it out of staging")
+		return nil, fmt.Errorf("file name is not a staged download (expected <video-id>%s); move or rename it out of staging", ext)
 	}
 
 	decision, err := s.resolveImportDecision(ctx, channelName, m, onUnknown)
@@ -231,7 +285,7 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 
 	interpreted := InterpretTitle(title)
 
-	relPath, absPathNative, err := s.resolveDestination(folderPath, interpreted.Title)
+	relPath, absPathNative, err := s.resolveDestination(folderPath, interpreted.Title, ext)
 	if err != nil {
 		return nil, err
 	}
@@ -244,9 +298,12 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 			ArtistID:     decision.artistID,
 			RelativePath: TrackPath(relPath),
 			SourceID:     sourceID,
+			Source:       SourceYouTube,
 			RawTitle:     title,
 			Performer:    interpreted.Performer,
 			Version:      interpreted.Version,
+			DurationSec:  int64(m.Media.Duration / time.Second),
+			Media:        m.Media,
 		},
 		sourceAbs: oldPathNative,
 		destAbs:   absPathNative,
@@ -282,7 +339,7 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 // (two uploads of the same song lose the same decoration), so an occupied
 // destination gets a numeric suffix rather than overwriting the file that
 // is already there.
-func (s *StagingService) resolveDestination(folderPath, title string) (string, string, error) {
+func (s *StagingService) resolveDestination(folderPath, title, ext string) (string, string, error) {
 	stem := fs.SanitizeFilename(title)
 	if stem == "" {
 		return "", "", fmt.Errorf("import track: title %q has no usable characters for a filename", title)
@@ -294,7 +351,7 @@ func (s *StagingService) resolveDestination(folderPath, title string) (string, s
 			candidate = fmt.Sprintf("%s (%d)", stem, attempt)
 		}
 
-		filename := candidate + ".opus"
+		filename := candidate + ext
 
 		var relPath string
 		if folderPath == "" {

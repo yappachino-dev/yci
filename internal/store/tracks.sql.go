@@ -189,6 +189,51 @@ func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]GetTracks
 	return items, nil
 }
 
+const listTracksMissingDuration = `-- name: ListTracksMissingDuration :many
+SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
+WHERE duration_sec = 0
+ORDER BY id
+`
+
+type ListTracksMissingDurationRow struct {
+	Track Track
+}
+
+func (q *Queries) ListTracksMissingDuration(ctx context.Context) ([]ListTracksMissingDurationRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksMissingDuration)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksMissingDurationRow
+	for rows.Next() {
+		var i ListTracksMissingDurationRow
+		if err := rows.Scan(
+			&i.Track.ID,
+			&i.Track.Title,
+			&i.Track.Album,
+			&i.Track.ArtistID,
+			&i.Track.DurationSec,
+			&i.Track.RelativePath,
+			&i.Track.SourceID,
+			&i.Track.Source,
+			&i.Track.RawTitle,
+			&i.Track.Performer,
+			&i.Track.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTrack = `-- name: UpdateTrack :exec
 UPDATE tracks
 SET
@@ -224,6 +269,22 @@ func (q *Queries) UpdateTrack(ctx context.Context, arg UpdateTrackParams) error 
 		arg.SourceID,
 		arg.OldID,
 	)
+	return err
+}
+
+const updateTrackDuration = `-- name: UpdateTrackDuration :exec
+UPDATE tracks
+SET duration_sec = ?1
+WHERE id = ?2
+`
+
+type UpdateTrackDurationParams struct {
+	DurationSec sql.NullInt64
+	ID          string
+}
+
+func (q *Queries) UpdateTrackDuration(ctx context.Context, arg UpdateTrackDurationParams) error {
+	_, err := q.db.ExecContext(ctx, updateTrackDuration, arg.DurationSec, arg.ID)
 	return err
 }
 

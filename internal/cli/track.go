@@ -33,6 +33,64 @@ var trackListCmd = &cobra.Command{
 	},
 }
 
+var trackProbeDurationCmd = &cobra.Command{
+	Use:   "probe-duration",
+	Short: "Probe library files and record track durations (writes; use --dry-run to preview)",
+	Long: `Probe each track whose duration is still 0 and record what the file reports.
+
+Only rows that are already 0 are considered, so a second run is harmless and
+a known-good duration is never overwritten. This is deliberately not part of
+sync or audit: those walk the whole library, and probing is a subprocess per
+file, so it belongs here on demand.
+
+Requires ffprobe, which ships with the ffmpeg this tool already needs for
+downloads. Without it nothing is scanned and the command reports that rather
+than failing per file.`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		c := Container(ctx)
+
+		dryRun, _ := cmd.Flags().GetBool(flagDryRunRetitle)
+
+		report, err := c.TrackService.BackfillDuration(ctx, c.Prober, c.Config.LibraryDir, dryRun)
+		if err != nil {
+			return fmt.Errorf("probe track durations: %w", err)
+		}
+
+		if report.Unavailable {
+			return fmt.Errorf("ffprobe is not installed or not in PATH; install ffmpeg to record durations")
+		}
+
+		if report.Scanned == 0 {
+			cmd.Println("Nothing to probe: every track already has a duration.")
+			return nil
+		}
+
+		cmd.Printf("Scanned %d track(s) with no recorded duration.\n", report.Scanned)
+		if report.Missing > 0 {
+			cmd.Printf("  %d file(s) are not on disk; left alone.\n", report.Missing)
+		}
+		if report.Failed > 0 {
+			cmd.Printf("  %d file(s) could not be probed.\n", report.Failed)
+		}
+		if report.Unchanged > 0 {
+			cmd.Printf("  %d file(s) reported a zero length; left at 0.\n", report.Unchanged)
+		}
+
+		if dryRun {
+			cmd.Printf("\nDry run: %d track(s) would record a duration. No changes made.\n", report.Updated)
+			return nil
+		}
+
+		cmd.Printf("\nRecorded a duration for %d of %d track(s).\n", report.Updated, report.Scanned)
+		if report.Updated == 0 {
+			cmd.Printf("Try: yci track list\n")
+		}
+		return nil
+	},
+}
+
 var trackRetitleCmd = &cobra.Command{
 	Use:   "retitle",
 	Short: "Re-derive clean titles from stored raw titles (database only; no files are renamed)",
@@ -192,10 +250,12 @@ func init() {
 	trackCmd.AddCommand(
 		trackListCmd,
 		trackRetitleCmd,
+		trackProbeDurationCmd,
 		trackDeleteCmd,
 	)
 
 	trackRetitleCmd.Flags().Bool(flagDryRunRetitle, false, "Report what would change without writing")
+	trackProbeDurationCmd.Flags().Bool(flagDryRunRetitle, false, "Report what would change without writing")
 
 	trackDeleteCmd.Flags().String(flagID, "", "The UUID of the track to delete")
 	trackDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")

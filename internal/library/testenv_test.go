@@ -9,6 +9,7 @@ import (
 
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/fs"
+	"github.com/yappachino-dev/yci/internal/probe"
 	"github.com/yappachino-dev/yci/internal/store"
 
 	_ "modernc.org/sqlite"
@@ -128,7 +129,7 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 		ArtistReader:   env.repos.artists,
 		FolderResolver: env.folders,
 		Linker:         env.channels,
-		MetaReader:     NewTagMetadataReader(),
+		MetaReader:     NewFileMetadataReader(probe.NewFFprobe()),
 		DiskMover:      journaled,
 		Transactor:     env.txr,
 		Paths:          env.paths,

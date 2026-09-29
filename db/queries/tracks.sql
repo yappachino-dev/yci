@@ -50,3 +50,13 @@ WHERE id = :id;
 -- name: UpdateTrackPath :exec
 UPDATE tracks SET relative_path = :relative_path
 WHERE id = :id;
+
+-- name: UpdateTrackDuration :exec
+UPDATE tracks
+SET duration_sec = :duration_sec
+WHERE id = :id;
+
+-- name: ListTracksMissingDuration :many
+SELECT sqlc.embed(tracks) FROM tracks
+WHERE duration_sec = 0
+ORDER BY id;

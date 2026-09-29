@@ -9,12 +9,17 @@ import (
 	"github.com/yappachino-dev/yci/internal/download"
 	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/library"
+	"github.com/yappachino-dev/yci/internal/probe"
 	"github.com/yappachino-dev/yci/internal/store"
 )
 
 type Container struct {
-	DB              *sql.DB
-	Config          config.Config
+	DB     *sql.DB
+	Config config.Config
+	// Prober reads media properties. Exposed so maintenance passes can be
+	// driven with the same prober the import path uses, and so tests can
+	// substitute one.
+	Prober          probe.Prober
 	Paths           fs.AppPaths
 	FolderService   *library.FolderService
 	ArtistService   *library.ArtistService
@@ -51,7 +56,8 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 	playlistRepo := library.NewSQLitePlaylistRepository(queries)
 
 	diskReader := fs.NewOSDiskReader()
-	metaReader := library.NewTagMetadataReader()
+	prober := probe.NewFFprobe()
+	metaReader := library.NewFileMetadataReader(prober)
 
 	channelService := library.NewChannelService(channelRepo)
 
@@ -120,6 +126,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		AuditService:    auditService,
 		FileActions:     fileActionExecutor,
 		Config:          cfg,
+		Prober:          prober,
 		Paths:           paths,
 	}, nil
 }

@@ -29,7 +29,9 @@ var (
 	ErrTrackPathExists = errors.New("track path already exists")
 )
 
-// SourceYouTube is the only supported track source today.
+// SourceYouTube is the only source that has ever written rows. It is a
+// constant so the spelling cannot drift between the import path and the
+// backfill command.
 const SourceYouTube = "youtube"
 
 type Track struct {
@@ -39,9 +41,17 @@ type Track struct {
 	ArtistID     ArtistID
 	RelativePath TrackPath
 	SourceID     string
-	// Source names the origin platform ("youtube" today). Kept as data
-	// now so adding sources later is a value change, not a migration.
+	// Source names the origin platform. Kept as data now so adding sources
+	// later is a value change, not a migration.
 	Source string
+	// DurationSec is the stream length in whole seconds. Zero means unknown,
+	// which is distinct from a genuinely zero-length file and is the state
+	// every row predating duration probing is in.
+	DurationSec int64
+	// Media holds the remaining stream properties from the same probe pass
+	// that produced DurationSec. Not persisted yet; recorded so a future
+	// codec-compatibility filter does not need a second full-library read.
+	Media TrackMediaInfo
 	// RawTitle is the title exactly as the file's tags carried it. Empty
 	// means the row predates title parsing.
 	RawTitle string
@@ -58,9 +68,13 @@ type TrackCreateParams struct {
 	ArtistID     ArtistID
 	RelativePath TrackPath
 	SourceID     string
-	// Source names the origin platform ("youtube" today). Kept as data
-	// now so adding sources later is a value change, not a migration.
+	// Source names the origin platform. Kept as data now so adding sources
+	// later is a value change, not a migration.
 	Source string
+	// DurationSec is the probed stream length; 0 when unknown.
+	DurationSec int64
+	// Media carries probe results for the same pass as DurationSec.
+	Media TrackMediaInfo
 	// RawTitle, Performer and Version carry title parsing results; see
 	// Track for their meaning.
 	RawTitle  string
@@ -84,6 +98,10 @@ type TrackRepository interface {
 	Delete(ctx context.Context, id TrackID) error
 	UpdatePathsByPrefix(ctx context.Context, oldPrefix, newPrefix string) error
 	UpdatePathsBatch(ctx context.Context, moves []TrackPathMove) error
+	// MissingDuration lists tracks whose duration is still 0, which is the
+	// state every row predating duration probing is in.
+	MissingDuration(ctx context.Context) ([]Track, error)
+	UpdateDuration(ctx context.Context, id TrackID, seconds int64) error
 }
 
 type FolderResolver interface {
@@ -150,6 +168,8 @@ func (s *TrackService) Create(ctx context.Context, params TrackCreateParams) (Tr
 		RawTitle:     strings.TrimSpace(params.RawTitle),
 		Performer:    strings.TrimSpace(params.Performer),
 		Version:      strings.TrimSpace(params.Version),
+		DurationSec:  params.DurationSec,
+		Media:        params.Media,
 	}
 
 	if err := s.repo.Create(ctx, t); err != nil {
@@ -302,6 +322,26 @@ func NewSQLiteTrackRepository(q *store.Queries) *SQLiteTrackRepository {
 	return &SQLiteTrackRepository{q: q}
 }
 
+func (r *SQLiteTrackRepository) MissingDuration(ctx context.Context) ([]Track, error) {
+	rows, err := r.db(ctx).ListTracksMissingDuration(ctx)
+	if err != nil {
+		return nil, db.MapSQLError(err, ErrTrackNotFound, ErrTrackPathExists)
+	}
+
+	tracks := make([]Track, 0, len(rows))
+	for _, row := range rows {
+		tracks = append(tracks, rowToTrack(row.Track))
+	}
+	return tracks, nil
+}
+
+func (r *SQLiteTrackRepository) UpdateDuration(ctx context.Context, id TrackID, seconds int64) error {
+	return r.db(ctx).UpdateTrackDuration(ctx, store.UpdateTrackDurationParams{
+		ID:          string(id),
+		DurationSec: db.ToNullInt64(seconds),
+	})
+}
+
 func rowToTrack(row store.Track) Track {
 	return Track{
 		ID:           TrackID(row.ID),
@@ -314,6 +354,7 @@ func rowToTrack(row store.Track) Track {
 		RawTitle:     db.FromNullString(row.RawTitle),
 		Performer:    row.Performer,
 		Version:      row.Version,
+		DurationSec:  db.FromNullInt64(row.DurationSec),
 	}
 }
 
@@ -329,6 +370,7 @@ func (r *SQLiteTrackRepository) Create(ctx context.Context, t Track) error {
 		RawTitle:     db.ToNullString(t.RawTitle),
 		Performer:    t.Performer,
 		Version:      t.Version,
+		DurationSec:  db.ToNullInt64(t.DurationSec),
 	})
 	if err != nil {
 		return db.MapSQLError(err, ErrTrackNotFound, ErrTrackPathExists)

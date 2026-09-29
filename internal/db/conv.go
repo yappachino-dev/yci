@@ -25,3 +25,10 @@ func FromNullInt64(n sql.NullInt64) int64 {
 		return 0
 	}
 }
+
+// ToNullInt64 stores 0 as 0 rather than NULL. Unlike strings there is no
+// "absent" representation of a number, and a zero duration means "unknown",
+// which a query can already select on.
+func ToNullInt64(n int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: n, Valid: true}
+}
