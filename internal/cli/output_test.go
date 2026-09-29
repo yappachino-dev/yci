@@ -181,24 +181,62 @@ func TestListOutput(t *testing.T) {
 //
 // Every `... yci <command> ...` fragment in a Go string literal must name a
 // command in the real tree.
+// maxHintDepth bounds how many command words a hint may contribute. Real
+// hints are `yci <group> <verb>`; prose that happens to share a literal with
+// a command ("... yci config set creates it on first write") would otherwise
+// contribute English words and fail the check for the wrong reason.
+//
+// The bound is self-verified below: if a command is ever nested deeper, the
+// test says so instead of quietly truncating a real hint.
+const maxHintDepth = 3
+
 func TestCommandHintsResolve(t *testing.T) {
 	// Cobra installs help and completion lazily during Execute, so a tree
 	// inspected before then is missing commands the user does see.
 	rootCmd.InitDefaultHelpCmd()
 	rootCmd.InitDefaultCompletionCmd()
 
-	hintPattern := regexp.MustCompile("`([^`]*)`|\"([^\"]*)\"")
+	assertNoCommandIsDeeperThan(t, maxHintDepth)
 
-	for _, ref := range collectCommandHints(t, hintPattern) {
+	for _, ref := range collectCommandHints(t) {
 		t.Run(ref, func(t *testing.T) {
-			if _, _, err := rootCmd.Find(strings.Fields(ref)); err != nil {
+			// Find resolves the longest matching prefix and returns the
+			// unconsumed words. A hint whose whole path resolves has
+			// nothing left over; a stale subcommand leaves its own name
+			// behind, which is what this asserts.
+			_, remaining, err := rootCmd.Find(strings.Fields(ref))
+			if err != nil {
 				t.Errorf("hint names %q, which is not a command: %v", ref, err)
+				return
+			}
+			if len(remaining) > 0 {
+				t.Errorf("hint names %q, but %q is not a command under it", ref, remaining[0])
 			}
 		})
 	}
 }
 
-func collectCommandHints(t *testing.T, hintPattern *regexp.Regexp) []string {
+// assertNoCommandIsDeeperThan keeps maxHintDepth honest. Without it, a
+// third-level command added later would have its hints truncated to two
+// words and pass, which is the same blind spot this test exists to close.
+func assertNoCommandIsDeeperThan(t *testing.T, depth int) {
+	t.Helper()
+
+	var walk func(c *cobra.Command, level int)
+	walk = func(c *cobra.Command, level int) {
+		for _, sub := range c.Commands() {
+			if level+1 > depth {
+				t.Errorf("command %q is nested deeper than maxHintDepth=%d; raise the constant so its hints stay checkable", sub.CommandPath(), depth)
+				continue
+			}
+			walk(sub, level+1)
+		}
+	}
+
+	walk(rootCmd, 0)
+}
+
+func collectCommandHints(t *testing.T) []string {
 	t.Helper()
 
 	sources, err := packageSources(".")
@@ -206,8 +244,20 @@ func collectCommandHints(t *testing.T, hintPattern *regexp.Regexp) []string {
 		t.Fatalf("read package sources: %v", err)
 	}
 
+	// Command words start with a letter: that excludes escape fragments and
+	// placeholder arguments like <name> without enumerating them.
+	commandWord := regexp.MustCompile(`[A-Za-z][A-Za-z0-9_-]*`)
+
 	seen := map[string]bool{}
 	var hints []string
+
+	add := func(ref string) {
+		if ref == "" || seen[ref] {
+			return
+		}
+		seen[ref] = true
+		hints = append(hints, ref)
+	}
 
 	for _, src := range sources {
 		for _, line := range strings.Split(src, "\n") {
@@ -215,24 +265,43 @@ func collectCommandHints(t *testing.T, hintPattern *regexp.Regexp) []string {
 				line = line[:i]
 			}
 
-			for _, m := range hintPattern.FindAllStringSubmatch(line, -1) {
-				literal := m[1] + m[2]
-				idx := strings.Index(literal, "yci ")
+			// Backticked spans are precise: the user wrote an explicit
+			// command, so everything inside is that command. This is what
+			// keeps "Run `yci download resume` to process them" from
+			// reading "to" as a subcommand.
+			for _, m := range regexp.MustCompile("`([^`]*)`").FindAllStringSubmatch(line, -1) {
+				if idx := strings.Index(m[1], "yci "); idx >= 0 {
+					add(strings.Join(commandWord.FindAllString(m[1][idx+len("yci "):], -1), " "))
+				}
+			}
+
+			// Plain string literals carry messages with a command embedded
+			// ("Re-derive it later with: yci playlist reseed %s"). There the
+			// path has to be inferred, so it is cut at the first thing that
+			// cannot be part of a command: an escape, a format verb, or a
+			// placeholder argument.
+			for _, m := range regexp.MustCompile(`"([^"]*)"`).FindAllStringSubmatch(line, -1) {
+				idx := strings.Index(m[1], "yci ")
 				if idx < 0 {
 					continue
 				}
 
-				// The first token after "yci" is the top-level command;
-				// placeholders like <name> end the search.
-				rest := literal[idx+len("yci "):]
-				name, _, _ := strings.Cut(rest, " ")
-				name = strings.Trim(name, "`\"',.!)")
-				if name == "" || strings.HasPrefix(name, "<") || seen[name] {
-					continue
+				// Cut at anything that cannot be part of a command
+				// path: a backtick (a backticked path inside a Go
+				// string is handled precisely by the branch above),
+				// an escape, a format verb, or a placeholder.
+				rest := m[1][idx+len("yci "):]
+				for _, cut := range []string{"`", `\`, "%", "<"} {
+					if j := strings.Index(rest, cut); j >= 0 {
+						rest = rest[:j]
+					}
 				}
 
-				seen[name] = true
-				hints = append(hints, name)
+				path := commandWord.FindAllString(rest, -1)
+				if len(path) > maxHintDepth {
+					path = path[:maxHintDepth]
+				}
+				add(strings.Join(path, " "))
 			}
 		}
 	}
