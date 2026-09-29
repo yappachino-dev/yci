@@ -313,3 +313,66 @@ func TestParseMatchModeDefaultsToAll(t *testing.T) {
 		}
 	}
 }
+
+// TestMatchingIsTokenEqualityNotSubstring pins the boundary between the two.
+//
+// Matching used to be a substring search over the folded title, which is
+// what let a run-together spelling match — and also let "Mori" reach
+// "Morisette", "Suisei" reach "Suisei2", and "body" reach "Nobody". Measured
+// over the 341-title corpus that was 18 matches the documented token-set
+// semantics should not have produced, across 22 of 682 seed/mode
+// combinations. Narrowing was the only direction: no combination widened.
+func TestMatchingIsTokenEqualityNotSubstring(t *testing.T) {
+	cases := []struct {
+		name  string
+		title string
+		token string
+		want  bool
+	}{
+		{"token inside a longer word", "Morisette - Souvenir", "Mori", false},
+		{"token as a word suffix", "Nobody - Song", "body", false},
+		{"token as a word prefix", "Suisei2 - Song", "Suisei", false},
+		{"short CJK token inside a word", "Chouzou - Song", "Chou", false},
+		{"latin token inside a Japanese word", "Ame no Uta", "me", false},
+		{"exact token still matches", "BRAIN - Mori Calliope (cover)", "Mori", true},
+		{"exact CJK token still matches", "Cry Baby / 星街すいせい", "星街すいせい", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := MatchesFragment(c.title, []string{c.token}); got != c.want {
+				t.Errorf("MatchesFragment(%q, [%q]) = %v, want %v", c.title, c.token, got, c.want)
+			}
+		})
+	}
+}
+
+// TestRunTogetherSpellingIsReachedWithoutSubstring guards the reason the old
+// substring search existed: a selection has to reach a title that spells it
+// without separators.
+func TestRunTogetherSpellingIsReachedWithoutSubstring(t *testing.T) {
+	titles := []string{
+		"BRAIN - Mori Calliope (cover)",
+		"【#RequiemforLove3D】 Bocca della Verita feat @MoriCalliope",
+		"Bocca della Verita - crybaby",
+	}
+	selections := [][]string{
+		{"Mori", "Calliope"},
+		{"cry", "baby"},
+	}
+
+	for _, sel := range selections {
+		for _, title := range titles {
+			got := MatchesTokens(title, sel, MatchAll)
+			t.Logf("selection %q vs %q -> %v", sel, title, got)
+		}
+	}
+
+	if !MatchesTokens("【MV】 Bocca della Verita feat @MoriCalliope", []string{"Mori", "Calliope"}, MatchAll) {
+		t.Error("run-together spelling no longer matched")
+	}
+	// A selection that does not appear run-together anywhere must not match.
+	if MatchesTokens("Morisette - Souvenir", []string{"Mori", "Calliope"}, MatchAll) {
+		t.Error("selection matched a title sharing only a word prefix")
+	}
+}

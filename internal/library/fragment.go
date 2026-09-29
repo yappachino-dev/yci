@@ -14,10 +14,11 @@ import (
 // seeds that scored 1.00 precision and 1.00 recall.
 //
 // Selection is a token set rather than a joined substring, so "星街 すいせい"
-// still matches "星街すいせい". How the tokens combine is a mode: AND (every
-// token present) is the default and is what the derivation proposes, because
-// it is what keeps unrelated titles out. ANY (at least one token present) is
-// available for deliberately widening a selection.
+// still matches "星街すいせい" and "Mori Calliope" still matches
+// "MoriCalliope". How the tokens combine is a mode: AND (every token present)
+// is the default and is what the derivation proposes, because it is what
+// keeps unrelated titles out. ANY (at least one token present) is available
+// for deliberately widening a selection.
 
 // foldFragment normalises a title for comparison: ASCII and fullwidth letters
 // fold to one case, so "Mori Calliope" and "calliope" share a family.
@@ -197,19 +198,30 @@ func MatchesFragment(corpusTitle string, tokens []string) bool {
 }
 
 // MatchesTokens reports whether a title satisfies a token set under mode.
-//
 // An empty token set never matches: a playlist with no criteria must not
 // silently select the whole library, which is the one outcome a user would
 // never notice and never want.
+//
+// A token matches a title when the folded token is one of the title's
+// tokens, or when the whole selection concatenated matches one of them as a
+// run-together spelling. The second clause is what lets ["Mori","Calliope"]
+// reach "MoriCalliope" without falling back to substring search, which would
+// also let "Mori" reach "Morisette" and "body" reach "Nobody".
 func MatchesTokens(corpusTitle string, tokens []string, mode MatchMode) bool {
 	if len(tokens) == 0 {
 		return false
 	}
 
-	haystack := foldFragment(StripTitle(corpusTitle))
+	haystack := foldedTokenSet(StripTitle(corpusTitle))
+
+	// A title that spells the selection without separators, e.g. a run
+	// together upload name.
+	if _, ok := haystack[foldFragment(strings.Join(tokens, ""))]; ok {
+		return true
+	}
 
 	for _, t := range tokens {
-		found := strings.Contains(haystack, foldFragment(t))
+		_, found := haystack[foldFragment(t)]
 		if mode == MatchAny && found {
 			return true
 		}
@@ -219,6 +231,18 @@ func MatchesTokens(corpusTitle string, tokens []string, mode MatchMode) bool {
 	}
 
 	return mode == MatchAll
+}
+
+// foldedTokenSet returns the folded tokens of a title, for membership tests.
+func foldedTokenSet(title string) map[string]struct{} {
+	raw := Tokenize(title)
+
+	set := make(map[string]struct{}, len(raw))
+	for _, t := range raw {
+		set[foldFragment(t)] = struct{}{}
+	}
+
+	return set
 }
 
 func countMatching(corpus []string, tokens []string) int {
