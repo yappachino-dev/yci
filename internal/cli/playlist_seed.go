@@ -78,11 +78,11 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 		}
 	}
 
-	matched := make([]library.Track, 0, len(tracks))
-	for _, t := range tracks {
-		if library.MatchesFragment(t.Title, tokens) {
-			matched = append(matched, t)
-		}
+	// Derive goes through the service so seeding and reseeding cannot
+	// disagree about what a token set means.
+	matched, err := c.PlaylistService.Derive(ctx, tokens)
+	if err != nil {
+		return err
 	}
 
 	if len(matched) == 0 {
@@ -100,23 +100,23 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 		return nil
 	}
 
-	playlist, err := c.PlaylistService.Create(ctx, name)
+	ids := make([]library.TrackID, 0, len(matched))
+	for _, t := range matched {
+		ids = append(ids, t.ID)
+	}
+
+	// Membership and the recipe that explains it are written together, so a
+	// playlist never exists holding rows that `playlist reseed` cannot
+	// reproduce.
+	playlist, err := c.PlaylistService.CreateFromSeed(ctx, name, seed, tokens, ids)
 	if err != nil {
 		return mapSentinels(err, map[error]string{
 			library.ErrPlaylistAlreadyExists: fmt.Sprintf("playlist %q already exists", name),
 		})
 	}
 
-	ids := make([]library.TrackID, 0, len(matched))
-	for _, t := range matched {
-		ids = append(ids, t.ID)
-	}
-
-	if err := c.PlaylistService.AddTracks(ctx, playlist.Name, ids); err != nil {
-		return fmt.Errorf("add tracks to playlist %q: %w", name, err)
-	}
-
 	cmd.Printf("\nCreated playlist %q with %d tracks.\n", playlist.Name, len(ids))
+	cmd.Printf("Re-derive it later with: yci playlist reseed %s\n", playlist.Name)
 	cmd.Printf("Export it with: yci playlist export %s\n", playlist.Name)
 
 	return nil

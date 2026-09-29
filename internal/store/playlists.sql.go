@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 )
 
 const addTrackToPlaylist = `-- name: AddTrackToPlaylist :exec
@@ -35,13 +36,18 @@ func (q *Queries) AddTrackToPlaylist(ctx context.Context, arg AddTrackToPlaylist
 const createPlaylist = `-- name: CreatePlaylist :one
 INSERT INTO playlists (name)
 VALUES (?1)
-RETURNING id, name
+RETURNING id, name, seed_track_id, fragment_tokens
 `
 
 func (q *Queries) CreatePlaylist(ctx context.Context, name string) (Playlist, error) {
 	row := q.db.QueryRowContext(ctx, createPlaylist, name)
 	var i Playlist
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SeedTrackID,
+		&i.FragmentTokens,
+	)
 	return i, err
 }
 
@@ -61,7 +67,9 @@ func (q *Queries) DeletePlaylist(ctx context.Context, id int64) (int64, error) {
 const getPlaylistByID = `-- name: GetPlaylistByID :one
 SELECT
     id,
-    name
+    name,
+    seed_track_id,
+    fragment_tokens
 FROM playlists
 WHERE id = ?1
 `
@@ -69,14 +77,21 @@ WHERE id = ?1
 func (q *Queries) GetPlaylistByID(ctx context.Context, id int64) (Playlist, error) {
 	row := q.db.QueryRowContext(ctx, getPlaylistByID, id)
 	var i Playlist
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SeedTrackID,
+		&i.FragmentTokens,
+	)
 	return i, err
 }
 
 const getPlaylistByName = `-- name: GetPlaylistByName :one
 SELECT
     id,
-    name
+    name,
+    seed_track_id,
+    fragment_tokens
 FROM playlists
 WHERE name = ?1
 `
@@ -84,7 +99,12 @@ WHERE name = ?1
 func (q *Queries) GetPlaylistByName(ctx context.Context, name string) (Playlist, error) {
 	row := q.db.QueryRowContext(ctx, getPlaylistByName, name)
 	var i Playlist
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SeedTrackID,
+		&i.FragmentTokens,
+	)
 	return i, err
 }
 
@@ -142,7 +162,9 @@ func (q *Queries) GetPlaylistTracks(ctx context.Context, playlistID int64) ([]Ge
 const getPlaylists = `-- name: GetPlaylists :many
 SELECT
     id,
-    name
+    name,
+    seed_track_id,
+    fragment_tokens
 FROM playlists
 ORDER BY name
 `
@@ -156,7 +178,12 @@ func (q *Queries) GetPlaylists(ctx context.Context) ([]Playlist, error) {
 	var items []Playlist
 	for rows.Next() {
 		var i Playlist
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.SeedTrackID,
+			&i.FragmentTokens,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -186,4 +213,24 @@ func (q *Queries) RemoveTrackFromPlaylist(ctx context.Context, arg RemoveTrackFr
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const setPlaylistRecipe = `-- name: SetPlaylistRecipe :exec
+UPDATE playlists
+SET seed_track_id = ?1, fragment_tokens = ?2
+WHERE id = ?3
+`
+
+type SetPlaylistRecipeParams struct {
+	SeedTrackID    sql.NullString
+	FragmentTokens string
+	ID             int64
+}
+
+// The recipe is written immediately after creation, in the same
+// transaction as the seeded membership, so a playlist is never left
+// holding membership it cannot explain.
+func (q *Queries) SetPlaylistRecipe(ctx context.Context, arg SetPlaylistRecipeParams) error {
+	_, err := q.db.ExecContext(ctx, setPlaylistRecipe, arg.SeedTrackID, arg.FragmentTokens, arg.ID)
+	return err
 }

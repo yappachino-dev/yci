@@ -1,6 +1,7 @@
 package library
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -179,4 +180,22 @@ func countMatching(corpus []string, tokens []string) int {
 		}
 	}
 	return n
+}
+
+// FormatTokens renders a token set for display.
+//
+// %q on a []string is unreadable at a glance, and strings.Join loses the
+// distinction between a one-token set and a two-token set. Quoting each
+// token makes both the members and the count visible.
+func FormatTokens(tokens []string) string {
+	if len(tokens) == 0 {
+		return "(none)"
+	}
+
+	quoted := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		quoted = append(quoted, strconv.Quote(t))
+	}
+
+	return strings.Join(quoted, " AND ")
 }

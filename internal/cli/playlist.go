@@ -281,6 +281,7 @@ var playlistExportCmd = &cobra.Command{
 func init() {
 	playlistCmd.AddCommand(
 		playlistCreateCmd,
+		playlistReseedCmd,
 		playlistShowCmd,
 		playlistAddCmd,
 		playlistRemoveCmd,

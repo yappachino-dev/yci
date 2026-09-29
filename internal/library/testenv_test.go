@@ -62,16 +62,17 @@ func (p testPaths) StagingDir() string { return p.staging }
 // real SQLite, real temporary directories, journaled file moves flushed
 // through the transactor's post-commit hook.
 type libraryEnv struct {
-	dbConn   *sql.DB
-	queries  *store.Queries
-	txr      *db.SQLiteTransactor
-	actions  *db.FileActionExecutor
-	folders  *FolderService
-	artists  *ArtistService
-	tracks   *TrackService
-	channels *ChannelService
-	staging  *StagingService
-	repos    struct {
+	dbConn    *sql.DB
+	queries   *store.Queries
+	txr       *db.SQLiteTransactor
+	actions   *db.FileActionExecutor
+	folders   *FolderService
+	artists   *ArtistService
+	tracks    *TrackService
+	channels  *ChannelService
+	staging   *StagingService
+	playlists *PlaylistService
+	repos     struct {
 		folders *SQLiteFolderRepository
 		artists *SQLiteArtistRepository
 		tracks  *SQLiteTrackRepository
@@ -133,6 +134,13 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 		DiskMover:      journaled,
 		Transactor:     env.txr,
 		Paths:          env.paths,
+	})
+
+	env.playlists = NewPlaylistService(PlaylistServiceConfig{
+		Repo:       NewSQLitePlaylistRepository(queries),
+		Tracks:     env.tracks,
+		Paths:      env.paths,
+		Transactor: env.txr,
 	})
 
 	return env

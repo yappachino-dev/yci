@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +29,30 @@ var (
 type Playlist struct {
 	ID   int64
 	Name string
+	// SeedTrackID is the track the playlist was seeded from, or empty for
+	// a playlist that was created empty or built by hand.
+	SeedTrackID TrackID
+	// FragmentTokens is the title-token set chosen at seed time. It is the
+	// recipe: re-deriving membership means re-running this token set, not
+	// re-evaluating a stored rule.
+	FragmentTokens []string
+}
+
+// HasRecipe reports whether the playlist was seeded at all.
+//
+// Tokens are the signal, not the seed track: seed_track_id is a foreign key
+// with ON DELETE SET NULL, so deleting the seed track blanks it while the
+// tokens survive. Reading the seed as the marker would then tell a user who
+// did seed a playlist that they never did, and send them looking for the
+// wrong problem.
+func (p Playlist) HasRecipe() bool {
+	return len(p.FragmentTokens) > 0
+}
+
+// HasSeed reports whether the recipe can actually be evaluated. A playlist
+// whose seed track was deleted still has a recipe but no way to apply it.
+func (p Playlist) HasSeed() bool {
+	return p.SeedTrackID != ""
 }
 
 // PlaylistEntry pairs a track with its playback order within one playlist.
@@ -40,6 +65,7 @@ type PlaylistEntry struct {
 // PlaylistRepository persists playlists and their membership.
 type PlaylistRepository interface {
 	Create(ctx context.Context, name string) (Playlist, error)
+	SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string) error
 	All(ctx context.Context) ([]Playlist, error)
 	ByName(ctx context.Context, name string) (Playlist, error)
 	Delete(ctx context.Context, id int64) error
@@ -60,7 +86,7 @@ func (r *SQLitePlaylistRepository) Create(ctx context.Context, name string) (Pla
 		return Playlist{}, db.MapSQLError(err, nil, ErrPlaylistAlreadyExists)
 	}
 
-	return Playlist(row), nil
+	return playlistFromRow(row)
 }
 
 func (r *SQLitePlaylistRepository) All(ctx context.Context) ([]Playlist, error) {
@@ -71,7 +97,11 @@ func (r *SQLitePlaylistRepository) All(ctx context.Context) ([]Playlist, error) 
 
 	out := make([]Playlist, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, Playlist(row))
+		p, err := playlistFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
 
 	return out, nil
@@ -93,7 +123,40 @@ func (r *SQLitePlaylistRepository) ByName(ctx context.Context, name string) (Pla
 		return Playlist{}, db.MapSQLError(err, ErrPlaylistNotFound, nil)
 	}
 
-	return Playlist(row), nil
+	return playlistFromRow(row)
+}
+
+// SetRecipe records how the playlist was seeded. It runs inside the same
+// transaction as the seeded membership, so a playlist never exists holding
+// rows it cannot explain.
+func (r *SQLitePlaylistRepository) SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string) error {
+	if err := r.db(ctx).SetPlaylistRecipe(ctx, store.SetPlaylistRecipeParams{
+		ID:             id,
+		SeedTrackID:    db.ToNullString(string(seedTrackID)),
+		FragmentTokens: tokensJSON,
+	}); err != nil {
+		return fmt.Errorf("set playlist recipe: %w", err)
+	}
+	return nil
+}
+
+// playlistFromRow decodes the stored recipe. A corrupt token column means
+// the playlist can no longer be explained, which is worth surfacing rather
+// than silently treating the playlist as hand-built.
+func playlistFromRow(row store.Playlist) (Playlist, error) {
+	p := Playlist{
+		ID:          row.ID,
+		Name:        row.Name,
+		SeedTrackID: TrackID(db.FromNullString(row.SeedTrackID)),
+	}
+
+	if row.FragmentTokens != "" && row.FragmentTokens != "[]" {
+		if err := json.Unmarshal([]byte(row.FragmentTokens), &p.FragmentTokens); err != nil {
+			return Playlist{}, fmt.Errorf("playlist %q has an unreadable recipe: %w", row.Name, err)
+		}
+	}
+
+	return p, nil
 }
 
 func (r *SQLitePlaylistRepository) Delete(ctx context.Context, id int64) error {
@@ -157,6 +220,9 @@ func (r *SQLitePlaylistRepository) Tracks(ctx context.Context, playlistID int64)
 // TrackFinder supplies track existence checks without the full TrackService.
 type TrackFinder interface {
 	ByID(ctx context.Context, id TrackID) (Track, error)
+	// All backs recipe derivation, which matches a token set against the
+	// whole library rather than a single track.
+	All(ctx context.Context) ([]Track, error)
 }
 
 // PlaylistServiceConfig follows the config-struct rule: four collaborators.
