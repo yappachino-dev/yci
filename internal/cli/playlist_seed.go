@@ -156,7 +156,7 @@ func printSeedMatches(cmd *cobra.Command, matched []library.Track) {
 			fmt.Fprintf(w, "...\tand %d more\n", len(matched)-seedMatchPreviewCap)
 			break
 		}
-		fmt.Fprintf(w, "%s\t%s\n", shortTrackID(t.ID), truncateCell(t.Title, 60))
+		fmt.Fprintf(w, "%s\t%s\n", shortTrackID(t.ID), truncateCell(t.Title, cellWidthTitleWide))
 	}
 
 	w.Flush()

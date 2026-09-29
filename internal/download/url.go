@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/yappachino-dev/yci/internal/videoid"
 )
 
 type URLType int
@@ -38,25 +40,11 @@ var shortHosts = map[string]struct{}{
 	"www.youtu.be": {},
 }
 
-const videoIDLength = 11
-
-// isVideoID reports whether s looks like a YouTube video ID (11 chars of
-// [A-Za-z0-9_-]), the form stored as track SourceID.
+// isVideoID reports whether s looks like a YouTube video ID, the form stored
+// as track SourceID. The rule itself lives in internal/videoid so that this
+// and the staging importer cannot disagree about it.
 func isVideoID(s string) bool {
-	if len(s) != videoIDLength {
-		return false
-	}
-
-	for _, c := range s {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		case c == '-', c == '_':
-		default:
-			return false
-		}
-	}
-
-	return true
+	return videoid.IsValid(s)
 }
 
 func (p ParsedURL) CleanURL(forcePlaylist bool) string {
@@ -77,7 +65,7 @@ func (p ParsedURL) CleanURL(forcePlaylist bool) string {
 }
 
 // ParseURL classifies rawURL as a video, playlist, or hybrid link. Bare
-// 11-character video IDs (as stored by audit) are accepted as videos.
+// Bare video IDs (as stored by audit) are accepted as videos.
 // Unrecognized input yields URLTypeUnknown with a nil error; only truly
 // malformed URLs produce an error.
 func ParseURL(rawURL string) (ParsedURL, error) {

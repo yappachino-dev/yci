@@ -22,7 +22,7 @@ type ChannelName string
 
 func (n ChannelName) Validate() error {
 	if strings.TrimSpace(string(n)) == "" {
-		return fmt.Errorf("channel name cannot be empty")
+		return fmt.Errorf("channel: %w", ErrNameEmpty)
 	}
 	return nil
 }

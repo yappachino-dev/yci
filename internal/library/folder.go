@@ -37,7 +37,7 @@ func (n FolderName) ToSlugID() FolderID {
 
 func (n FolderName) Validate() error {
 	if strings.TrimSpace(string(n)) == "" {
-		return fmt.Errorf("folder name cannot be empty")
+		return fmt.Errorf("folder: %w", ErrNameEmpty)
 	}
 	return nil
 }

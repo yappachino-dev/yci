@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,10 +14,8 @@ const (
 	flagForce         = "force"
 )
 
-// retitlePreviewLimit caps how many rows are printed before summarizing;
+// changePreviewLimit caps how many rows are printed before summarizing;
 // a full backfill over a large library would otherwise bury the summary.
-const retitlePreviewLimit = 20
-
 var trackCmd = &cobra.Command{
 	Use:   "track",
 	Short: "Manage tracks in the library",
@@ -116,7 +113,7 @@ var trackRetitleCmd = &cobra.Command{
 			fmt.Fprintln(w, "TRACK ID\tOLD TITLE\tNEW TITLE\tVERSION")
 
 			for i, change := range report.Changes {
-				if i == retitlePreviewLimit {
+				if i == changePreviewLimit {
 					break
 				}
 				if !change.Retitled {
@@ -124,8 +121,8 @@ var trackRetitleCmd = &cobra.Command{
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 					shortTrackID(change.ID),
-					truncateCell(change.From, 40),
-					truncateCell(change.To, 40),
+					truncateCell(change.From, cellWidthDiff),
+					truncateCell(change.To, cellWidthDiff),
 					change.Version,
 				)
 			}
@@ -133,8 +130,8 @@ var trackRetitleCmd = &cobra.Command{
 			w.Flush()
 		}
 
-		if report.Retitled > retitlePreviewLimit {
-			cmd.Printf("... and %d more.\n", report.Retitled-retitlePreviewLimit)
+		if report.Retitled > changePreviewLimit {
+			cmd.Printf("... and %d more.\n", report.Retitled-changePreviewLimit)
 		}
 		cmd.Println()
 
@@ -224,26 +221,6 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 
 	w.Flush()
 	return nil
-}
-
-func shortTrackID(id library.TrackID) string {
-	const keep = 8
-
-	s := string(id)
-	if len(s) <= keep {
-		return s
-	}
-
-	return s[:keep]
-}
-
-func truncateCell(s string, limit int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len([]rune(s)) <= limit {
-		return s
-	}
-
-	return string([]rune(s)[:limit-1]) + "…"
 }
 
 func init() {

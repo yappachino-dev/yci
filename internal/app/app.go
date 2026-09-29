@@ -32,6 +32,21 @@ type Container struct {
 	FileActions     *db.FileActionExecutor
 }
 
+// Close releases the container's database handle.
+//
+// It exists because initApplication is a function rather than a
+// constructor someone can defer on, and because a test that boots the real
+// application stack would otherwise leak a pooled connection per case. The
+// CLI does not need to call it — the process is about to exit — but every
+// path that opens a connection and might not exit should.
+func (c *Container) Close() error {
+	if c == nil || c.DB == nil {
+		return nil
+	}
+
+	return c.DB.Close()
+}
+
 // NewContainer wires all services from a single resolved config. The
 // database connection must already be open and migrated.
 func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {

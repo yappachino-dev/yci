@@ -7,11 +7,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/yappachino-dev/yci/internal/fs"
+	"github.com/yappachino-dev/yci/internal/videoid"
 
 	"github.com/google/uuid"
 )
@@ -243,10 +243,10 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, channelName 
 	return &decision, nil
 }
 
-// sourceIDPattern matches YouTube video IDs — the only staging filename
-// convention yci writes (<id>.opus). Anything else fails loudly instead of
-// being imported with the whole filename as its source ID.
-var sourceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+// A staged file must be named <video-id>.<ext> — the only convention yci
+// writes. Anything else fails loudly instead of being imported with the
+// whole filename as its source ID. The rule lives in internal/videoid so it
+// cannot drift from the one the download queue validates URLs against.
 
 // planImport performs the decision phase for one staged file and computes
 // its destination paths.
@@ -266,7 +266,7 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 	ext := strings.ToLower(filepath.Ext(fileName))
 	sourceID := strings.TrimSuffix(fileName, ext)
 
-	if !sourceIDPattern.MatchString(sourceID) {
+	if !videoid.IsValid(sourceID) {
 		return nil, fmt.Errorf("file name is not a staged download (expected <video-id>%s); move or rename it out of staging", ext)
 	}
 

@@ -14,6 +14,12 @@ import (
 
 // Sentinel errors for artist lookups and writes.
 var (
+	// ErrNameEmpty reports a blank artist, folder or channel name. It is a
+	// sentinel because validation runs at the boundary of Create and Rename,
+	// and a caller that needs to distinguish "the user typed nothing" from
+	// any other failure cannot do it with an anonymous fmt.Errorf.
+	ErrNameEmpty = errors.New("name cannot be empty")
+
 	ErrArtistNotFound      = errors.New("artist not found")
 	ErrArtistAlreadyExists = errors.New("artist already exists")
 )
@@ -29,7 +35,7 @@ func (n ArtistName) ToSlugID() ArtistID {
 
 func (n ArtistName) Validate() error {
 	if strings.TrimSpace(string(n)) == "" {
-		return fmt.Errorf("artist name cannot be empty")
+		return fmt.Errorf("artist: %w", ErrNameEmpty)
 	}
 	return nil
 }

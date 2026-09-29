@@ -15,10 +15,15 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+// latestVersion is the upper bound CollectMigrations is given, meaning "every
+// migration regardless of version". Named because the expression is
+// otherwise an unexplained 1<<63-1 repeated at two call sites.
+const latestVersion = 1<<63 - 1
+
 // PendingMigrations lists the embedded migrations the database has not
 // applied, oldest first.
 func PendingMigrations(database *sql.DB) ([]*goose.Migration, error) {
-	migrations, err := goose.CollectMigrations(".", 0, 1<<63-1)
+	migrations, err := goose.CollectMigrations(".", 0, latestVersion)
 	if err != nil {
 		return nil, fmt.Errorf("collect migrations: %w", err)
 	}
@@ -39,7 +44,7 @@ func PendingMigrations(database *sql.DB) ([]*goose.Migration, error) {
 }
 
 func GetMaxVersion() (int, error) {
-	migrations, err := goose.CollectMigrations(".", 0, 1<<63-1)
+	migrations, err := goose.CollectMigrations(".", 0, latestVersion)
 	if err != nil {
 		return 0, fmt.Errorf("collect migrations: %w", err)
 	}

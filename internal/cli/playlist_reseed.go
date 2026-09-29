@@ -11,12 +11,10 @@ import (
 
 const flagAccept = "accept"
 
-// reseedPreviewLimit caps how many membership changes are listed before
+// changePreviewLimit caps how many membership changes are listed before
 // summarizing. A recipe re-derived against a much-changed library can
 // differ by hundreds of rows, and the question being asked is how many,
 // not each one.
-const reseedPreviewLimit = 20
-
 var playlistReseedCmd = &cobra.Command{
 	Use:   "reseed <name>",
 	Short: "Re-derive a seeded playlist's membership and show what would change",
@@ -88,7 +86,7 @@ device.`,
 }
 
 func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedReport) {
-	cmd.Printf("Playlist %q  (seed: %s)\n", name, truncateCell(report.SeedTitle, 50))
+	cmd.Printf("Playlist %q  (seed: %s)\n", name, truncateCell(report.SeedTitle, cellWidthSeed))
 	cmd.Printf("Recipe: %s\n", library.FormatTokens(report.Recipe, report.MatchMode))
 	if report.MatchMode == library.MatchAny {
 		cmd.Printf("Matching: ANY token — wider than the AND default\n")
@@ -110,18 +108,18 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 		if change.Add {
 			continue
 		}
-		if shown == reseedPreviewLimit {
+		if shown == changePreviewLimit {
 			break
 		}
-		fmt.Fprintf(w, "remove\t%s\t%s\n", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, 50))
+		fmt.Fprintf(w, "remove\t%s\t%s\n", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, cellWidthTitle))
 		shown++
 	}
 
 	for _, change := range report.Changes {
-		if !change.Add || shown == reseedPreviewLimit {
+		if !change.Add || shown == changePreviewLimit {
 			continue
 		}
-		fmt.Fprintf(w, "add\t%s\t%s\n", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, 50))
+		fmt.Fprintf(w, "add\t%s\t%s\n", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, cellWidthTitle))
 		shown++
 	}
 

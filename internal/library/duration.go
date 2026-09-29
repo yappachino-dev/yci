@@ -161,8 +161,23 @@ func probeTrackDuration(ctx context.Context, prober probe.Prober, track Track, l
 
 	path := filepath.Join(libraryDir, filepath.FromSlash(string(track.RelativePath)))
 
+	// The file is checked here rather than inferred from the prober's error
+	// text. ffprobe exits non-zero with a diagnostic both for a file that is
+	// absent and for one it cannot decode, so the two were being told apart
+	// by matching on the wording of a message from another program — and a
+	// wording change there would have silently reclassified every absent
+	// file as corrupt, sending the repair path after files that simply are
+	// not there.
+	if _, statErr := os.Stat(path); statErr != nil {
+		if os.IsNotExist(statErr) {
+			return 0, false, errTrackFileMissing
+		}
+		return 0, false, fmt.Errorf("stat %q: %w", path, statErr)
+	}
+
 	info, err := prober.Probe(ctx, path)
 	if err != nil {
+		// The file can still disappear between the stat and the probe.
 		if isMissingFileError(err) {
 			return 0, false, errTrackFileMissing
 		}

@@ -187,6 +187,10 @@ func TestBackfillDurationCancelAborts(t *testing.T) {
 	}
 }
 
+// TestBackfillDurationReportsMissingAndUnreadableSeparately pins the two
+// counts, and does so with a prober that says something unhelpful about the
+// missing file. The classification has to come from the filesystem, not from
+// the wording of a message produced by another program.
 func TestBackfillDurationReportsMissingAndUnreadableSeparately(t *testing.T) {
 	env, prober, paths := durationBackfillEnv(t, "Present", "Absent")
 
@@ -194,6 +198,9 @@ func TestBackfillDurationReportsMissingAndUnreadableSeparately(t *testing.T) {
 	if err := os.Remove(paths[1]); err != nil {
 		t.Fatal(err)
 	}
+	// Deliberately NOT a "no such file" message: an absent file must be
+	// recognised without the prober saying so.
+	prober.errs[paths[1]] = errors.New("ffprobe: unrecognised failure")
 	prober.errs[paths[0]] = errors.New("ffprobe: Invalid data found when processing input")
 
 	got, err := env.tracks.BackfillDuration(t.Context(), prober, env.paths.LibraryDir(), false)
