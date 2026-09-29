@@ -27,10 +27,6 @@ const (
 // confirmation buries the question being asked.
 const seedMatchPreviewCap = 15
 
-// seedFormWidth is the render width of the token picker. huh does not default
-// it, and a zero-width input panics in bubbles' placeholder view.
-const seedFormWidth = 72
-
 // seedPlaylist derives a fragment from a seed track, shows what it matches,
 // and materializes the result as a static playlist.
 //
@@ -81,7 +77,7 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 				suggested.FragmentText(), suggested.Recurrence, confidenceNote(suggested))
 		}
 	default:
-		if !stdinIsTTY() {
+		if !inputIsTTY(cmd) {
 			return fmt.Errorf("non-interactive session: pass --%s to use the derived fragment, or --%s to choose tokens", flagAcceptAll, flagFragment)
 		}
 
@@ -114,8 +110,8 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 	// on work identity, so a performer family also brings in collabs and
 	// self-covers; one-time review of the whole set is the only place that
 	// judgement can be applied.
-	if !acceptAll && fragmentFlag == "" && !flagWasSet(cmd, flagExclude) && stdinIsTTY() {
-		matched, excludes, err = pickCandidates(matched, excludes)
+	if !acceptAll && fragmentFlag == "" && !flagChanged(cmd, flagExclude) && inputIsTTY(cmd) {
+		matched, excludes, err = pickCandidates(cmd, matched, excludes)
 		if err != nil {
 			return err
 		}
@@ -224,12 +220,10 @@ func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.
 			CharLimit(64).
 			Value(&answer)
 
-		// The form needs an explicit width. Without one the input renders
-		// at width zero and bubbles' placeholder view sizes a rune slice
-		// from a negative length, panicking on first draw.
-		form := huh.NewForm(huh.NewGroup(prompt)).WithTheme(huh.ThemeBase()).WithWidth(seedFormWidth)
-
-		if err := form.Run(); err != nil {
+		// The form is built through newForm so it reads the command's input
+		// and writes the command's output. That is also what lets a test
+		// drive this prompt with scripted keypresses.
+		if err := newForm(cmd, prompt).Run(); err != nil {
 			return nil, mode, fmt.Errorf("read token selection: %w", err)
 		}
 
@@ -429,7 +423,7 @@ type candidateOption struct {
 // The form needs an explicit width for the same reason the token input does:
 // huh does not default it, and a zero-width field panics in bubbles'
 // placeholder view.
-func pickCandidates(matched []library.Track, alreadyExcluded []library.TrackID) ([]library.Track, []library.TrackID, error) {
+func pickCandidates(cmd *cobra.Command, matched []library.Track, alreadyExcluded []library.TrackID) ([]library.Track, []library.TrackID, error) {
 	excluded := make(map[library.TrackID]bool, len(alreadyExcluded))
 	for _, id := range alreadyExcluded {
 		excluded[id] = true
@@ -453,16 +447,20 @@ func pickCandidates(matched []library.Track, alreadyExcluded []library.TrackID) 
 	// walks the options and marks the ones already in the initial value as
 	// selected. Called the other way round, every row would come up
 	// unselected and the user would have to select the whole family by hand.
+	//
+	// Note the absence of Filtering(true). That call switches the field into
+	// filtering *permanently* and focuses the filter box, so space and enter
+	// go to the filter and the options can never be toggled at all.
+	// Filtering is already enabled; pressing / starts it on demand.
 	multi := huh.NewMultiSelect[candidateOption]().
 		Key(candidateSelectKey).
 		Title("Which of these belong in the playlist?").
 		Description("Space toggles, / filters, enter confirms. All start selected — deselect the false positives.").
 		Options(options...).
 		Value(&seeded).
-		Height(12).
-		Filtering(true)
+		Height(12)
 
-	form := huh.NewForm(huh.NewGroup(multi)).WithTheme(huh.ThemeBase()).WithWidth(seedFormWidth)
+	form := newForm(cmd, multi)
 	if err := form.Run(); err != nil {
 		return nil, alreadyExcluded, fmt.Errorf("read candidate selection: %w", err)
 	}
@@ -492,12 +490,4 @@ func pickCandidates(matched []library.Track, alreadyExcluded []library.TrackID) 
 	}
 
 	return final, exclusions, nil
-}
-
-// flagWasSet reports whether the user named a flag explicitly, as opposed to
-// it holding its default. Used to decide whether an interactive session
-// should still offer the candidate picker: passing --exclude is a statement
-// that the exclusions have been decided.
-func flagWasSet(cmd *cobra.Command, name string) bool {
-	return cmd.Flags().Changed(name)
 }

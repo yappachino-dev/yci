@@ -16,7 +16,8 @@ import (
 
 const flagYes = "yes"
 
-// stdinIsTTY reports whether standard input is an interactive terminal.
+// stdinIsTTY reports whether the process stdin is an interactive terminal.
+// Prefer inputIsTTY: only use this where no command is in scope.
 // Note that a plain ModeCharDevice check is not enough: /dev/null is a
 // character device too.
 func stdinIsTTY() bool {
@@ -30,14 +31,12 @@ func confirmDestructive(cmd *cobra.Command, prompt string) (bool, error) {
 		return true, nil
 	}
 
-	if !stdinIsTTY() {
+	if !inputIsTTY(cmd) {
 		return false, fmt.Errorf("non-interactive session: re-run with --%s to confirm", flagYes)
 	}
 
 	var confirmed bool
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Title(prompt).Value(&confirmed),
-	)).WithTheme(huh.ThemeBase())
+	form := newForm(cmd, huh.NewConfirm().Title(prompt).Value(&confirmed))
 
 	if err := form.Run(); err != nil {
 		return false, fmt.Errorf("read confirmation: %w", err)
