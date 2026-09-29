@@ -106,6 +106,30 @@ func (s *PlaylistService) SetMatchMode(ctx context.Context, name string, mode Ma
 	return s.repo.SetMode(ctx, p.ID, mode)
 }
 
+// SetExcludes replaces a recipe's exclusion list.
+//
+// Changing the exclusions does not alter membership; it changes what the
+// recipe means. The caller is expected to follow with a reseed, which shows
+// the resulting diff, because the two together are the point: a person
+// decides what belongs, then reviews what that means for membership.
+func (s *PlaylistService) SetExcludes(ctx context.Context, name string, excludes []TrackID) error {
+	p, err := s.repo.ByName(ctx, strings.TrimSpace(name))
+	if err != nil {
+		return fmt.Errorf("find playlist %q: %w", name, err)
+	}
+
+	if !p.HasRecipe() {
+		return &NoRecipeError{Playlist: p.Name}
+	}
+
+	encoded, err := encodeExcludes(excludes)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.SetExcludes(ctx, p.ID, encoded)
+}
+
 // exportPaths returns the old and new .m3u locations, or empty when the two
 // names sanitize to the same filename.
 func (s *PlaylistService) exportPaths(oldName, newName string) (string, string) {

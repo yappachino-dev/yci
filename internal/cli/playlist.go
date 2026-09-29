@@ -25,18 +25,22 @@ matches, and adds the accepted set as a static playlist. The fragment is a
 token set: it matches a track only when every chosen token is present, so
 spacing differences do not matter.
 
-In an interactive session you pick which title tokens to match on. Elsewhere,
-pass --accept-all to take the derived fragment, or --fragment to state one
-explicitly.`,
+In an interactive session you pick which title tokens to match on, then
+deselect any matches that do not belong. Elsewhere, pass --accept-all to take
+the derived fragment, or --fragment to state one explicitly.
+
+Exclusions are stored in the recipe, so --exclude survives
+"playlist reseed" instead of being undone by the next re-derivation.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		seedInput, _ := cmd.Flags().GetString(flagFromTrack)
 		fragmentFlag, _ := cmd.Flags().GetString(flagFragment)
 		acceptAll, _ := cmd.Flags().GetBool(flagAcceptAll)
 		match, _ := cmd.Flags().GetString(flagMatch)
+		exclude, _ := cmd.Flags().GetStringSlice(flagExclude)
 
 		if seedInput != "" {
-			return seedPlaylist(cmd, args[0], seedInput, fragmentFlag, acceptAll, library.ParseMatchMode(match))
+			return seedPlaylist(cmd, args[0], seedInput, fragmentFlag, acceptAll, library.ParseMatchMode(match), exclude)
 		}
 
 		c := Container(cmd.Context())
@@ -58,6 +62,7 @@ func init() {
 	playlistCreateCmd.Flags().String(flagFragment, "", "Match on these title tokens instead of choosing them")
 	playlistCreateCmd.Flags().Bool(flagAcceptAll, false, "Use the derived fragment without prompting (non-interactive)")
 	playlistCreateCmd.Flags().String(flagMatch, "all", `How tokens combine: "all" requires every token, "any" requires at least one`)
+	playlistCreateCmd.Flags().StringSlice(flagExclude, nil, "Leave these track IDs (prefix allowed) out of the derived set")
 	playlistCreateCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 }
 

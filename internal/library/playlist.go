@@ -40,6 +40,23 @@ type Playlist struct {
 	// playlist written before the column existed, so an old recipe does not
 	// silently change meaning.
 	MatchMode MatchMode
+	// FragmentExcludes are track IDs the user deselected from the derived
+	// set. Token matching is lexical rather than work-identity based, so it
+	// also selects collabs and titles that merely share a word; these are
+	// the deliberate exceptions, recorded in the recipe so that re-deriving
+	// does not put them back.
+	FragmentExcludes []TrackID
+}
+
+// Excludes reports whether ID is on the recipe's exclusion list.
+func (p Playlist) Excludes(id TrackID) bool {
+	for _, e := range p.FragmentExcludes {
+		if e == id {
+			return true
+		}
+	}
+
+	return false
 }
 
 // HasRecipe reports whether the playlist was seeded at all.
@@ -69,9 +86,10 @@ type PlaylistEntry struct {
 // PlaylistRepository persists playlists and their membership.
 type PlaylistRepository interface {
 	Create(ctx context.Context, name string) (Playlist, error)
-	SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string, mode MatchMode) error
+	SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string, mode MatchMode, excludesJSON string) error
 	Rename(ctx context.Context, id int64, name string) error
 	SetMode(ctx context.Context, id int64, mode MatchMode) error
+	SetExcludes(ctx context.Context, id int64, excludesJSON string) error
 	All(ctx context.Context) ([]Playlist, error)
 	ByName(ctx context.Context, name string) (Playlist, error)
 	Delete(ctx context.Context, id int64) error
@@ -135,12 +153,13 @@ func (r *SQLitePlaylistRepository) ByName(ctx context.Context, name string) (Pla
 // SetRecipe records how the playlist was seeded. It runs inside the same
 // transaction as the seeded membership, so a playlist never exists holding
 // rows it cannot explain.
-func (r *SQLitePlaylistRepository) SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string, mode MatchMode) error {
+func (r *SQLitePlaylistRepository) SetRecipe(ctx context.Context, id int64, seedTrackID TrackID, tokensJSON string, mode MatchMode, excludesJSON string) error {
 	if err := r.db(ctx).SetPlaylistRecipe(ctx, store.SetPlaylistRecipeParams{
-		ID:             id,
-		SeedTrackID:    db.ToNullString(string(seedTrackID)),
-		FragmentTokens: tokensJSON,
-		FragmentMode:   mode.String(),
+		ID:               id,
+		SeedTrackID:      db.ToNullString(string(seedTrackID)),
+		FragmentTokens:   tokensJSON,
+		FragmentMode:     mode.String(),
+		FragmentExcludes: excludesJSON,
 	}); err != nil {
 		return fmt.Errorf("set playlist recipe: %w", err)
 	}
@@ -162,6 +181,12 @@ func (r *SQLitePlaylistRepository) SetMode(ctx context.Context, id int64, mode M
 	return r.db(ctx).SetPlaylistMode(ctx, store.SetPlaylistModeParams{ID: id, FragmentMode: mode.String()})
 }
 
+// SetExchanges replaces the recipe's exclusion list, without touching
+// membership.
+func (r *SQLitePlaylistRepository) SetExcludes(ctx context.Context, id int64, excludesJSON string) error {
+	return r.db(ctx).SetPlaylistExcludes(ctx, store.SetPlaylistExcludesParams{ID: id, FragmentExcludes: excludesJSON})
+}
+
 // playlistFromRow decodes the stored recipe. A corrupt token column means
 // the playlist can no longer be explained, which is worth surfacing rather
 // than silently treating the playlist as hand-built.
@@ -177,6 +202,16 @@ func playlistFromRow(row store.Playlist) (Playlist, error) {
 	if row.FragmentTokens != "" && row.FragmentTokens != "[]" {
 		if err := json.Unmarshal([]byte(row.FragmentTokens), &p.FragmentTokens); err != nil {
 			return Playlist{}, fmt.Errorf("playlist %q has an unreadable recipe: %w", row.Name, err)
+		}
+	}
+
+	if row.FragmentExcludes != "" && row.FragmentExcludes != "[]" {
+		var raw []string
+		if err := json.Unmarshal([]byte(row.FragmentExcludes), &raw); err != nil {
+			return Playlist{}, fmt.Errorf("playlist %q has an unreadable exclusion list: %w", row.Name, err)
+		}
+		for _, id := range raw {
+			p.FragmentExcludes = append(p.FragmentExcludes, TrackID(id))
 		}
 	}
 

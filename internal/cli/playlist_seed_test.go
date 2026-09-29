@@ -195,7 +195,7 @@ func TestSeedPlaylistAcceptAll(t *testing.T) {
 	)
 
 	cmd, out := seedCmdWith(t, c, true)
-	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true, library.MatchAll); err != nil {
+	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true, library.MatchAll, nil); err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}
 
@@ -229,7 +229,7 @@ func TestSeedPlaylistExplicitFragment(t *testing.T) {
 	)
 
 	cmd, out := seedCmdWith(t, c, true)
-	if err := seedPlaylist(cmd, "Calliope", string(ids[0]), "Mori Calliope", true, library.MatchAll); err != nil {
+	if err := seedPlaylist(cmd, "Calliope", string(ids[0]), "Mori Calliope", true, library.MatchAll, nil); err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}
 
@@ -250,7 +250,7 @@ func TestSeedPlaylistNoMatchIsRefused(t *testing.T) {
 	ids := seedTracks(t, c, "Espresso", "From The Start")
 
 	cmd, _ := seedCmd(t, c)
-	if err := seedPlaylist(cmd, "Nothing", string(ids[0]), "zzzznotpresent", true, library.MatchAll); err == nil {
+	if err := seedPlaylist(cmd, "Nothing", string(ids[0]), "zzzznotpresent", true, library.MatchAll, nil); err == nil {
 		t.Fatal("seedPlaylist accepted a fragment that matches nothing")
 	}
 
@@ -271,7 +271,7 @@ func TestSeedPlaylistRequiresConfirmationFlag(t *testing.T) {
 	// Tests are non-interactive, so without --yes the command must refuse
 	// rather than assume approval.
 	cmd, _ := seedCmd(t, c)
-	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true, library.MatchAll); err == nil {
+	if err := seedPlaylist(cmd, "Suisei", string(ids[0]), "", true, library.MatchAll, nil); err == nil {
 		t.Fatal("seedPlaylist succeeded without confirmation in a non-interactive session")
 	}
 

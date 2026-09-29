@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/yappachino-dev/yci/internal/app"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -16,6 +18,8 @@ const (
 	flagFragment  = "fragment"
 	flagAcceptAll = "accept-all"
 	flagMatch     = "match"
+	flagExclude   = "exclude"
+	flagInclude   = "include"
 )
 
 // seedMatchPreviewCap bounds how many matched tracks are listed. A
@@ -34,7 +38,7 @@ const seedFormWidth = 72
 // substring, so "Mori Calliope" also reaches the run-together
 // "MoriCalliope" spelling. Nothing is written until the user confirms, and
 // the whole membership is added in one transaction.
-func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acceptAll bool, mode library.MatchMode) error {
+func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acceptAll bool, mode library.MatchMode, excludeFlags []string) error {
 	ctx := cmd.Context()
 	c := Container(ctx)
 
@@ -87,15 +91,37 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 		}
 	}
 
+	// Exclusions named on the command line are resolved first, so a typo is
+	// reported before anything is derived rather than after.
+	excludes, err := resolveExclusions(ctx, c, excludeFlags)
+	if err != nil {
+		return err
+	}
+
 	// Derive goes through the service so seeding and reseeding cannot
 	// disagree about what a token set means.
-	matched, err := c.PlaylistService.Derive(ctx, tokens, mode)
+	matched, err := c.PlaylistService.Derive(ctx, tokens, mode, excludes)
 	if err != nil {
 		return err
 	}
 
 	if len(matched) == 0 {
 		return fmt.Errorf("no track matches the fragment %s", describeTokens(tokens, mode))
+	}
+
+	// An interactive session gets a second pass in which individual
+	// matches can be deselected. Lexical matching selects on spelling, not
+	// on work identity, so a performer family also brings in collabs and
+	// self-covers; one-time review of the whole set is the only place that
+	// judgement can be applied.
+	if !acceptAll && fragmentFlag == "" && !flagWasSet(cmd, flagExclude) && stdinIsTTY() {
+		matched, excludes, err = pickCandidates(matched, excludes)
+		if err != nil {
+			return err
+		}
+		if len(matched) == 0 {
+			return fmt.Errorf("every match was deselected; nothing to add to playlist %q", name)
+		}
 	}
 
 	printSeedMatches(cmd, matched)
@@ -117,7 +143,7 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 	// Membership and the recipe that explains it are written together, so a
 	// playlist never exists holding rows that `playlist reseed` cannot
 	// reproduce.
-	playlist, err := c.PlaylistService.CreateFromSeed(ctx, name, seed, tokens, mode, ids)
+	playlist, err := c.PlaylistService.CreateFromSeed(ctx, name, seed, tokens, mode, excludes, ids)
 	if err != nil {
 		return mapSentinels(err, map[error]string{
 			library.ErrPlaylistAlreadyExists: fmt.Sprintf("playlist %q already exists", name),
@@ -125,6 +151,9 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 	}
 
 	cmd.Printf("\nCreated playlist %q with %d tracks (%s).\n", playlist.Name, len(ids), describeTokens(tokens, mode))
+	if len(excludes) > 0 {
+		cmd.Printf("Excluded %d track(s); they stay out when the recipe is re-derived.\n", len(excludes))
+	}
 	cmd.Printf("Re-derive it later with: yci playlist reseed %s\n", playlist.Name)
 	cmd.Printf("Export it with: yci playlist export %s\n", playlist.Name)
 
@@ -342,4 +371,133 @@ func containsString(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// resolveExclusions turns --exclude values into track IDs, accepting the same
+// unambiguous prefixes that every other command accepts.
+//
+// An ID that resolves to nothing is an error rather than a silent no-op: a
+// mistyped prefix that quietly excluded nothing would leave the user
+// believing a false positive had been dealt with.
+func resolveExclusions(ctx context.Context, c *app.Container, values []string) ([]library.TrackID, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+
+	out := make([]library.TrackID, 0, len(values))
+	seen := make(map[library.TrackID]bool, len(values))
+
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+
+		id, err := resolveTrackID(ctx, c, value)
+		if err != nil {
+			return nil, fmt.Errorf("resolving --%s %q: %w", flagExclude, value, err)
+		}
+
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+
+	return out, nil
+}
+
+// candidateSelectKey names the multiselect so its result can be read back
+// from the form.
+const candidateSelectKey = "candidates"
+
+// candidateOption is one row in the multiselect. It is comparable so huh can
+// use it as its value type, which is why the title is carried alongside the
+// ID rather than looked up later.
+type candidateOption struct {
+	title string
+	id    library.TrackID
+}
+
+// pickCandidates lets the user deselect matches that do not belong, and
+// returns the kept set together with the exclusion list to record.
+//
+// Everything starts selected, because the derivation is the proposal and the
+// user's job is to find the exceptions rather than to build the set. The
+// multiselect filters, so a 60-track performer family is still navigable.
+//
+// The form needs an explicit width for the same reason the token input does:
+// huh does not default it, and a zero-width field panics in bubbles'
+// placeholder view.
+func pickCandidates(matched []library.Track, alreadyExcluded []library.TrackID) ([]library.Track, []library.TrackID, error) {
+	excluded := make(map[library.TrackID]bool, len(alreadyExcluded))
+	for _, id := range alreadyExcluded {
+		excluded[id] = true
+	}
+
+	options := make([]huh.Option[candidateOption], 0, len(matched))
+	seeded := make([]candidateOption, 0, len(matched))
+
+	for _, t := range matched {
+		opt := candidateOption{title: t.Title, id: t.ID}
+		options = append(options, huh.NewOption(
+			fmt.Sprintf("%s  %s", shortTrackID(t.ID), truncateCell(t.Title, cellWidthTitleWide)),
+			opt,
+		))
+		if !excluded[t.ID] {
+			seeded = append(seeded, opt)
+		}
+	}
+
+	// Order matters: Options must be set before Value, because Value is what
+	// walks the options and marks the ones already in the initial value as
+	// selected. Called the other way round, every row would come up
+	// unselected and the user would have to select the whole family by hand.
+	multi := huh.NewMultiSelect[candidateOption]().
+		Key(candidateSelectKey).
+		Title("Which of these belong in the playlist?").
+		Description("Space toggles, / filters, enter confirms. All start selected — deselect the false positives.").
+		Options(options...).
+		Value(&seeded).
+		Height(12).
+		Filtering(true)
+
+	form := huh.NewForm(huh.NewGroup(multi)).WithTheme(huh.ThemeBase()).WithWidth(seedFormWidth)
+	if err := form.Run(); err != nil {
+		return nil, alreadyExcluded, fmt.Errorf("read candidate selection: %w", err)
+	}
+
+	chosen, ok := form.Get(candidateSelectKey).([]candidateOption)
+	if !ok {
+		// No result is a huh behaviour change, not an empty selection:
+		// falling back to the seeded set keeps the derived playlist rather
+		// than silently creating an empty one.
+		chosen = seeded
+	}
+
+	keep := make(map[library.TrackID]bool, len(chosen))
+	for _, o := range chosen {
+		keep[o.id] = true
+	}
+
+	final := make([]library.Track, 0, len(matched))
+	exclusions := make([]library.TrackID, 0, len(alreadyExcluded))
+
+	for _, t := range matched {
+		if keep[t.ID] {
+			final = append(final, t)
+			continue
+		}
+		exclusions = append(exclusions, t.ID)
+	}
+
+	return final, exclusions, nil
+}
+
+// flagWasSet reports whether the user named a flag explicitly, as opposed to
+// it holding its default. Used to decide whether an interactive session
+// should still offer the candidate picker: passing --exclude is a statement
+// that the exclusions have been decided.
+func flagWasSet(cmd *cobra.Command, name string) bool {
+	return cmd.Flags().Changed(name)
 }

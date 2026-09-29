@@ -36,7 +36,7 @@ func (q *Queries) AddTrackToPlaylist(ctx context.Context, arg AddTrackToPlaylist
 const createPlaylist = `-- name: CreatePlaylist :one
 INSERT INTO playlists (name)
 VALUES (?1)
-RETURNING id, name, seed_track_id, fragment_tokens, fragment_mode
+RETURNING id, name, seed_track_id, fragment_tokens, fragment_mode, fragment_excludes
 `
 
 func (q *Queries) CreatePlaylist(ctx context.Context, name string) (Playlist, error) {
@@ -48,6 +48,7 @@ func (q *Queries) CreatePlaylist(ctx context.Context, name string) (Playlist, er
 		&i.SeedTrackID,
 		&i.FragmentTokens,
 		&i.FragmentMode,
+		&i.FragmentExcludes,
 	)
 	return i, err
 }
@@ -71,7 +72,8 @@ SELECT
     name,
     seed_track_id,
     fragment_tokens,
-    fragment_mode
+    fragment_mode,
+    fragment_excludes
 FROM playlists
 WHERE id = ?1
 `
@@ -85,6 +87,7 @@ func (q *Queries) GetPlaylistByID(ctx context.Context, id int64) (Playlist, erro
 		&i.SeedTrackID,
 		&i.FragmentTokens,
 		&i.FragmentMode,
+		&i.FragmentExcludes,
 	)
 	return i, err
 }
@@ -95,7 +98,8 @@ SELECT
     name,
     seed_track_id,
     fragment_tokens,
-    fragment_mode
+    fragment_mode,
+    fragment_excludes
 FROM playlists
 WHERE name = ?1
 `
@@ -109,6 +113,7 @@ func (q *Queries) GetPlaylistByName(ctx context.Context, name string) (Playlist,
 		&i.SeedTrackID,
 		&i.FragmentTokens,
 		&i.FragmentMode,
+		&i.FragmentExcludes,
 	)
 	return i, err
 }
@@ -170,7 +175,8 @@ SELECT
     name,
     seed_track_id,
     fragment_tokens,
-    fragment_mode
+    fragment_mode,
+    fragment_excludes
 FROM playlists
 ORDER BY name
 `
@@ -190,6 +196,7 @@ func (q *Queries) GetPlaylists(ctx context.Context) ([]Playlist, error) {
 			&i.SeedTrackID,
 			&i.FragmentTokens,
 			&i.FragmentMode,
+			&i.FragmentExcludes,
 		); err != nil {
 			return nil, err
 		}
@@ -238,6 +245,22 @@ func (q *Queries) RenamePlaylist(ctx context.Context, arg RenamePlaylistParams) 
 	return err
 }
 
+const setPlaylistExcludes = `-- name: SetPlaylistExcludes :exec
+UPDATE playlists
+SET fragment_excludes = ?1
+WHERE id = ?2
+`
+
+type SetPlaylistExcludesParams struct {
+	FragmentExcludes string
+	ID               int64
+}
+
+func (q *Queries) SetPlaylistExcludes(ctx context.Context, arg SetPlaylistExcludesParams) error {
+	_, err := q.db.ExecContext(ctx, setPlaylistExcludes, arg.FragmentExcludes, arg.ID)
+	return err
+}
+
 const setPlaylistMode = `-- name: SetPlaylistMode :exec
 UPDATE playlists
 SET fragment_mode = ?1
@@ -256,15 +279,17 @@ func (q *Queries) SetPlaylistMode(ctx context.Context, arg SetPlaylistModeParams
 
 const setPlaylistRecipe = `-- name: SetPlaylistRecipe :exec
 UPDATE playlists
-SET seed_track_id = ?1, fragment_tokens = ?2, fragment_mode = ?3
-WHERE id = ?4
+SET seed_track_id = ?1, fragment_tokens = ?2,
+    fragment_mode = ?3, fragment_excludes = ?4
+WHERE id = ?5
 `
 
 type SetPlaylistRecipeParams struct {
-	SeedTrackID    sql.NullString
-	FragmentTokens string
-	FragmentMode   string
-	ID             int64
+	SeedTrackID      sql.NullString
+	FragmentTokens   string
+	FragmentMode     string
+	FragmentExcludes string
+	ID               int64
 }
 
 // The recipe is written immediately after creation, in the same
@@ -275,6 +300,7 @@ func (q *Queries) SetPlaylistRecipe(ctx context.Context, arg SetPlaylistRecipePa
 		arg.SeedTrackID,
 		arg.FragmentTokens,
 		arg.FragmentMode,
+		arg.FragmentExcludes,
 		arg.ID,
 	)
 	return err

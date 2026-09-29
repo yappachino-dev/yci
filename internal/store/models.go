@@ -48,11 +48,12 @@ type FsJournal struct {
 }
 
 type Playlist struct {
-	ID             int64
-	Name           string
-	SeedTrackID    sql.NullString
-	FragmentTokens string
-	FragmentMode   string
+	ID               int64
+	Name             string
+	SeedTrackID      sql.NullString
+	FragmentTokens   string
+	FragmentMode     string
+	FragmentExcludes string
 }
 
 type PlaylistTrack struct {

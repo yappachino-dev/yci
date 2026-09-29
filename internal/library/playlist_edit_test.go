@@ -12,7 +12,7 @@ func TestRenameMovesTheExportedFile(t *testing.T) {
 	env, ids := seedPlaylist(t, "comet / 星街すいせい(official)")
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Old Name", ids[0], []string{"星街すいせい"}, MatchAll, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Old Name", ids[0], []string{"星街すいせい"}, MatchAll, nil, ids); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ func TestRenameWithNothingExportedReportsNoOrphan(t *testing.T) {
 	env, ids := seedPlaylist(t, "comet / 星街すいせい(official)")
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "A", ids[0], []string{"星街すいせい"}, MatchAll, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "A", ids[0], []string{"星街すいせい"}, MatchAll, nil, ids); err != nil {
 		t.Fatal(err)
 	}
 
@@ -75,7 +75,7 @@ func TestRenameCaseOnlyIsNotAConflict(t *testing.T) {
 	env, ids := seedPlaylist(t, "comet / 星街すいせい(official)")
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "gym", ids[0], []string{"星街すいせい"}, MatchAll, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "gym", ids[0], []string{"星街すいせい"}, MatchAll, nil, ids); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,7 +94,7 @@ func TestRenameToAnExistingNameIsRefused(t *testing.T) {
 	env, ids := seedPlaylist(t, "comet / 星街すいせい(official)")
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Taken", ids[0], []string{"星街すいせい"}, MatchAll, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Taken", ids[0], []string{"星街すいせい"}, MatchAll, nil, ids); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := env.playlists.Create(ctx, "Other"); err != nil {
@@ -138,7 +138,7 @@ func TestSetMatchModePersistsAndDefaultsToAll(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Mixed", ids[0], []string{"Mori", "Calliope"}, MatchAll, nil); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Mixed", ids[0], []string{"Mori", "Calliope"}, MatchAll, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,7 +198,7 @@ func TestMatchModeChangeIsVisibleOnlyAfterReseed(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if _, err := env.playlists.CreateFromSeed(ctx, "Wide", ids[0], []string{"星街すいせい", "Calliope"}, MatchAll, ids); err != nil {
+	if _, err := env.playlists.CreateFromSeed(ctx, "Wide", ids[0], []string{"星街すいせい", "Calliope"}, MatchAll, nil, ids); err != nil {
 		t.Fatal(err)
 	}
 

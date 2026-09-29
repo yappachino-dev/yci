@@ -25,6 +25,9 @@ type ReseedReport struct {
 	Recipe []string
 	// MatchMode is how the recipe's tokens combine.
 	MatchMode MatchMode
+	// Excludes are the track IDs the user deselected from the derived set.
+	// Reported so a reseed summary can say why a matching track is absent.
+	Excludes []TrackID
 	// SeedTitle is the seed track's current title, for the report header.
 	SeedTitle string
 	// Current counts the tracks the playlist holds right now, which is not
@@ -79,6 +82,7 @@ func (s *PlaylistService) CreateFromSeed(
 	seedTrackID TrackID,
 	tokens []string,
 	mode MatchMode,
+	excludes []TrackID,
 	trackIDs []TrackID,
 ) (Playlist, error) {
 	if seedTrackID == "" || len(tokens) == 0 {
@@ -88,6 +92,11 @@ func (s *PlaylistService) CreateFromSeed(
 	encoded, err := json.Marshal(tokens)
 	if err != nil {
 		return Playlist{}, fmt.Errorf("encode seed tokens: %w", err)
+	}
+
+	encodedExcludes, err := encodeExcludes(excludes)
+	if err != nil {
+		return Playlist{}, err
 	}
 
 	trimmed := strings.TrimSpace(name)
@@ -100,7 +109,7 @@ func (s *PlaylistService) CreateFromSeed(
 		}
 		created = p
 
-		if err := s.repo.SetRecipe(txCtx, p.ID, seedTrackID, string(encoded), mode); err != nil {
+		if err := s.repo.SetRecipe(txCtx, p.ID, seedTrackID, string(encoded), mode, encodedExcludes); err != nil {
 			return err
 		}
 
@@ -122,20 +131,55 @@ func (s *PlaylistService) CreateFromSeed(
 // Derive resolves a recipe against the current library, returning the
 // matching tracks. It is the single definition of what a recipe means, used
 // by both seeding and reseeding so the two can never disagree.
-func (s *PlaylistService) Derive(ctx context.Context, tokens []string, mode MatchMode) ([]Track, error) {
+//
+// excludes are track IDs the user deselected. They are applied here rather
+// than at the call sites so that a track removed in the wizard stays removed
+// when the recipe is re-derived, and so a re-derivation cannot reintroduce
+// what a person deliberately dropped.
+func (s *PlaylistService) Derive(ctx context.Context, tokens []string, mode MatchMode, excludes []TrackID) ([]Track, error) {
 	all, err := s.tracks.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks: %w", err)
 	}
 
+	excluded := make(map[TrackID]bool, len(excludes))
+	for _, id := range excludes {
+		excluded[id] = true
+	}
+
 	matched := make([]Track, 0, len(all))
 	for _, t := range all {
+		if excluded[t.ID] {
+			continue
+		}
 		if MatchesTokens(t.Title, tokens, mode) {
 			matched = append(matched, t)
 		}
 	}
 
 	return matched, nil
+}
+
+// encodeExcludes renders an exclusion list for storage. An empty list is
+// stored as "[]" rather than NULL so the column is never ambiguous.
+func encodeExcludes(excludes []TrackID) (string, error) {
+	ids := make([]string, 0, len(excludes))
+	seen := make(map[TrackID]bool, len(excludes))
+
+	for _, id := range excludes {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, string(id))
+	}
+
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return "", fmt.Errorf("encode seed excludes: %w", err)
+	}
+
+	return string(encoded), nil
 }
 
 // ReseedPlan re-derives a playlist's membership and reports the difference
@@ -164,7 +208,7 @@ func (s *PlaylistService) ReseedPlan(ctx context.Context, name string) (ReseedRe
 		return report, &MissingSeedError{Playlist: p.Name, SeedTrackID: p.SeedTrackID}
 	}
 
-	matched, err := s.Derive(ctx, p.FragmentTokens, p.MatchMode)
+	matched, err := s.Derive(ctx, p.FragmentTokens, p.MatchMode, p.FragmentExcludes)
 	if err != nil {
 		return report, err
 	}
@@ -199,6 +243,7 @@ func (s *PlaylistService) ReseedPlan(ctx context.Context, name string) (ReseedRe
 
 	report.Recipe = p.FragmentTokens
 	report.MatchMode = p.MatchMode
+	report.Excludes = p.FragmentExcludes
 	report.SeedTitle = seed.Title
 	report.Matched = len(matched)
 	report.Unmatched = report.Removed()
