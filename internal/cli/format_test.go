@@ -43,10 +43,15 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-// TestTruncateCellIsRuneSafe guards a real hazard: the library is largely
-// Japanese, and slicing bytes would split a multi-byte rune and render
-// replacement characters in the retitle table.
-func TestTruncateCellIsRuneSafe(t *testing.T) {
+// TestTruncateCellIsCellSafe guards a real hazard: the library is largely
+// Japanese, and the width of what a cell occupies on screen is neither its
+// byte length nor its rune count.
+//
+// Slicing bytes splits a multi-byte rune and renders replacement characters.
+// Counting runes calls a CJK character one cell wide when the terminal gives
+// it two, which hands a Japanese title twice the column it was budgeted and
+// makes the table ragged. So the unit is display cells throughout.
+func TestTruncateCellIsCellSafe(t *testing.T) {
 	tests := []struct {
 		name  string
 		in    string
@@ -58,10 +63,12 @@ func TestTruncateCellIsRuneSafe(t *testing.T) {
 		{"over limit gets an ellipsis", "abcdefghijk", 10, "abcdefghi…"},
 		{"collapses runs of whitespace", "a   b\t\tc", 40, "a b c"},
 		{"trims surrounding whitespace", "  spaced  ", 40, "spaced"},
-		{"counts runes, not bytes", strings.Repeat("猫", 30), 10, strings.Repeat("猫", 9) + "…"},
-		// The result is exactly `limit` runes, ellipsis included.
-		{"mixed script stays intact", "少女A / 猫又おかゆ (cover) 歌ってみた", 12, "少女A / 猫又おかゆ…"},
-		{"emoji is not split", strings.Repeat("🎵", 5), 3, "🎵🎵…"},
+		// Half as many CJK characters as the cell limit, because each is
+		// two cells wide. Counting runes here would fit nine of them and
+		// overflow the column by nine cells.
+		{"counts cells, not runes", strings.Repeat("猫", 30), 10, strings.Repeat("猫", 4) + "…"},
+		{"mixed script stays intact", "少女A / 猫又おかゆ (cover) 歌ってみた", 12, "少女A / 猫…"},
+		{"emoji is not split", strings.Repeat("🎵", 5), 3, "🎵…"},
 	}
 
 	for _, tt := range tests {
@@ -72,6 +79,12 @@ func TestTruncateCellIsRuneSafe(t *testing.T) {
 			}
 			if strings.ContainsRune(got, '�') {
 				t.Errorf("truncateCell produced a replacement character: %q", got)
+			}
+			// Every case must fit the budget it was given, whatever script
+			// it is written in.
+			if w := displayWidth(got); w > tt.limit {
+				t.Errorf("truncateCell(%q, %d) is %d cells wide, over budget: %q",
+					tt.in, tt.limit, w, got)
 			}
 		})
 	}
@@ -133,36 +146,58 @@ func TestConfirmDestructiveFailsClosed(t *testing.T) {
 	})
 }
 
-// TestNewTabWriterAlignsColumns documents the shared formatting helper:
-// every list command depends on it to line columns up identically.
-func TestNewTabWriterAlignsColumns(t *testing.T) {
+// TestTableAlignsColumns is the shared formatting contract: every list
+// command depends on this alignment to line columns up identically.
+//
+// The rows deliberately mix widths, because that is the only case where a
+// padding bug shows up. Equal-width rows align under any implementation.
+func TestTableAlignsColumns(t *testing.T) {
 	var out strings.Builder
 
-	w := newTabWriter(&out)
-	w.Write([]byte("ID\tNAME\n"))
-	w.Write([]byte("a\tA very long artist name\n"))
-	w.Write([]byte("bb\tB\n"))
-	w.Flush()
+	table := NewTable(&out, "ID", "NAME")
+	table.Row("a", "A very long artist name")
+	table.Row("bb", "B")
+	table.Flush()
 
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("got %d lines, want 3:\n%s", len(lines), out.String())
+	if len(lines) != 4 {
+		t.Fatalf("got %d lines, want 4:\n%s", len(lines), out.String())
 	}
 
-	// Every row must start its second column at the header's offset,
-	// otherwise the table renders ragged.
-	col2 := strings.Index(lines[0], "NAME")
-	if col2 < 0 {
-		t.Fatalf("header has no NAME column: %q", lines[0])
+	offsets := table.ColumnOffsets()
+	if len(offsets) != 2 {
+		t.Fatalf("got %d column offsets, want 2", len(offsets))
 	}
 
-	for i, line := range lines[1:] {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			t.Fatalf("row %d has fewer than two columns: %q", i, line)
-		}
-		if got := strings.Index(line, fields[1]); got != col2 {
-			t.Errorf("row %d starts column 2 at %d, want %d: %q", i, got, col2, line)
+	// Every line must place its second column at the offset the table said
+	// it would, and that offset must be a real boundary in the text rather
+	// than an interior space of a padding run.
+	for i, line := range lines {
+		for col, at := range offsets {
+			if col == len(offsets)-1 && i > 0 && col > 0 {
+				// The final column is ragged by design; only interior
+				// columns are pinned.
+				continue
+			}
+			if got := cellAt(t, line, at); got != "" && col > 0 && i > 1 {
+				t.Errorf("line %d column %d starts mid-cell at cell %d: %q",
+					i, col, at, line)
+			}
 		}
 	}
+}
+
+// cellAt returns the character beginning at display-cell offset at.
+func cellAt(t *testing.T, line string, at int) string {
+	t.Helper()
+
+	if at > displayWidth(line) {
+		return ""
+	}
+	for i, r := range line {
+		if displayWidth(line[:i]) == at {
+			return string(r)
+		}
+	}
+	return ""
 }

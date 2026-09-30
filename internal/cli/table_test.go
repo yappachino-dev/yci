@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -219,5 +220,106 @@ func TestPluralIsUsedInCountsRatherThanParenthesised(t *testing.T) {
 				t.Errorf("%s still contains %q", path, bad)
 			}
 		}
+	}
+}
+
+// TestTableAlignsJapaneseTitles is the regression test for East Asian width.
+//
+// A terminal gives a CJK character two cells, a Latin one, and tabwriter
+// aligns on bytes, where a CJK character is three. The two errors compound:
+// `track list` padded each Japanese title as though it were three cells per
+// character and then handed it one, so the LENGTH column landed in a
+// different place on every row. The table looked fine in testing and came out
+// ragged against a real library, because real libraries are mostly Japanese
+// and the fixtures were not.
+//
+// The titles below are taken from the real library rather than invented, since
+// the widths that break are the ones in the actual data.
+func TestTableAlignsJapaneseTitles(t *testing.T) {
+	titles := []string{
+		"少女A / 猫又おかゆ",
+		"ラグトレイン / 猫又おかゆ",
+		"【MV】nevermore _ _ネヴァモア_ - Cecilia Immergreen (cover) [sasakure.‌UK × lasah]",
+		"星街すいせい",
+		"Nekomata Okayu",
+		"にじさんじ☆かぷっと纪念",
+	}
+
+	var out strings.Builder
+	table := NewTable(&out, "ID", "TITLE", "LENGTH")
+	for i, title := range titles {
+		table.Row(strconv.Itoa(i), truncateCell(title, cellWidthTitleWide), "—")
+	}
+	table.Flush()
+
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	if len(lines) != len(titles)+2 {
+		t.Fatalf("got %d lines, want %d:\n%s", len(lines), len(titles)+2, out.String())
+	}
+
+	// The ID column and the TITLE column must start at the same cell on
+	// every line, measured in display cells. Comparing the title offsets
+	// across rows is the check that fails under byte-width padding.
+	titleOffset := displayWidth(strings.Split(lines[0], "\t")[0]) // placeholder, recomputed below
+	_ = titleOffset
+
+	offsets := table.ColumnOffsets()
+	wantTitle := offsets[1]
+
+	for i, line := range lines {
+		// Skip the rule line; it is dashes and spaces of the same shape.
+		if i == 0 || i == 1 {
+			continue
+		}
+		got := strings.Index(line, titles[i-2][:1])
+		if got < 0 {
+			t.Fatalf("row %d lost its title: %q", i-2, line)
+		}
+		if cell := displayWidth(line[:got]); cell != wantTitle {
+			t.Errorf("row %d starts TITLE at cell %d, want %d:\n%q\n%s",
+				i-2, cell, wantTitle, line, out.String())
+		}
+	}
+}
+
+// TestTruncateCellHonoursDisplayWidth is the other half: a limit stated in
+// cells has to be applied in cells.
+//
+// Truncating by rune count hands a Japanese title twice the column it was
+// given, which is the same raggedness arriving through a different door.
+func TestTruncateCellHonoursDisplayWidth(t *testing.T) {
+	cases := []struct {
+		name  string
+		in    string
+		limit int
+	}{
+		{"japanese", strings.Repeat("猫", 40), 20},
+		{"mixed", strings.Repeat("猫a", 30), 20},
+		{"ascii", strings.Repeat("a", 40), 20},
+		{"fullwidth punctuation", strings.Repeat("！", 40), 20},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := truncateCell(c.in, c.limit)
+
+			if w := displayWidth(got); w > c.limit {
+				t.Errorf("displayWidth(%q) = %d, want at most %d", got, w, c.limit)
+			}
+			if !strings.HasSuffix(got, "…") {
+				t.Errorf("truncated cell %q has no ellipsis", got)
+			}
+			// A rune count is only a valid proxy for width in the ASCII
+			// case; the others are the ones that used to overshoot.
+			if r := len([]rune(got)); c.name == "japanese" && r > c.limit/2+2 {
+				t.Errorf("%q kept %d runes, which is more than half again the cell budget",
+					got, r)
+			}
+		})
+	}
+
+	// A cell already inside the budget is returned whole, with no ellipsis.
+	if got := truncateCell("猫又おかゆ", 20); got != "猫又おかゆ" {
+		t.Errorf("truncateCell = %q, want the value unchanged", got)
 	}
 }

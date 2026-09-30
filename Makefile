@@ -67,6 +67,11 @@ sandbox:
 	@if [ ! -f "$(XDG_CONFIG_HOME)/yci/data.db" ]; then \
 		echo "No database at $(XDG_CONFIG_HOME)/yci/data.db — nothing to copy."; exit 1; \
 	fi
+	@# Go marks its module cache read-only (0555 on directories), so a bare
+	@# rm -rf fails with EPERM once a build has populated GOPATH under this
+	@# directory. Make the tree writable first, or the sandbox can only ever
+	@# be created once per machine.
+	@chmod -R u+w $(SANDBOX_DIR) 2>/dev/null || true
 	@rm -rf $(SANDBOX_DIR)
 	@mkdir -p $(SANDBOX_DIR)/.config/yci
 	@# VACUUM INTO rather than cp: it takes a consistent snapshot even if a
