@@ -15,7 +15,8 @@ import (
 )
 
 // cmdWithOutput builds a bare command wired to the container, with a captured
-// output buffer, the way the shell wires a real one.
+// output buffer, the way the shell wires a real one. c may be nil for
+// commands that never read it, such as the console reporter.
 func cmdWithOutput(t *testing.T, c *app.Container) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
 

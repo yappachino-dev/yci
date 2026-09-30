@@ -54,7 +54,7 @@ var downloadCmd = &cobra.Command{
 
 		var selector download.PlaylistSelector
 		if interactive, _ := cmd.Flags().GetBool(flagInteractive); interactive {
-			selector = &EnqueueSelector{}
+			selector = &EnqueueSelector{cmd: cmd}
 		}
 
 		forcePlaylist, _ := cmd.Flags().GetBool(flagForcePlaylist)
@@ -144,19 +144,28 @@ func (r *consoleReporter) OnTrackFailure(_ string, err error) {
 // picker without selecting anything.
 var errNoChannelsSelected = errors.New("no channels selected")
 
-type EnqueueSelector struct{}
+// EnqueueSelector picks which playlist channels to download, interactively.
+//
+// It holds the command rather than reading the process stdin, so the form
+// goes through newForm and can be driven by a test. Construct it with
+// &EnqueueSelector{cmd: cmd}.
+type EnqueueSelector struct {
+	cmd *cobra.Command
+}
 
 func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
 	var selected []string
 
 	options := huh.NewOptions(channels...)
 
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewNote().Title("Select channels that will be downloaded"),
-		huh.NewMultiSelect[string]().
-			Options(options...).
-			Value(&selected),
-	)).WithTheme(huh.ThemeBase())
+	// Options must be set before Value: Value walks the options to mark the
+	// ones already present in the initial value as selected, and reading the
+	// list the other way round leaves every row unchecked.
+	multi := huh.NewMultiSelect[string]().
+		Options(options...).
+		Value(&selected)
+
+	form := newForm(s.cmd, huh.NewNote().Title("Select channels that will be downloaded"), multi)
 
 	if err := form.Run(); err != nil {
 		return nil, fmt.Errorf("failed to read terminal input: %w", err)
