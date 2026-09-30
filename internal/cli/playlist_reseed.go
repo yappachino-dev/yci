@@ -98,6 +98,11 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 		report.Matched, report.Current, report.Unchanged)
 
 	if !report.Changed() {
+		// "Nothing to do" is the most common outcome of this command, and
+		// it used to be reported only implicitly, by leaving out the change
+		// table. Without the sentence the counts read as an invitation to go
+		// looking for a diff that is not there.
+		cmd.Println("Nothing to change; the recipe already matches the membership.")
 		return
 	}
 
