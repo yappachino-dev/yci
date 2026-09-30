@@ -169,6 +169,15 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 		}
 	}
 
+	if jsonRequested(cmd) {
+		out := folderTreeJSON(folders)
+		if out == nil {
+			out = []jsonFolder{}
+		}
+
+		return writeJSON(cmd.OutOrStdout(), out)
+	}
+
 	if userFolders == 0 {
 		cmd.Println("No folders yet. Create one with `yci folder create`.")
 		return nil
@@ -212,6 +221,38 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 	return nil
 }
 
+// folderTreeJSON flattens the folder hierarchy into parent-first order with a
+// depth per row.
+//
+// The root is omitted: it exists to give the tree a starting point and is not
+// a folder anyone creates or refers to. The order is the same one the human
+// view draws, so a diff between the two views lines up row for row.
+func folderTreeJSON(folders []library.Folder) []jsonFolder {
+	childrenOf := make(map[library.FolderID][]library.Folder)
+	for _, f := range folders {
+		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
+	}
+
+	root := library.FolderID(library.RootID)
+
+	var out []jsonFolder
+
+	var traverse func(parentID library.FolderID, depth int)
+	traverse = func(parentID library.FolderID, depth int) {
+		for _, child := range childrenOf[parentID] {
+			if child.ID == root {
+				continue
+			}
+			out = append(out, toJSONFolder(child, depth))
+			traverse(child.ID, depth+1)
+		}
+	}
+
+	traverse(root, 0)
+
+	return out
+}
+
 func init() {
 	folderCmd.AddCommand(
 		folderCreateCmd,
@@ -239,4 +280,6 @@ func init() {
 	folderDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 	folderDeleteCmd.Flags().Bool(flagForce, false, "Force delete a folder even if it contains artists or sub-folders")
 	folderDeleteCmd.RegisterFlagCompletionFunc(flagID, folderIDCompletion)
+
+	folderListCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
 }

@@ -201,6 +201,17 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 		return fmt.Errorf("fetch tracks: %w", err)
 	}
 
+	// JSON before the empty-state message: a consumer asking for data should
+	// get an empty array, not a sentence explaining why there is none.
+	if jsonRequested(cmd) {
+		out := make([]jsonTrack, 0, len(tracks))
+		for _, t := range tracks {
+			out = append(out, toJSONTrack(t))
+		}
+
+		return writeJSON(cmd.OutOrStdout(), out)
+	}
+
 	if len(tracks) == 0 {
 		cmd.Println("No tracks in the library. Import some with `yci import staging`.")
 		return nil
@@ -211,12 +222,8 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 	fmt.Fprintln(w, "--\t---------\t---------\t-----")
 
 	for _, t := range tracks {
-		shortID := t.ID
-		if len(shortID) > 8 {
-			shortID = shortID[:8]
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", shortID, t.ArtistID, t.SourceID, t.Title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			shortTrackID(t.ID), t.ArtistID, t.SourceID, truncateCell(t.Title, cellWidthTitleWide))
 	}
 
 	w.Flush()
@@ -237,4 +244,6 @@ func init() {
 	trackDeleteCmd.Flags().String(flagID, "", "The UUID of the track to delete")
 	trackDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 	trackDeleteCmd.RegisterFlagCompletionFunc(flagID, trackIDCompletion)
+
+	trackListCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
 }

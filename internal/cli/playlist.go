@@ -77,6 +77,15 @@ var playlistListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("list playlists: %w", err)
 		}
+		if jsonRequested(cmd) {
+			out := make([]jsonPlaylist, 0, len(playlists))
+			for _, p := range playlists {
+				out = append(out, toJSONPlaylist(p))
+			}
+
+			return writeJSON(cmd.OutOrStdout(), out)
+		}
+
 		if len(playlists) == 0 {
 			cmd.Println("No playlists yet. Create one with: yci playlist create <name>")
 			return nil
@@ -125,17 +134,36 @@ var playlistShowCmd = &cobra.Command{
 				library.ErrPlaylistNotFound: fmt.Sprintf("playlist %q does not exist", args[0]),
 			})
 		}
+		if jsonRequested(cmd) {
+			out := make([]jsonPlaylistEntry, 0, len(entries))
+			for _, e := range entries {
+				out = append(out, jsonPlaylistEntry{
+					Position: e.Position,
+					Track:    string(e.Track.ID),
+					Title:    e.Track.Title,
+					Duration: e.Duration,
+				})
+			}
+
+			return writeJSON(cmd.OutOrStdout(), out)
+		}
+
 		if len(entries) == 0 {
 			cmd.Printf("Playlist %q is empty.\n", args[0])
 			return nil
 		}
 
 		w := newTabWriter(cmd.OutOrStdout())
-		fmt.Fprintln(w, "#\tTITLE\tLENGTH")
-		fmt.Fprintln(w, "-\t-----\t------")
+		fmt.Fprintln(w, "#\tTRACK_ID\tTITLE\tLENGTH")
+		fmt.Fprintln(w, "--\t--------\t-----\t------")
 
 		for i, e := range entries {
-			fmt.Fprintf(w, "%d\t%s\t%s\n", i+1, e.Track.Title, formatDuration(e.Duration))
+			// The row number is the human handle for "remove track 4"; the
+			// track ID is printed alongside it because a renumbering after a
+			// removal is exactly why positions should not be the only
+			// identifier given.
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n",
+				i+1, shortTrackID(e.Track.ID), truncateCell(e.Track.Title, cellWidthTitleWide), formatDuration(e.Duration))
 		}
 
 		w.Flush()
@@ -302,4 +330,7 @@ func init() {
 	// confirmDestructive requires --yes, and the flag used to live on the
 	// top-level delete group that playlists never sat under.
 	playlistDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
+
+	playlistListCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
+	playlistShowCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
 }

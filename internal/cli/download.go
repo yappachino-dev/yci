@@ -237,6 +237,24 @@ func listQueue(ctx context.Context, cmd *cobra.Command) error {
 		return fmt.Errorf("fetch queue: %w", err)
 	}
 
+	// JSON first: a consumer asking for data should get an empty array, not
+	// a sentence explaining why there is none.
+	if jsonRequested(cmd) {
+		out := make([]jsonQueueEntry, 0, len(queue))
+		for _, e := range queue {
+			out = append(out, jsonQueueEntry{
+				ID:        e.ID,
+				SourceID:  e.SourceID,
+				Status:    string(e.Status),
+				Attempts:  e.Attempts,
+				ErrorMsg:  e.ErrorMsg,
+				ErrorKind: queueErrorKind(e.ErrorMsg),
+			})
+		}
+
+		return writeJSON(cmd.OutOrStdout(), out)
+	}
+
 	if len(queue) == 0 {
 		cmd.Println("Download queue is empty. Add items with `yci download` or `yci sync`.")
 		return nil
@@ -264,6 +282,8 @@ func init() {
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
 	downloadCmd.Flags().Bool(flagInteractive, false, "Dynamically select channels upon downloading playlist")
 	downloadCmd.Flags().Bool(flagForcePlaylist, false, "Extract playlist ID instead of video ID from hybrid URLs")
+
+	downloadQueueCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
 }
 
 func readUrlsFromFile(path string) ([]string, error) {

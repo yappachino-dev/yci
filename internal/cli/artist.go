@@ -174,6 +174,15 @@ func listArtists(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
+	if jsonRequested(cmd) {
+		out := make([]jsonArtist, 0, len(artists))
+		for _, a := range artists {
+			out = append(out, toJSONArtist(a))
+		}
+
+		return writeJSON(cmd.OutOrStdout(), out)
+	}
+
 	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "ID\tNAME\tFOLDER_ID")
 	fmt.Fprintln(w, "--\t----\t---------")
@@ -212,4 +221,6 @@ func init() {
 	artistDeleteCmd.Flags().String(flagID, "", "The ID of the artist to delete")
 	artistDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
 	artistDeleteCmd.RegisterFlagCompletionFunc(flagID, artistIDCompletion)
+
+	artistListCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
 }

@@ -12,6 +12,7 @@ import (
 const (
 	flagID     = "id"
 	flagName   = "name"
+	flagJSON   = "json"
 	flagParent = "parent"
 	flagArtist = "artist"
 	flagFolder = "folder"
