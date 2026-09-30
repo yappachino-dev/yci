@@ -38,7 +38,7 @@ func TestPrintReseedPlanStatesEverythingThatMatters(t *testing.T) {
 		})
 
 		got := out.String()
-		for _, want := range []string{`Playlist "P"`, "Cry Baby", "AND", "Matches 4", "Nothing to change"} {
+		for _, want := range []string{`Playlist "P"`, "Cry Baby", "AND", "Recipe matches 4", "Nothing to change"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("plan does not mention %q:\n%s", want, got)
 			}

@@ -183,9 +183,7 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "ID\tNAME\tPARENT")
-	fmt.Fprintln(w, "--\t----\t------")
+	table := NewTable(cmd.OutOrStdout(), "ID", "NAME", "PARENT")
 
 	childrenOf := make(map[library.FolderID][]library.Folder)
 	for _, f := range folders {
@@ -204,7 +202,7 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 			}
 
 			nameWithTree := prefix + connector + string(child.Name)
-			fmt.Fprintf(w, "%s\t%s\t%s\n", child.ID, nameWithTree, child.ParentID)
+			table.Row(string(child.ID), nameWithTree, string(child.ParentID))
 
 			newPrefix := prefix + "│  "
 			if isLast {
@@ -217,7 +215,7 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 
 	traverse(library.FolderID(library.RootID), "")
 
-	w.Flush()
+	table.Flush()
 	return nil
 }
 

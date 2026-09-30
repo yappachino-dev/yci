@@ -49,10 +49,13 @@ device.`,
 			return fmt.Errorf("plan reseed for %q: %w", name, err)
 		}
 
+		// The plan already says what it found, including the explicit
+		// "Nothing to change" when there is nothing. Returning straight out
+		// keeps the most common outcome of this command to one sentence
+		// rather than two that say the same thing.
 		printReseedPlan(cmd, name, report)
 
 		if !report.Changed() {
-			cmd.Println("\nAlready up to date; nothing to do.")
 			return nil
 		}
 
@@ -63,7 +66,8 @@ device.`,
 		yes, _ := cmd.Flags().GetBool(flagYes)
 
 		if !accept && !yes {
-			ok, err := confirmDestructive(cmd, fmt.Sprintf("Apply these %d change(s) to playlist %q?", len(report.Changes), name))
+			ok, err := confirmDestructive(cmd, fmt.Sprintf("Apply these %s to playlist %q?",
+				plural(len(report.Changes), "change", "changes"), name))
 			if err != nil {
 				return err
 			}
@@ -89,13 +93,16 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 	cmd.Printf("Playlist %q  (seed: %s)\n", name, truncateCell(report.SeedTitle, cellWidthSeed))
 	cmd.Printf("Recipe: %s\n", library.FormatTokens(report.Recipe, report.MatchMode))
 	if len(report.Excludes) > 0 {
-		cmd.Printf("Excluded: %d track(s), kept out on every re-derivation\n", len(report.Excludes))
+		cmd.Printf("Excluded: %s, kept out on every re-derivation\n",
+			plural(len(report.Excludes), "track", "tracks"))
 	}
 	if report.MatchMode == library.MatchAny {
 		cmd.Printf("Matching: ANY token — wider than the AND default\n")
 	}
-	cmd.Printf("Matches %d track(s) now; playlist holds %d, of which %d already match.\n\n",
-		report.Matched, report.Current, report.Unchanged)
+	cmd.Printf("Recipe matches %s now; playlist holds %s, of which %s already match.\n\n",
+		plural(report.Matched, "track", "tracks"),
+		plural(report.Current, "track", "tracks"),
+		plural(report.Unchanged, "track", "tracks"))
 
 	if !report.Changed() {
 		// "Nothing to do" is the most common outcome of this command, and
@@ -106,8 +113,7 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 		return
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "CHANGE\tID\tTITLE")
+	table := NewTable(cmd.OutOrStdout(), "CHANGE", "TRACK_ID", "TITLE")
 
 	shown := 0
 	// Removals print first: they are the destructive half and the reason
@@ -119,7 +125,7 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 		if shown == changePreviewLimit {
 			break
 		}
-		fmt.Fprintf(w, "remove\t%s\t%s\n", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, cellWidthTitle))
+		table.Row("remove", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, cellWidthTitle))
 		shown++
 	}
 
@@ -127,14 +133,14 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 		if !change.Add || shown == changePreviewLimit {
 			continue
 		}
-		fmt.Fprintf(w, "add\t%s\t%s\n", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, cellWidthTitle))
+		table.Row("add", shortTrackID(change.Track.ID), truncateCell(change.Track.Title, cellWidthTitle))
 		shown++
 	}
 
-	w.Flush()
+	table.Flush()
 
 	if remaining := len(report.Changes) - shown; remaining > 0 {
-		cmd.Printf("... and %d more change(s).\n", remaining)
+		cmd.Printf("... and %s more.\n", pluralOf(remaining, "changes"))
 	}
 }
 

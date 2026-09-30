@@ -74,8 +74,8 @@ and apply it.`,
 			if err != nil {
 				return err
 			}
-			cmd.Printf("Exclusions for %q now hold %d track(s). Re-derive with: yci playlist reseed %s\n",
-				target, n, target)
+			cmd.Printf("Exclusions for %q now hold %s. Re-derive with: yci playlist reseed %s\n",
+				target, plural(n, "track", "tracks"), target)
 		}
 
 		return nil

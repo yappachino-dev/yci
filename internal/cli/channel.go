@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strconv"
+
 	"context"
 	"fmt"
 	"strings"
@@ -96,15 +98,13 @@ func listChannels(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "ID\tARTIST_ID\tCHANNEL_NAME")
-	fmt.Fprintln(w, "--\t---------\t------------")
+	table := NewTable(cmd.OutOrStdout(), "ID", "ARTIST_ID", "CHANNEL_NAME")
 
 	for _, c := range channels {
-		fmt.Fprintf(w, "%d\t%s\t%s\n", c.ID, c.ArtistID, c.Name)
+		table.Row(strconv.Itoa(c.ID), string(c.ArtistID), string(c.Name))
 	}
 
-	w.Flush()
+	table.Flush()
 	return nil
 }
 

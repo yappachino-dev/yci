@@ -43,7 +43,8 @@ var debugMigrationGetCmd = &cobra.Command{
 
 		switch {
 		case current < maxVersion:
-			cmd.Printf("Database is %d version(s) behind; they apply on the next command.\n", maxVersion-current)
+			cmd.Printf("Database is %s behind; they apply on the next command.\n",
+				plural(int(maxVersion-current), "version", "versions"))
 		case current == maxVersion:
 			cmd.Println("Database is up to date.")
 		default:

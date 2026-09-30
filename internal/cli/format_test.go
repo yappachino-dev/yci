@@ -14,8 +14,12 @@ func TestFormatDuration(t *testing.T) {
 		secs int
 		want string
 	}{
-		{0, "0:00"},
-		{-1, "0:00"},
+		// Unknown is not zero. A track ffprobe could not read is a gap in
+		// what yci knows; a zero-length track is a broken file. Rendering
+		// both as "0:00" made the rows that most needed attention look the
+		// most unremarkable.
+		{0, unknownDuration},
+		{-1, unknownDuration},
 		{5, "0:05"},
 		{59, "0:59"},
 		{60, "1:00"},
@@ -30,6 +34,12 @@ func TestFormatDuration(t *testing.T) {
 		if got := formatDuration(tt.secs); got != tt.want {
 			t.Errorf("formatDuration(%d) = %q, want %q", tt.secs, got, tt.want)
 		}
+	}
+
+	// The unknown marker must not be something a duration could produce, or
+	// the column becomes ambiguous again.
+	if unknownDuration == "0:00" {
+		t.Error("the unknown-duration marker is still the zero rendering")
 	}
 }
 

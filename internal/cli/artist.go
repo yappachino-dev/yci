@@ -183,15 +183,13 @@ func listArtists(ctx context.Context, cmd *cobra.Command) error {
 		return writeJSON(cmd.OutOrStdout(), out)
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "ID\tNAME\tFOLDER_ID")
-	fmt.Fprintln(w, "--\t----\t---------")
+	table := NewTable(cmd.OutOrStdout(), "ID", "NAME", "FOLDER_ID")
 
 	for _, a := range artists {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", a.ID, a.Name, a.FolderID)
+		table.Row(string(a.ID), string(a.Name), string(a.FolderID))
 	}
 
-	w.Flush()
+	table.Flush()
 	return nil
 }
 

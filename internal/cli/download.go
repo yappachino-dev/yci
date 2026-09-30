@@ -201,7 +201,7 @@ var downloadRetryCmd = &cobra.Command{
 			return err
 		}
 
-		cmd.Printf("Re-armed %d failed download(s).\n", result.Retried)
+		cmd.Printf("Re-armed %s.\n", plural(result.Retried, "failed download", "failed downloads"))
 		cmd.Println("▶ Run `yci download resume` to process them.")
 		return nil
 	},
@@ -260,16 +260,48 @@ func listQueue(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "ID\tSOURCE_ID\tSTATUS\tATTEMPTS\tERROR_MSG")
-	fmt.Fprintln(w, "--\t---------\t------\t--------\t---------")
+	table := NewTable(cmd.OutOrStdout(), "ID", "SOURCE_ID", "STATUS", "ATTEMPTS", "ERROR")
 
 	for _, q := range queue {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\n", q.ID, q.SourceID, q.Status, q.Attempts, q.ErrorMsg)
+		table.Row(
+			strconv.Itoa(q.ID),
+			q.SourceID,
+			string(q.Status),
+			strconv.Itoa(q.Attempts),
+			// Bounded, because the full yt-dlp diagnostic runs to around 120
+			// characters and a single one of those pushes every other row's
+			// columns out of alignment. The whole message is still in
+			// --json, where a column width cannot break a consumer.
+			queueErrorSummary(q.ErrorMsg),
+		)
 	}
 
-	w.Flush()
+	table.Flush()
 	return nil
+}
+
+// queueErrorSummary is the one-line form of a queue failure, or "-" when
+// there is no failure to report.
+func queueErrorSummary(msg string) string {
+	if msg == "" {
+		return "-"
+	}
+
+	// Keep the identifying part and drop the repeated boilerplate. yt-dlp
+	// prefixes every message with the same clauses.
+	for _, prefix := range []string{
+		"execute yt-dlp: ",
+		"access forbidden: ",
+		"ERROR: ",
+	} {
+		msg = strings.TrimPrefix(msg, prefix)
+	}
+
+	if kind := queueErrorKind(msg); kind != "other" && kind != "" {
+		return kind
+	}
+
+	return truncateCell(msg, cellWidthError)
 }
 
 func init() {

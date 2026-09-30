@@ -47,9 +47,7 @@ var configListCmd = &cobra.Command{
 			return fmt.Errorf("load configuration: %w", err)
 		}
 
-		w := newTabWriter(cmd.OutOrStdout())
-		fmt.Fprintln(w, "KEY\tVALUE\tSOURCE")
-		fmt.Fprintln(w, "---\t-----\t------")
+		table := NewTable(cmd.OutOrStdout(), "KEY", "VALUE", "SOURCE")
 
 		for _, name := range config.Keys() {
 			value, source, err := cfg.Resolved(name)
@@ -65,10 +63,10 @@ var configListCmd = &cobra.Command{
 				display = "(unset)"
 			}
 
-			fmt.Fprintf(w, "%s\t%s\t%s\n", name, display, source)
+			table.Row(name, display, string(source))
 		}
 
-		w.Flush()
+		table.Flush()
 		return nil
 	},
 }

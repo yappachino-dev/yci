@@ -148,7 +148,8 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 
 	cmd.Printf("\nCreated playlist %q with %d tracks (%s).\n", playlist.Name, len(ids), describeTokens(tokens, mode))
 	if len(excludes) > 0 {
-		cmd.Printf("Excluded %d track(s); they stay out when the recipe is re-derived.\n", len(excludes))
+		cmd.Printf("Excluded %s; they stay out when the recipe is re-derived.\n",
+			plural(len(excludes), "track", "tracks"))
 	}
 	cmd.Printf("Re-derive it later with: yci playlist reseed %s\n", playlist.Name)
 	cmd.Printf("Export it with: yci playlist export %s\n", playlist.Name)
@@ -173,18 +174,17 @@ func confidenceNote(f library.Fragment) string {
 }
 
 func printSeedMatches(cmd *cobra.Command, matched []library.Track) {
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "ID\tTITLE")
+	table := NewTable(cmd.OutOrStdout(), "TRACK_ID", "TITLE")
 
 	for i, t := range matched {
 		if i == seedMatchPreviewCap {
-			fmt.Fprintf(w, "...\tand %d more\n", len(matched)-seedMatchPreviewCap)
+			table.Row("...", fmt.Sprintf("and %s more", pluralOf(len(matched)-seedMatchPreviewCap, "tracks")))
 			break
 		}
-		fmt.Fprintf(w, "%s\t%s\n", shortTrackID(t.ID), truncateCell(t.Title, cellWidthTitleWide))
+		table.Row(shortTrackID(t.ID), truncateCell(t.Title, cellWidthTitleWide))
 	}
 
-	w.Flush()
+	table.Flush()
 }
 
 // pickFragmentTokens shows the seed's tokens and lets the user choose which
@@ -268,7 +268,7 @@ func pickFragmentTokens(cmd *cobra.Command, seedTitle string, suggested library.
 			}
 		}
 
-		cmd.Printf("Fragment %s matches %d tracks.\n", describeTokens(selected, mode), matches)
+		cmd.Printf("Fragment %s matches %s.\n", describeTokens(selected, mode), pluralOf(matches, "tracks"))
 		if matches == 0 {
 			cmd.Println("That selection matches nothing. Try again.")
 			continue

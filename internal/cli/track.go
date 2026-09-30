@@ -64,23 +64,30 @@ than failing per file.`,
 			return nil
 		}
 
-		cmd.Printf("Scanned %d track(s) with no recorded duration.\n", report.Scanned)
+		cmd.Printf("Scanned %s with no recorded duration.\n",
+			plural(report.Scanned, "track", "tracks"))
 		if report.Missing > 0 {
-			cmd.Printf("  %d file(s) are not on disk; left alone.\n", report.Missing)
+			cmd.Printf("  %s not on disk; left alone.\n",
+				plural(report.Missing, "file is", "files are"))
 		}
 		if report.Failed > 0 {
-			cmd.Printf("  %d file(s) could not be probed.\n", report.Failed)
+			cmd.Printf("  %s not be probed.\n",
+				plural(report.Failed, "file could", "files could"))
 		}
 		if report.Unchanged > 0 {
-			cmd.Printf("  %d file(s) reported a zero length; left at 0.\n", report.Unchanged)
+			cmd.Printf("  %s a zero length; left at 0.\n",
+				plural(report.Unchanged, "file reported", "files reported"))
 		}
 
 		if dryRun {
-			cmd.Printf("\nDry run: %d track(s) would record a duration. No changes made.\n", report.Updated)
+			cmd.Printf("\nDry run: %s would record a duration. No changes made.\n",
+				plural(report.Updated, "track", "tracks"))
 			return nil
 		}
 
-		cmd.Printf("\nRecorded a duration for %d of %d track(s).\n", report.Updated, report.Scanned)
+		cmd.Printf("\nRecorded a duration for %s of %s.\n",
+			plural(report.Updated, "track", "tracks"),
+			plural(report.Scanned, "track", "tracks"))
 		if report.Updated == 0 {
 			cmd.Printf("Try: yci track list\n")
 		}
@@ -104,45 +111,51 @@ var trackRetitleCmd = &cobra.Command{
 		}
 
 		if report.Updated == 0 {
-			cmd.Printf("Nothing to interpret: all %d track(s) already have parsed titles.\n", report.Scanned)
+			cmd.Printf("Nothing to interpret: all %s already have parsed titles.\n",
+				plural(report.Scanned, "track", "tracks"))
 			return nil
 		}
 
 		if report.Retitled > 0 {
-			w := newTabWriter(cmd.OutOrStdout())
-			fmt.Fprintln(w, "TRACK ID\tOLD TITLE\tNEW TITLE\tVERSION")
+			table := NewTable(cmd.OutOrStdout(), "TRACK_ID", "OLD_TITLE", "NEW_TITLE", "VERSION")
 
-			for i, change := range report.Changes {
-				if i == changePreviewLimit {
+			shown := 0
+			for _, change := range report.Changes {
+				if shown == changePreviewLimit {
 					break
 				}
 				if !change.Retitled {
 					continue
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				table.Row(
 					shortTrackID(change.ID),
 					truncateCell(change.From, cellWidthDiff),
 					truncateCell(change.To, cellWidthDiff),
 					change.Version,
 				)
+				shown++
 			}
 
-			w.Flush()
+			table.Flush()
 		}
 
 		if report.Retitled > changePreviewLimit {
-			cmd.Printf("... and %d more.\n", report.Retitled-changePreviewLimit)
+			cmd.Printf("... and %s more.\n", pluralOf(report.Retitled-changePreviewLimit, "changes"))
 		}
 		cmd.Println()
 
 		if dryRun {
-			cmd.Printf("Dry run: %d of %d track(s) would be retitled, %d row(s) would record provenance. No changes made.\n",
-				report.Retitled, report.Scanned, report.Updated)
+			cmd.Printf("Dry run: %s of %s would be retitled, %s would record provenance. No changes made.\n",
+				plural(report.Retitled, "track", "tracks"),
+				plural(report.Scanned, "track", "tracks"),
+				plural(report.Updated, "row", "rows"))
 			return nil
 		}
 
-		cmd.Printf("Retitled %d of %d track(s); %d row(s) now carry parsed titles.\n",
-			report.Retitled, report.Scanned, report.Updated)
+		cmd.Printf("Retitled %s of %s; %s now carry parsed titles.\n",
+			plural(report.Retitled, "track", "tracks"),
+			plural(report.Scanned, "track", "tracks"),
+			plural(report.Updated, "row", "rows"))
 		return nil
 	},
 }
@@ -217,16 +230,19 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "ID\tARTIST_ID\tSOURCE_ID\tTITLE")
-	fmt.Fprintln(w, "--\t---------\t---------\t-----")
+	table := NewTable(cmd.OutOrStdout(), "ID", "ARTIST_ID", "SOURCE_ID", "TITLE", "LENGTH")
 
 	for _, t := range tracks {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			shortTrackID(t.ID), t.ArtistID, t.SourceID, truncateCell(t.Title, cellWidthTitleWide))
+		table.Row(
+			shortTrackID(t.ID),
+			string(t.ArtistID),
+			t.SourceID,
+			truncateCell(t.Title, cellWidthTitleWide),
+			formatDuration(int(t.DurationSec)),
+		)
 	}
 
-	w.Flush()
+	table.Flush()
 	return nil
 }
 

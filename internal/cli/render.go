@@ -1,19 +1,9 @@
 package cli
 
 import (
-	"io"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/yappachino-dev/yci/internal/library"
-)
-
-// Column widths for table output. tabwriter takes these as (padding, tabwidth)
-// and derives alignment from the data, so the numbers below only have to be
-// consistent, not tuned per table.
-const (
-	tabwriterPadding = 3
-	tabwriterTabstop = 0
 )
 
 // Cell display limits, in runes. They exist so a long title cannot push the
@@ -33,6 +23,10 @@ const (
 	cellWidthDiff = 40
 	// cellWidthSeed is for the seed line in a recipe report.
 	cellWidthSeed = 50
+	// cellWidthError bounds the error column in the download queue. A full
+	// yt-dlp diagnostic is around 120 characters, which is enough to push
+	// every other column off a normal terminal.
+	cellWidthError = 40
 )
 
 // changePreviewLimit caps how many added/removed rows a diff-style command
@@ -40,12 +34,6 @@ const (
 // that show a change list, and a cap on one but not the other would make the
 // same kind of output behave two ways.
 const changePreviewLimit = 20
-
-// newTabWriter returns the aligned column writer shared by every list
-// command, so table output looks the same across entity groups.
-func newTabWriter(w io.Writer) *tabwriter.Writer {
-	return tabwriter.NewWriter(w, 0, 0, tabwriterPadding, ' ', tabwriterTabstop)
-}
 
 // shortTrackID abbreviates a track ID to a fixed prefix, which is long enough
 // to be unambiguous in practice and short enough for a column.

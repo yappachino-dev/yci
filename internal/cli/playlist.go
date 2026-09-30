@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strconv"
+
 	"fmt"
 	"strings"
 
@@ -91,23 +93,31 @@ var playlistListCmd = &cobra.Command{
 			return nil
 		}
 
-		w := newTabWriter(cmd.OutOrStdout())
-		fmt.Fprintln(w, "NAME")
-		fmt.Fprintln(w, "----")
-
+		table := NewTable(cmd.OutOrStdout(), "NAME")
 		for _, p := range playlists {
-			fmt.Fprintln(w, p.Name)
+			table.Row(p.Name)
 		}
+		table.Flush()
 
-		w.Flush()
 		return nil
 	},
 }
 
 // formatDuration renders seconds as H:MM:SS or M:SS; 0 (unknown) stays 0:00.
+// unknownDuration is what a duration column shows when the length is not
+// known.
+//
+// It is deliberately not "0:00". A track ffprobe could not read is not a
+// zero-length track, and the two are different facts about a library: one is
+// a gap in what yci knows, the other is a broken file. Rendering both as
+// "0:00" made the most common state indistinguishable from a real problem,
+// and the rows that most needed attention were the ones that looked least
+// wrong.
+const unknownDuration = "—"
+
 func formatDuration(secs int) string {
 	if secs <= 0 {
-		return "0:00"
+		return unknownDuration
 	}
 
 	h := secs / 3600
@@ -153,20 +163,22 @@ var playlistShowCmd = &cobra.Command{
 			return nil
 		}
 
-		w := newTabWriter(cmd.OutOrStdout())
-		fmt.Fprintln(w, "#\tTRACK_ID\tTITLE\tLENGTH")
-		fmt.Fprintln(w, "--\t--------\t-----\t------")
+		table := NewTable(cmd.OutOrStdout(), "#", "TRACK_ID", "TITLE", "LENGTH")
 
 		for i, e := range entries {
 			// The row number is the human handle for "remove track 4"; the
-			// track ID is printed alongside it because a renumbering after a
+			// track ID is printed alongside it because renumbering after a
 			// removal is exactly why positions should not be the only
 			// identifier given.
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n",
-				i+1, shortTrackID(e.Track.ID), truncateCell(e.Track.Title, cellWidthTitleWide), formatDuration(e.Duration))
+			table.Row(
+				strconv.Itoa(i+1),
+				shortTrackID(e.Track.ID),
+				truncateCell(e.Track.Title, cellWidthTitleWide),
+				formatDuration(e.Duration),
+			)
 		}
 
-		w.Flush()
+		table.Flush()
 		return nil
 	},
 }
@@ -308,7 +320,8 @@ var playlistExportCmd = &cobra.Command{
 			exported++
 		}
 
-		cmd.Printf("Exported %d playlist(s) to the library %s directory.\n", exported, library.ExportDir)
+		cmd.Printf("Exported %s to the library %s directory.\n",
+			plural(exported, "playlist", "playlists"), library.ExportDir)
 		return nil
 	},
 }

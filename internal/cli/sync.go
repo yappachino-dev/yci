@@ -53,11 +53,11 @@ var syncCmd = &cobra.Command{
 			return nil
 		}
 
-		cmd.Printf("Audit complete. Found %d missing files.\n", len(missing))
+		cmd.Printf("Audit complete. Found %s.\n", plural(len(missing), "missing file", "missing files"))
 		cmd.Println()
 
 		if dryRun {
-			cmd.Println("--- DRY RUN: The following files would be enqueued and downloaded ---")
+			cmd.Println("Dry run: the following would be enqueued and downloaded.")
 			for _, t := range missing {
 				cmd.Printf("- %s (Target: %s)\n", t.Title, t.RelativePath)
 			}
