@@ -73,6 +73,12 @@ func (r *SQLiteQueueRepo) Start(ctx context.Context, id int) error {
 	return r.db(ctx).StartDownload(ctx, int64(id))
 }
 
+// Complete removes a finished entry from the queue.
+//
+// It deletes rather than marking it done: the schema allows only pending,
+// processing and failed, so there is nowhere to record a completed state. The
+// trade is that a finished download leaves no trace, which also means
+// `download retry <id>` cannot refer to one — a retry is for failures only.
 func (r *SQLiteQueueRepo) Complete(ctx context.Context, id int) error {
 	return r.db(ctx).CompleteDownload(ctx, int64(id))
 }
