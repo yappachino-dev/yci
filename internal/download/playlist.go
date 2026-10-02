@@ -17,6 +17,9 @@ type VideoMetadata struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Channel string `json:"channel"`
+	// ChannelID is the immutable YouTube channel ID. A real playlist
+	// carries it; a @channel/videos listing does not, so empty is normal.
+	ChannelID string `json:"channel_id"`
 }
 
 // Fetch resolves a playlist URL with yt-dlp. It is the method form of the

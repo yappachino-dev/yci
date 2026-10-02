@@ -20,20 +20,28 @@ type fakeDownloader struct {
 	// behaviour decides what happens to a given source ID. An ID with no
 	// entry succeeds.
 	behaviour map[string]func(cfg Config) error
+	// metadata is what a successful download reports. A zero value reports
+	// no channel, which is the case a real download can produce when
+	// yt-dlp did not surface one.
+	metadata map[string]VideoMetadata
 
 	mu    sync.Mutex
 	calls []string
 }
 
-func (f *fakeDownloader) Download(_ context.Context, cfg Config) error {
+func (f *fakeDownloader) Download(_ context.Context, cfg Config) (VideoMetadata, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, cfg.URL)
 	f.mu.Unlock()
 
 	if fn, ok := f.behaviour[cfg.URL]; ok {
-		return fn(cfg)
+		return VideoMetadata{}, fn(cfg)
 	}
-	return nil
+	if meta, ok := f.metadata[cfg.URL]; ok {
+		return meta, nil
+	}
+
+	return VideoMetadata{}, nil
 }
 
 func (f *fakeDownloader) called() []string {

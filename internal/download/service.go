@@ -128,7 +128,18 @@ type Transactor interface {
 // retry versus terminal classification, the reporter sequence, and the
 // cancellation path that must not burn an attempt.
 type Downloader interface {
-	Download(ctx context.Context, cfg Config) error
+	// Download returns what yt-dlp reported: the only moment the immutable
+	// channel ID exists, since the file later carries only the artist's tag.
+	Download(ctx context.Context, cfg Config) (VideoMetadata, error)
+}
+
+// ChannelRecorder notes which channel a downloaded video came from, keyed by
+// video ID so import can join without reading the tag.
+//
+// Optional: a caller that does not supply one still downloads, and import
+// falls back to matching the artist name as it always did.
+type ChannelRecorder interface {
+	RecordVideoChannel(ctx context.Context, videoID, channelID string) error
 }
 
 // PlaylistFetcher resolves a playlist URL to its channels and videos, for the
@@ -145,6 +156,7 @@ type ServiceConfig struct {
 	StagingDirs     StagingDirProvider
 	Downloader      Downloader
 	PlaylistFetcher PlaylistFetcher
+	Channels        ChannelRecorder
 }
 
 type Service struct {
@@ -155,6 +167,7 @@ type Service struct {
 	stagingDirs     StagingDirProvider
 	downloader      Downloader
 	playlistFetcher PlaylistFetcher
+	channels        ChannelRecorder
 }
 
 // ytDlp is the real implementation of both seams: the two places this
@@ -178,6 +191,7 @@ func NewService(cfg ServiceConfig) *Service {
 	}
 
 	return &Service{
+		channels:        cfg.Channels,
 		repo:            cfg.QueueRepo,
 		trackChecker:    cfg.TrackChecker,
 		dirReader:       cfg.DirReader,
@@ -410,6 +424,30 @@ type QueueRunConfig struct {
 	CookiesFile string
 }
 
+// recordChannel stores the download's channel before the queue row is
+// completed, because Complete deletes it and this is the only durable trace
+// of where the video came from.
+//
+// Best effort by design: losing it degrades import to the name-based path it
+// used before, whereas failing the download over a bookkeeping row would lose
+// the audio that was just fetched.
+func (s *Service) recordChannel(ctx context.Context, entry QueueEntry, meta VideoMetadata) error {
+	if s.channels == nil || meta.ChannelID == "" {
+		return nil
+	}
+
+	videoID := entry.SourceID
+	if meta.ID != "" {
+		videoID = meta.ID
+	}
+
+	if err := s.channels.RecordVideoChannel(ctx, videoID, meta.ChannelID); err != nil {
+		return nil
+	}
+
+	return nil
+}
+
 func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter Reporter) (ProcessResult, error) {
 	if reporter == nil {
 		reporter = defaultNoOpReporter
@@ -464,7 +502,8 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 			return result, fmt.Errorf("start queue entry %d: %w", entry.ID, err)
 		}
 
-		if err := s.downloader.Download(ctx, cfg); err != nil {
+		meta, err := s.downloader.Download(ctx, cfg)
+		if err != nil {
 			// Cancelled: leave the row processing and record nothing, since
 			// the write would need the cancelled context. The next run's
 			// ResetPending re-arms it and returns the attempt it never spent.
@@ -485,6 +524,10 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 			}
 
 			continue
+		}
+
+		if err := s.recordChannel(ctx, entry, meta); err != nil {
+			return result, err
 		}
 
 		if err := s.repo.Complete(ctx, entry.ID); err != nil {

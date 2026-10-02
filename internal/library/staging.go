@@ -47,6 +47,14 @@ type ChannelLinker interface {
 	Link(ctx context.Context, artistID ArtistID, name ChannelName) error
 	ResolveArtist(ctx context.Context, name ChannelName) (ArtistID, bool, error)
 	All(ctx context.Context) ([]Channel, error)
+
+	// ResolveArtistByID and the rest carry the immutable channel identity,
+	// recorded at download time. They are the path a rename does not break.
+	ResolveArtistByID(ctx context.Context, id ChannelID) (ArtistID, bool, error)
+	RefreshChannelName(ctx context.Context, id ChannelID, artistID ArtistID, name ChannelName) error
+	AttachChannelID(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error
+	VideoChannel(ctx context.Context, videoID VideoID) (ChannelID, bool, error)
+	ForgetVideoChannel(ctx context.Context, videoID VideoID) error
 }
 
 // MetadataReader reads tag metadata from an audio file.
@@ -201,8 +209,8 @@ type importDecision struct {
 // resolveImportDecision maps staged-file metadata to an artist/folder target,
 // consulting onUnknown when the channel has no linked artist. Returns a nil
 // decision when the handler chose to skip the file.
-func (s *StagingService) resolveImportDecision(ctx context.Context, channelName ChannelName, m TrackMetadata, onUnknown LinkHandler) (*importDecision, error) {
-	artistID, ok, err := s.linker.ResolveArtist(ctx, channelName)
+func (s *StagingService) resolveImportDecision(ctx context.Context, videoID VideoID, channelName ChannelName, m TrackMetadata, onUnknown LinkHandler) (*importDecision, error) {
+	artistID, ok, err := s.ResolveChannel(ctx, videoID, channelName)
 	if err != nil {
 		return nil, err
 	}
@@ -251,6 +259,68 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, channelName 
 	return &decision, nil
 }
 
+// ResolveChannel maps a staged file to an artist, preferring the immutable
+// channel ID recorded at download time over the artist tag written into the
+// file.
+//
+// The tag is a display name, and a performer can rename their channel at any
+// time. When that happened, the name lookup missed, import stopped resolving
+// an artist, and the user was asked again for every file. With the ID the
+// rename self-heals: the link still matches and only the stored label needs
+// refreshing.
+//
+// videoID may be empty, in which case only the name path is available.
+func (s *StagingService) ResolveChannel(ctx context.Context, videoID VideoID, name ChannelName) (ArtistID, bool, error) {
+	if videoID != "" {
+		if id, found, err := s.linker.VideoChannel(ctx, videoID); err == nil && found && id != "" {
+			artistID, resolved, err := s.linker.ResolveArtistByID(ctx, id)
+			if err != nil {
+				return "", false, err
+			}
+			if resolved {
+				// The channel is known; keep the label honest.
+				s.refreshLabel(ctx, id, artistID, name)
+				return artistID, true, nil
+			}
+		}
+	}
+
+	artistID, ok, err := s.linker.ResolveArtist(ctx, name)
+	if err != nil {
+		return "", false, err
+	}
+	if ok {
+		s.promoteLabel(ctx, artistID, name, videoID)
+	}
+
+	return artistID, ok, nil
+}
+
+// refreshLabel updates a stored channel name that has drifted. Best effort:
+// the artist is already resolved, so a failure here costs tidiness, not
+// correctness.
+func (s *StagingService) refreshLabel(ctx context.Context, id ChannelID, artistID ArtistID, name ChannelName) {
+	if name == "" {
+		return
+	}
+	_ = s.linker.RefreshChannelName(ctx, id, artistID, name)
+}
+
+// promoteLabel attaches the channel ID to a link that only has a name, so the
+// next download resolves by identity instead of by string.
+func (s *StagingService) promoteLabel(ctx context.Context, artistID ArtistID, name ChannelName, videoID VideoID) {
+	if artistID == "" || videoID == "" {
+		return
+	}
+
+	id, found, err := s.linker.VideoChannel(ctx, videoID)
+	if err != nil || !found || id == "" {
+		return
+	}
+
+	_ = s.linker.AttachChannelID(ctx, artistID, name, id)
+}
+
 // A staged file must be named <video-id>.<ext> — the only convention yci
 // writes. Anything else fails loudly instead of being imported with the
 // whole filename as its source ID. The rule lives in internal/videoid so it
@@ -278,7 +348,7 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 		return nil, fmt.Errorf("file name is not a staged download (expected <video-id>%s); move or rename it out of staging", ext)
 	}
 
-	decision, err := s.resolveImportDecision(ctx, channelName, m, onUnknown)
+	decision, err := s.resolveImportDecision(ctx, VideoID(sourceID), channelName, m, onUnknown)
 	if err != nil {
 		return nil, err
 	}

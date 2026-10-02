@@ -118,6 +118,9 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		DirReader:    diskReader,
 		Transactor:   transactor,
 		StagingDirs:  paths,
+		// Records which channel each downloaded video came from, so import
+		// joins on the immutable ID rather than on the artist tag.
+		Channels: channelService,
 	})
 
 	playlistService := library.NewPlaylistService(library.PlaylistServiceConfig{

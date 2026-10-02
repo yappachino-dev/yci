@@ -110,6 +110,33 @@ func (s *ChannelService) All(ctx context.Context) ([]Channel, error) {
 	return s.repo.All(ctx)
 }
 
+func (s *ChannelService) ResolveArtistByID(ctx context.Context, id ChannelID) (ArtistID, bool, error) {
+	return s.repo.ResolveByID(ctx, id)
+}
+
+func (s *ChannelService) RefreshChannelName(ctx context.Context, id ChannelID, artistID ArtistID, name ChannelName) error {
+	return s.repo.RenameByID(ctx, id, artistID, name)
+}
+
+func (s *ChannelService) AttachChannelID(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error {
+	return s.repo.AttachID(ctx, artistID, name, id)
+}
+
+// RecordVideoChannel satisfies download.ChannelRecorder. It is deliberately
+// shaped with plain strings so the download package does not have to import
+// this one to record a mapping.
+func (s *ChannelService) RecordVideoChannel(ctx context.Context, videoID, channelID string) error {
+	return s.repo.RecordVideoChannel(ctx, VideoID(videoID), ChannelID(channelID))
+}
+
+func (s *ChannelService) VideoChannel(ctx context.Context, videoID VideoID) (ChannelID, bool, error) {
+	return s.repo.VideoChannel(ctx, videoID)
+}
+
+func (s *ChannelService) ForgetVideoChannel(ctx context.Context, videoID VideoID) error {
+	return s.repo.ForgetVideoChannel(ctx, videoID)
+}
+
 // SQLiteChannelRepository implements ChannelRepository over sqlc queries.
 type SQLiteChannelRepository struct {
 	q *store.Queries

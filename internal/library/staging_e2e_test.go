@@ -247,3 +247,109 @@ func TestStagingImportRejectsForeignFilenames(t *testing.T) {
 		t.Errorf("foreign file should remain untouched in staging: %v", statErr)
 	}
 }
+
+// TestStagingImportSurvivesChannelRename is the scenario the channel ID exists
+// for. A performer renames their channel, so the artist tag on the next
+// download carries a name no link holds, and the tag lookup misses.
+//
+// Before, that meant the unknown-channel handler ran for every affected file.
+// Now the ID recorded at download time resolves the artist regardless, the
+// stale label is corrected in passing, and the handler stays out of it.
+func TestStagingImportSurvivesChannelRename(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	artist, err := env.artists.Create(ctx, "", folder.ID, "An Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.channels.Link(ctx, artist.ID, "Old Channel Name"); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.channels.AttachChannelID(ctx, artist.ID, "Old Channel Name", "UC8rcEBzJSleTkf_-agPM20g"); err != nil {
+		t.Fatalf("attach channel id: %v", err)
+	}
+
+	// Download time recorded the ID; the file's tag carries the new name.
+	const videoID = "dQw4w9WgXcQ"
+	if err := env.channels.RecordVideoChannel(ctx, videoID, "UC8rcEBzJSleTkf_-agPM20g"); err != nil {
+		t.Fatalf("record video channel: %v", err)
+	}
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), videoID+".opus"), "Renamed Song", "New Channel Name")
+
+	onUnknown := func(channelName, title string) (StagingResult, error) {
+		t.Errorf("unknown-channel handler ran for %q/%q; the recorded ID should have resolved it", channelName, title)
+		return StagingResult{Action: ActionSkip}, nil
+	}
+
+	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+		t.Fatalf("process staging: %v", err)
+	}
+
+	tracks, err := env.tracks.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 1 {
+		t.Fatalf("tracks = %d, want 1", len(tracks))
+	}
+	if tracks[0].ArtistID != artist.ID {
+		t.Errorf("track artist = %q, want %q", tracks[0].ArtistID, artist.ID)
+	}
+
+	// The stored label follows YouTube rather than drifting forever.
+	resolved, ok, err := env.channels.ResolveArtist(ctx, "New Channel Name")
+	if err != nil || !ok {
+		t.Fatalf("new name not resolvable after import: (%q, %t, %v)", resolved, ok, err)
+	}
+	if resolved != artist.ID {
+		t.Errorf("new name resolves to %q, want %q", resolved, artist.ID)
+	}
+
+	// And no duplicate link was left behind.
+	all, err := env.channels.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 {
+		t.Errorf("%d channel rows after rename, want 1", len(all))
+	}
+	if all[0].Name != "New Channel Name" {
+		t.Errorf("stored name = %q, want the refreshed label", all[0].Name)
+	}
+}
+
+// TestStagingImportWithoutRecordedChannelFallsBackToName keeps the old path
+// working: a file imported with no download-time record still resolves by its
+// tag, so hand-placed files and pre-existing staging continue to import.
+func TestStagingImportWithoutRecordedChannelFallsBackToName(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	artist, err := env.artists.Create(ctx, "", folder.ID, "An Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.channels.Link(ctx, artist.ID, "An Artist"); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "dQw4w9WgXcQ.opus"), "Manual Song", "An Artist")
+
+	if err := env.staging.ProcessStaging(ctx, func(channelName, title string) (StagingResult, error) {
+		t.Errorf("handler ran for %q/%q despite a matching name link", channelName, title)
+		return StagingResult{Action: ActionSkip}, nil
+	}); err != nil {
+		t.Fatalf("process staging: %v", err)
+	}
+
+	tracks, err := env.tracks.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 1 || tracks[0].ArtistID != artist.ID {
+		t.Fatalf("tracks = %+v, want one track attributed to %q", tracks, artist.ID)
+	}
+}
