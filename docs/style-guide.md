@@ -183,6 +183,19 @@ to break. Enums are typed `iota` constants.
   which pads from `runewidth.StringWidth`; all cell limits and truncation are
   in display cells. `text/tabwriter` is banned: it aligns on bytes, which
   misaligns CJK. Counting runes is equally wrong.
+- A list of more than a screenful is a paginated command, not a scroll. Cap
+  it with `--limit N` (0 means no cap), apply the cap to `--json` as well,
+  and **always print the total**. Truncating without saying so is the one
+  failure mode here that lies to the reader: a 50-row list looks exactly
+  like a 50-track library.
+- List queries carry an `ORDER BY`. SQLite's unspecified order is stable
+  across runs, which is exactly why it gets mistaken for a deliberate one.
+  Sort for a reader (artist, then title) and put artistless rows last.
+- A column earns its width. `track list` dropped `SOURCE_ID` because no
+  command takes it as an argument and it pushed the table past 80 cells,
+  where the display-width alignment that `Table` exists to provide is undone
+  by the terminal wrapping. Removing a column from the human table is not
+  removing it from the contract: it stays in `--json`.
 - `%q` for identifiers in messages.
 - Version comes from build flags (`-ldflags "-X main.version=..."`), not a
   source constant.
