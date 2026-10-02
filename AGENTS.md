@@ -51,10 +51,12 @@ self-studies from `docs/*.md` between sessions.
 - **New debt** found in any form lands in `docs/technical-debt.md` as a
   numbered entry. Never chat-only.
 - **Git**: Conventional Commits, subject line only, no body. One logical
-  change per commit. Commit what the change touched — code, tests, generated
-  `internal/store`, `AGENTS.md` — as one commit; never ship code without the
-  regenerated store. `docs/` is gitignored: keep it current as part of the
-  work, but it is not part of any commit until the owner decides otherwise.
+  change per commit. Commit what the change actually touched: code, tests and
+  generated `internal/store` together — never code without the regenerated
+  store. Stage `AGENTS.md` only when its guidelines genuinely changed; most
+  feature commits leave it alone. `docs/` is gitignored: keep it current as
+  part of the work, but it is not part of any commit until the owner decides
+  otherwise.
 - **Editing**: use the `edit` tool for targeted changes; scripted bulk edits
   only for genuinely mechanical multi-file rewrites. A scripted edit has
   already destroyed two register entries here — read back what you wrote.
