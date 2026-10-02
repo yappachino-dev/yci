@@ -13,7 +13,6 @@ import (
 var folderCmd = &cobra.Command{
 	Use:   "folder",
 	Short: "Manage folders in the library",
-	Args:  cobra.NoArgs,
 }
 
 var folderCreateCmd = &cobra.Command{

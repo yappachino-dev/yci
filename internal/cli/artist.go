@@ -18,7 +18,6 @@ const (
 var artistCmd = &cobra.Command{
 	Use:   "artist",
 	Short: "Manage artists in the library",
-	Args:  cobra.NoArgs,
 }
 
 var artistCreateCmd = &cobra.Command{

@@ -11,7 +11,6 @@ import (
 var debugCmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Collection of debug utilities",
-	Args:  cobra.NoArgs,
 }
 
 var debugMigrationCmd = &cobra.Command{

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -90,4 +91,78 @@ func TestSilenceUsageOnRuntimeError(t *testing.T) {
 			t.Errorf("output = %q, want usage retained for wrong arguments", combined)
 		}
 	})
+}
+
+// TestEveryNounGroupRejectsUnknownSubcommand pins the shape of every noun
+// group in the real command tree.
+//
+// The failure this guards against is silent: a non-runnable command prints
+// help and exits 0, so a typo looks like success to `set -e` and help text
+// lands where a --json consumer expects data. Enumerating the real groups
+// rather than a synthetic tree is the point, because the bug is a property of
+// how these commands are declared.
+func TestEveryNounGroupRejectsUnknownSubcommand(t *testing.T) {
+	groups := []*cobra.Command{
+		folderCmd, artistCmd, channelCmd, trackCmd, playlistCmd,
+		configCmd, importCmd, debugCmd,
+	}
+
+	for _, g := range groups {
+		if g.RunE == nil {
+			t.Errorf("group %q has no RunE: Cobra will print help and exit 0 for an unknown subcommand. Wrap it in asGroup.", g.Name())
+		}
+		if g.Args == nil {
+			t.Errorf("group %q has no Args: an unknown subcommand would be accepted", g.Name())
+		}
+	}
+}
+
+// TestAsGroupRejectsUnknownSubcommand executes one to prove the shape check
+// above means what it says: the error is returned, not swallowed.
+func TestAsGroupRejectsUnknownSubcommand(t *testing.T) {
+	root := &cobra.Command{Use: "test"}
+	group := asGroup(&cobra.Command{Use: "thing"})
+	group.AddCommand(&cobra.Command{
+		Use:   "list",
+		RunE:  func(*cobra.Command, []string) error { return nil },
+		Short: "List things",
+	})
+	root.AddCommand(group)
+
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"thing", "nope"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("Execute() = nil, want an unknown-command error")
+	}
+	if !strings.Contains(err.Error(), `unknown command "nope"`) {
+		t.Errorf("error = %q, want it to name the unknown subcommand", err)
+	}
+}
+
+// TestAsGroupShowsHelpOnNoArgs is the other half: making the group runnable
+// must not turn `yci thing` into an error.
+func TestAsGroupShowsHelpOnNoArgs(t *testing.T) {
+	out := &bytes.Buffer{}
+	root := &cobra.Command{Use: "test"}
+	group := asGroup(&cobra.Command{Use: "thing", Short: "Manage things"})
+	group.AddCommand(&cobra.Command{
+		Use:   "list",
+		RunE:  func(*cobra.Command, []string) error { return nil },
+		Short: "List things",
+	})
+	root.AddCommand(group)
+
+	root.SetOut(out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"thing"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() = %v, want help with no error", err)
+	}
+	if !strings.Contains(out.String(), "Manage things") {
+		t.Errorf("output = %q, want the group help", out.String())
+	}
 }

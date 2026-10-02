@@ -13,6 +13,18 @@ const (
 	groupDiag     = "diagnostics"
 )
 
+// asGroup turns a noun group into a runnable command that shows help.
+//
+// A command with no Run is treated by Cobra as a help command: it prints help
+// and returns nil, so Args is never evaluated. Left that way, `Args: NoArgs`
+// is dead code and an unknown subcommand exits 0 with help on stdout, which
+// silently passes a typo to any script running under `set -e`.
+func asGroup(cmd *cobra.Command) *cobra.Command {
+	cmd.Args = cobra.NoArgs
+	cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+	return cmd
+}
+
 func init() {
 	// Cobra sorts commands alphabetically unless this is turned off, which
 	// would scatter related commands and bury the rarely used ones.
@@ -47,20 +59,20 @@ func init() {
 	rootCmd.SetCompletionCommandGroupID(groupDiag)
 
 	rootCmd.AddCommand(
-		folderCmd,
-		artistCmd,
-		channelCmd,
-		trackCmd,
-		playlistCmd,
+		asGroup(folderCmd),
+		asGroup(artistCmd),
+		asGroup(channelCmd),
+		asGroup(trackCmd),
+		asGroup(playlistCmd),
 
-		configCmd,
+		asGroup(configCmd),
 
 		downloadCmd,
-		importCmd,
+		asGroup(importCmd),
 		syncCmd,
 		repairCmd,
 
-		debugCmd,
+		asGroup(debugCmd),
 		versionCmd,
 	)
 }

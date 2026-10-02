@@ -15,7 +15,6 @@ import (
 var channelCmd = &cobra.Command{
 	Use:   "channel",
 	Short: "Manage YouTube channel links",
-	Args:  cobra.NoArgs,
 }
 
 var channelCreateCmd = &cobra.Command{

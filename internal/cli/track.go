@@ -19,7 +19,6 @@ const (
 var trackCmd = &cobra.Command{
 	Use:   "track",
 	Short: "Manage tracks in the library",
-	Args:  cobra.NoArgs,
 }
 
 var trackListCmd = &cobra.Command{

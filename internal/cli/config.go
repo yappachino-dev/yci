@@ -15,7 +15,6 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "View and modify application configuration",
-	Args:  cobra.NoArgs,
 }
 
 var configPathCmd = &cobra.Command{

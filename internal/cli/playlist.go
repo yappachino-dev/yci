@@ -14,7 +14,6 @@ import (
 var playlistCmd = &cobra.Command{
 	Use:   "playlist",
 	Short: "Manage playlists and export them as .m3u files",
-	Args:  cobra.NoArgs,
 }
 
 var playlistCreateCmd = &cobra.Command{
