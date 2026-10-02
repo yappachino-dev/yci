@@ -16,7 +16,19 @@ import (
 var (
 	ErrChannelAlreadyLinked = errors.New("channel already linked to artist")
 	ErrChannelNotLinked     = errors.New("channel not linked to artist")
+	// ErrChannelNameAmbiguous means one name resolves to several artists.
+	ErrChannelNameAmbiguous = errors.New("channel name links to several artists")
 )
+
+// VideoID is a YouTube video identifier, as it appears in a staged file name.
+type VideoID string
+
+// ChannelID is a YouTube channel identifier, the immutable UC... form.
+//
+// It is the identity of a link. The name is a label: a performer can rename
+// their channel at any time, and treating the label as the key made a rename
+// orphan every download attributed to them.
+type ChannelID string
 
 type ChannelName string
 
@@ -31,6 +43,8 @@ type Channel struct {
 	ID       int
 	ArtistID ArtistID
 	Name     ChannelName
+	// ChannelID is empty for a link made before the channel was resolved.
+	ChannelID ChannelID
 }
 
 type ChannelRepository interface {
@@ -38,6 +52,16 @@ type ChannelRepository interface {
 	FindArtistID(ctx context.Context, name ChannelName) (ArtistID, bool, error)
 	All(ctx context.Context) ([]Channel, error)
 	Delete(ctx context.Context, artistID ArtistID, name ChannelName) error
+
+	// ResolveByID is the authoritative lookup, and RenameByID refreshes a
+	// label that has drifted from the channel's current name.
+	ResolveByID(ctx context.Context, id ChannelID) (ArtistID, bool, error)
+	RenameByID(ctx context.Context, id ChannelID, artistID ArtistID, name ChannelName) error
+	AttachID(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error
+
+	RecordVideoChannel(ctx context.Context, videoID VideoID, id ChannelID) error
+	ForgetVideoChannel(ctx context.Context, videoID VideoID) error
+	VideoChannel(ctx context.Context, videoID VideoID) (ChannelID, bool, error)
 }
 
 // ChannelService links YouTube channel names to artists.
@@ -99,6 +123,7 @@ func (r *SQLiteChannelRepository) Create(ctx context.Context, artistID ArtistID,
 	err := r.db(ctx).CreateChannel(ctx, store.CreateChannelParams{
 		ArtistID:    string(artistID),
 		ChannelName: db.ToNullString(string(name)),
+		ChannelID:   db.ToNullString(""),
 	})
 	if err != nil {
 		return db.MapSQLError(err, nil, ErrChannelAlreadyLinked)
@@ -108,15 +133,86 @@ func (r *SQLiteChannelRepository) Create(ctx context.Context, artistID ArtistID,
 }
 
 func (r *SQLiteChannelRepository) FindArtistID(ctx context.Context, name ChannelName) (ArtistID, bool, error) {
-	artistID, err := r.db(ctx).GetArtistIDByChannel(ctx, db.ToNullString(string(name)))
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
+	ids, err := r.db(ctx).GetArtistIDByChannel(ctx, db.ToNullString(string(name)))
 	if err != nil {
 		return "", false, fmt.Errorf("find artist by channel %q: %w", name, err)
 	}
 
+	switch len(ids) {
+	case 0:
+		return "", false, nil
+	case 1:
+		return ArtistID(ids[0]), true, nil
+	default:
+		// Two artists may hold the same name, so picking the first would
+		// file a download under an arbitrary artist and call it resolved.
+		return "", false, fmt.Errorf("%w: %q is linked to %s",
+			ErrChannelNameAmbiguous, name, strings.Join(ids, ", "))
+	}
+}
+
+func (r *SQLiteChannelRepository) ResolveByID(ctx context.Context, id ChannelID) (ArtistID, bool, error) {
+	artistID, err := r.db(ctx).GetArtistIDByChannelID(ctx, db.ToNullString(string(id)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("resolve channel %q: %w", id, err)
+	}
+
 	return ArtistID(artistID), true, nil
+}
+
+func (r *SQLiteChannelRepository) RenameByID(ctx context.Context, id ChannelID, artistID ArtistID, name ChannelName) error {
+	rows, err := r.db(ctx).SetChannelNameByID(ctx, store.SetChannelNameByIDParams{
+		ChannelID:   db.ToNullString(string(id)),
+		ChannelName: db.ToNullString(string(name)),
+		ArtistID:    string(artistID),
+	})
+	if err != nil {
+		return fmt.Errorf("rename channel %q: %w", id, err)
+	}
+	if rows == 0 {
+		return ErrChannelNotLinked
+	}
+
+	return nil
+}
+
+func (r *SQLiteChannelRepository) AttachID(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error {
+	_, err := r.db(ctx).SetChannelID(ctx, store.SetChannelIDParams{
+		ArtistID:    string(artistID),
+		ChannelName: db.ToNullString(string(name)),
+		ChannelID:   db.ToNullString(string(id)),
+	})
+	if err != nil {
+		return fmt.Errorf("attach channel id to %q: %w", name, err)
+	}
+
+	return nil
+}
+
+func (r *SQLiteChannelRepository) RecordVideoChannel(ctx context.Context, videoID VideoID, id ChannelID) error {
+	return r.db(ctx).SetVideoChannel(ctx, store.SetVideoChannelParams{
+		VideoID:   string(videoID),
+		ChannelID: string(id),
+	})
+}
+
+func (r *SQLiteChannelRepository) ForgetVideoChannel(ctx context.Context, videoID VideoID) error {
+	return r.db(ctx).DeleteVideoChannel(ctx, string(videoID))
+}
+
+func (r *SQLiteChannelRepository) VideoChannel(ctx context.Context, videoID VideoID) (ChannelID, bool, error) {
+	id, err := r.db(ctx).GetVideoChannel(ctx, string(videoID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("look up channel for video %q: %w", videoID, err)
+	}
+
+	return ChannelID(id), true, nil
 }
 
 func (r *SQLiteChannelRepository) All(ctx context.Context) ([]Channel, error) {
@@ -128,9 +224,10 @@ func (r *SQLiteChannelRepository) All(ctx context.Context) ([]Channel, error) {
 	channels := make([]Channel, 0, len(rows))
 	for _, row := range rows {
 		channels = append(channels, Channel{
-			ID:       int(row.ID),
-			ArtistID: ArtistID(row.ArtistID),
-			Name:     ChannelName(db.FromNullString(row.ChannelName)),
+			ID:        int(row.ID),
+			ArtistID:  ArtistID(row.ArtistID),
+			Name:      ChannelName(db.FromNullString(row.ChannelName)),
+			ChannelID: ChannelID(db.FromNullString(row.ChannelID)),
 		})
 	}
 

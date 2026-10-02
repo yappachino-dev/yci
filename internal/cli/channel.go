@@ -95,10 +95,9 @@ func listChannels(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	// No ID column: it is the row's integer primary key, and no command
-	// accepts it — `channel create` and `channel delete` both identify a
-	// link by artist plus channel name. Printing a value the reader cannot
-	// type back is worse than not printing it.
+	// No ID column: it is the row's integer primary key and no command
+	// accepts it, since both link and unlink identify a channel by artist
+	// plus name. See style-guide 7.
 	table := NewTable(cmd.OutOrStdout(), "ARTIST_ID", "CHANNEL_NAME")
 
 	for _, c := range channels {

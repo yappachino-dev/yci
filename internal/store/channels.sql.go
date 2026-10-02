@@ -11,17 +11,20 @@ import (
 )
 
 const createChannel = `-- name: CreateChannel :exec
-INSERT INTO channels (artist_id, channel_name)
-VALUES (?1, ?2)
+INSERT INTO channels (artist_id, channel_name, channel_id)
+VALUES (?1, ?2, ?3)
 `
 
 type CreateChannelParams struct {
 	ArtistID    string
 	ChannelName sql.NullString
+	ChannelID   sql.NullString
 }
 
+// channel_id may be null for a link made by hand, before yt-dlp has been
+// asked. Such a row resolves by name only until a download fills it in.
 func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) error {
-	_, err := q.db.ExecContext(ctx, createChannel, arg.ArtistID, arg.ChannelName)
+	_, err := q.db.ExecContext(ctx, createChannel, arg.ArtistID, arg.ChannelName, arg.ChannelID)
 	return err
 }
 
@@ -43,25 +46,89 @@ func (q *Queries) DeleteChannel(ctx context.Context, arg DeleteChannelParams) (i
 	return result.RowsAffected()
 }
 
-const getArtistIDByChannel = `-- name: GetArtistIDByChannel :one
+const deleteVideoChannel = `-- name: DeleteVideoChannel :exec
+DELETE FROM video_channels
+WHERE video_id = ?1
+`
+
+// Once the track exists, the mapping has done its job.
+func (q *Queries) DeleteVideoChannel(ctx context.Context, videoID string) error {
+	_, err := q.db.ExecContext(ctx, deleteVideoChannel, videoID)
+	return err
+}
+
+const getArtistIDByChannel = `-- name: GetArtistIDByChannel :many
 SELECT artist_id
 FROM channels
 WHERE channel_name = ?1
+ORDER BY artist_id
 `
 
-func (q *Queries) GetArtistIDByChannel(ctx context.Context, channelName sql.NullString) (string, error) {
-	row := q.db.QueryRowContext(ctx, getArtistIDByChannel, channelName)
+// Every match, not just the first. The name is not unique across artists,
+// because the uniqueness constraint is on the pair, so returning one row
+// would pick an artist arbitrarily and call it an answer. The caller decides
+// what an ambiguous name means.
+func (q *Queries) GetArtistIDByChannel(ctx context.Context, channelName sql.NullString) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getArtistIDByChannel, channelName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var artist_id string
+		if err := rows.Scan(&artist_id); err != nil {
+			return nil, err
+		}
+		items = append(items, artist_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getArtistIDByChannelID = `-- name: GetArtistIDByChannelID :one
+SELECT artist_id
+FROM channels
+WHERE channel_id = ?1
+`
+
+// The authoritative lookup. A YouTube channel ID does not change when the
+// channel is renamed.
+func (q *Queries) GetArtistIDByChannelID(ctx context.Context, channelID sql.NullString) (string, error) {
+	row := q.db.QueryRowContext(ctx, getArtistIDByChannelID, channelID)
 	var artist_id string
 	err := row.Scan(&artist_id)
 	return artist_id, err
+}
+
+const getChannelNameByChannelID = `-- name: GetChannelNameByChannelID :one
+SELECT channel_name
+FROM channels
+WHERE channel_id = ?1
+`
+
+// Read before writing, so a rename updates the stored label instead of
+// inserting a second link for the same channel.
+func (q *Queries) GetChannelNameByChannelID(ctx context.Context, channelID sql.NullString) (sql.NullString, error) {
+	row := q.db.QueryRowContext(ctx, getChannelNameByChannelID, channelID)
+	var channel_name sql.NullString
+	err := row.Scan(&channel_name)
+	return channel_name, err
 }
 
 const getChannels = `-- name: GetChannels :many
 SELECT
     id,
     artist_id,
-    channel_name
+    channel_name,
+    channel_id
 FROM channels
+ORDER BY artist_id, channel_name
 `
 
 func (q *Queries) GetChannels(ctx context.Context) ([]Channel, error) {
@@ -73,7 +140,12 @@ func (q *Queries) GetChannels(ctx context.Context) ([]Channel, error) {
 	var items []Channel
 	for rows.Next() {
 		var i Channel
-		if err := rows.Scan(&i.ID, &i.ArtistID, &i.ChannelName); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArtistID,
+			&i.ChannelName,
+			&i.ChannelID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -85,4 +157,114 @@ func (q *Queries) GetChannels(ctx context.Context) ([]Channel, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getVideoChannel = `-- name: GetVideoChannel :one
+SELECT channel_id
+FROM video_channels
+WHERE video_id = ?1
+`
+
+// The import-time lookup, keyed by the staged file's name because that is the
+// video ID. Attribution then does not depend on the artist tag.
+func (q *Queries) GetVideoChannel(ctx context.Context, videoID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getVideoChannel, videoID)
+	var channel_id string
+	err := row.Scan(&channel_id)
+	return channel_id, err
+}
+
+const listVideoChannels = `-- name: ListVideoChannels :many
+SELECT
+    video_id,
+    channel_id
+FROM video_channels
+ORDER BY video_id
+`
+
+// Backs the backfill report: downloads with no channel recorded.
+func (q *Queries) ListVideoChannels(ctx context.Context) ([]VideoChannel, error) {
+	rows, err := q.db.QueryContext(ctx, listVideoChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VideoChannel
+	for rows.Next() {
+		var i VideoChannel
+		if err := rows.Scan(&i.VideoID, &i.ChannelID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setChannelID = `-- name: SetChannelID :execrows
+UPDATE channels
+SET channel_id = ?1
+WHERE artist_id = ?2 AND channel_name = ?3
+  AND channel_id IS NULL
+`
+
+type SetChannelIDParams struct {
+	ChannelID   sql.NullString
+	ArtistID    string
+	ChannelName sql.NullString
+}
+
+// Attaches the ID to a link that was created by name only.
+func (q *Queries) SetChannelID(ctx context.Context, arg SetChannelIDParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setChannelID, arg.ChannelID, arg.ArtistID, arg.ChannelName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setChannelNameByID = `-- name: SetChannelNameByID :execrows
+UPDATE channels
+SET channel_name = ?1
+WHERE channel_id = ?2 AND artist_id = ?3
+`
+
+type SetChannelNameByIDParams struct {
+	ChannelName sql.NullString
+	ChannelID   sql.NullString
+	ArtistID    string
+}
+
+// Refreshes the display name after a rename. Scoped to the artist so it
+// cannot move a channel between artists by accident.
+func (q *Queries) SetChannelNameByID(ctx context.Context, arg SetChannelNameByIDParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setChannelNameByID, arg.ChannelName, arg.ChannelID, arg.ArtistID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setVideoChannel = `-- name: SetVideoChannel :exec
+INSERT INTO video_channels (video_id, channel_id)
+VALUES (?1, ?2)
+ON CONFLICT (video_id) DO UPDATE SET channel_id = excluded.channel_id
+`
+
+type SetVideoChannelParams struct {
+	VideoID   string
+	ChannelID string
+}
+
+// Recorded at download time, where yt-dlp has just reported the channel the
+// video actually belongs to. A retry overwrites rather than failing, because
+// a video cannot belong to two channels and the later answer is the fresher.
+func (q *Queries) SetVideoChannel(ctx context.Context, arg SetVideoChannelParams) error {
+	_, err := q.db.ExecContext(ctx, setVideoChannel, arg.VideoID, arg.ChannelID)
+	return err
 }

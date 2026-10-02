@@ -167,6 +167,12 @@ to break. Enums are typed `iota` constants.
   replaces.
 - sqlc queries: named parameters, one intent per query name, qualified columns
   whenever more than one table/CTE alias is in scope.
+- **No em-dashes (U+2014) anywhere in `db/queries/*.sql`**, comments included.
+  sqlc's SQLite parser fails on the character and reports it as a syntax error
+  in the *edited* query, several lines away from the comment that caused it,
+  so the real cause is not obvious. Migration files under `db/migrations/` are
+  goose's, not sqlc's, and are unaffected. Plain `-` reads the same and
+  parses.
 - Lint SQL with sqlfluff (config in `.sqlfluff`: uppercase keywords,
   4-space indent). The config exists; no gate runs it yet, so this is a
   convention rather than something CI will catch.

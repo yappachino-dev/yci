@@ -19,6 +19,7 @@ type Channel struct {
 	ID          int64
 	ArtistID    string
 	ChannelName sql.NullString
+	ChannelID   sql.NullString
 }
 
 type DownloadQueue struct {
@@ -74,4 +75,9 @@ type Track struct {
 	RawTitle     sql.NullString
 	Performer    string
 	Version      string
+}
+
+type VideoChannel struct {
+	VideoID   string
+	ChannelID string
 }
