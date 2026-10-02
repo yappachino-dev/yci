@@ -15,7 +15,7 @@ in here. If a section grows into a changelog, it has stopped belonging here.
 | Holds | valuable, **proven** information | ephemeral working memory |
 | Contents | design rationale, contracts, rejected alternatives and why | task checklists, intermediate diffs, command dumps, scratch notes |
 | Lifetime | permanent; deleted or fixed when it goes stale | cleared when the task ends |
-| Committed | no — gitignored (see `technical-debt.md`) | **never** |
+| Committed | yes, with the change it documents | **never** |
 
 A fact that is still useful after the task ends does not belong in `.agent/`.
 `.agent/` may contradict `docs/`; `docs/` is authoritative, which is why
@@ -54,9 +54,8 @@ self-studies from `docs/*.md` between sessions.
   change per commit. Commit what the change actually touched: code, tests and
   generated `internal/store` together — never code without the regenerated
   store. Stage `AGENTS.md` only when its guidelines genuinely changed; most
-  feature commits leave it alone. `docs/` is gitignored: keep it current as
-  part of the work, but it is not part of any commit until the owner decides
-  otherwise.
+  feature commits leave it alone. `docs/` is versioned and updated in the same
+  commit as the code it describes.
 - **Editing**: use the `edit` tool for targeted changes; scripted bulk edits
   only for genuinely mechanical multi-file rewrites. A scripted edit has
   already destroyed two register entries here — read back what you wrote.
