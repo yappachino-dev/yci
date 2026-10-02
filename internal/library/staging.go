@@ -95,6 +95,7 @@ type StagingService struct {
 	diskMover      PhysicalTrackMover
 	transactor     Transactor
 	paths          PathsProvider
+	dirReader      fs.DirReader
 }
 
 type StagingServiceConfig struct {
@@ -106,9 +107,18 @@ type StagingServiceConfig struct {
 	DiskMover      PhysicalTrackMover
 	Transactor     Transactor
 	Paths          PathsProvider
+
+	// DirReader lists the staging directory. Optional: nil uses
+	// fs.NewOSDiskReader(), so wiring code need not supply it.
+	DirReader fs.DirReader
 }
 
 func NewStagingService(cfg StagingServiceConfig) *StagingService {
+	dirReader := cfg.DirReader
+	if dirReader == nil {
+		dirReader = fs.NewOSDiskReader()
+	}
+
 	return &StagingService{
 		trackCreator:   cfg.TrackCreator,
 		artistReader:   cfg.ArtistReader,
@@ -118,6 +128,7 @@ func NewStagingService(cfg StagingServiceConfig) *StagingService {
 		diskMover:      cfg.DiskMover,
 		transactor:     cfg.Transactor,
 		paths:          cfg.Paths,
+		dirReader:      dirReader,
 	}
 }
 
@@ -142,33 +153,30 @@ type LinkHandler func(channelName string, title string) (StagingResult, error)
 func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {
 	stagingDir := s.paths.StagingDir()
 
-	files, err := os.ReadDir(stagingDir)
+	files, err := s.dirReader.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("read staging directory: %w", err)
 	}
 
+	// fs.DirReader returns file names only, already without subdirectories.
 	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		ext := strings.ToLower(filepath.Ext(file.Name()))
+		ext := strings.ToLower(filepath.Ext(file))
 		if !isSupportedImportExtension(ext) {
 			// Report rather than skip silently: a misconfigured download
 			// command would otherwise look like "nothing to import".
 			if ext != "" {
 				fmt.Printf("Skipping staging file %s: unsupported format %q (supported: %s)\n",
-					file.Name(), ext, strings.Join(supportedImportExtensions, ", "))
+					file, ext, strings.Join(supportedImportExtensions, ", "))
 			}
 			continue
 		}
 
-		if err := s.processSingleStagingFile(ctx, file.Name(), onUnknown); err != nil {
+		if err := s.processSingleStagingFile(ctx, file, onUnknown); err != nil {
 			if errors.Is(err, ErrProcessAborted) {
 				return err
 			}
 
-			fmt.Printf("Error processing staging file %s: %v\n", file.Name(), err)
+			fmt.Printf("Error processing staging file %s: %v\n", file, err)
 			continue
 		}
 	}

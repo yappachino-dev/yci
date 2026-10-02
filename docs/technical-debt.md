@@ -51,22 +51,6 @@ belonged next to the fix.
 
 ---
 
-## TD-42 — Two inconsistent abstractions at the same boundary — open
-
-**Severity: cosmetic.**
-
-- `library/staging.go` `ProcessStaging` reads its directory with `os.ReadDir`
-  directly, while `download` reaches the disk through the injected
-  `fs.OSDiskReader`. Two paths to the same operation, one of them untestable.
-- `TagMetadataReader.Read` accepts a `ctx` and does not honour it. Cancellation
-  is ignored rather than reported.
-
-**Fix:** route staging through the same reader, and either honour the context
-in the tag reader or drop the parameter so the signature stops promising
-something it does not deliver.
-
----
-
 ## Deferred by decision, not oversight
 
 These are not open work. They are recorded so they are not rediscovered as

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yappachino-dev/yci/internal/fs"
 )
 
 const (
@@ -91,12 +93,9 @@ type TrackChecker interface {
 	ExistsBySourceID(ctx context.Context, id string) (bool, error)
 }
 
-// DirReader lists file names in a directory. Error contract: not-exist
-// failures satisfy errors.Is(err, fs.ErrNotExist) via wrapped stdlib
-// errors; callers decide whether absence is fatal.
-type DirReader interface {
-	ReadDir(path string) ([]string, error)
-}
+// DirReader is fs.DirReader, aliased so existing references keep working. The
+// contract lives in internal/fs beside its implementation.
+type DirReader = fs.DirReader
 
 type QueueRepo interface {
 	All(ctx context.Context) ([]QueueEntry, error)
