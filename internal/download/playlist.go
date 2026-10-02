@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"os/exec"
 )
 
@@ -19,7 +19,13 @@ type VideoMetadata struct {
 	Channel string `json:"channel"`
 }
 
-func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
+// Fetch resolves a playlist URL with yt-dlp. It is the method form of the
+// parser, reachable through the PlaylistFetcher seam.
+func (y ytDlp) Fetch(ctx context.Context, url string) (PlaylistMetadata, error) {
+	return parsePlaylist(ctx, url, y.errOut)
+}
+
+func parsePlaylist(ctx context.Context, url string, errOut io.Writer) (PlaylistMetadata, error) {
 	args := []string{
 		"--ignore-config",
 		"--no-cookies",
@@ -32,7 +38,7 @@ func parsePlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = errOut
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {

@@ -51,40 +51,6 @@ func (q *Queries) FailDownload(ctx context.Context, arg FailDownloadParams) erro
 	return err
 }
 
-const getNextActionableDownload = `-- name: GetNextActionableDownload :one
-SELECT
-    download_queue.id,
-    download_queue.source_id,
-    download_queue.status,
-    download_queue.attempts,
-    download_queue.error_msg
-FROM download_queue
-WHERE download_queue.status = 'pending'
-ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
-LIMIT 1
-`
-
-type GetNextActionableDownloadRow struct {
-	ID       int64
-	SourceID string
-	Status   string
-	Attempts int64
-	ErrorMsg sql.NullString
-}
-
-func (q *Queries) GetNextActionableDownload(ctx context.Context) (GetNextActionableDownloadRow, error) {
-	row := q.db.QueryRowContext(ctx, getNextActionableDownload)
-	var i GetNextActionableDownloadRow
-	err := row.Scan(
-		&i.ID,
-		&i.SourceID,
-		&i.Status,
-		&i.Attempts,
-		&i.ErrorMsg,
-	)
-	return i, err
-}
-
 const getQueue = `-- name: GetQueue :many
 SELECT
     id,
@@ -93,6 +59,7 @@ SELECT
     attempts,
     error_msg
 FROM download_queue
+ORDER BY COALESCE(updated_at, created_at) ASC
 `
 
 type GetQueueRow struct {

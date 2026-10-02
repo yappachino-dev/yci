@@ -51,24 +51,6 @@ func (r *SQLiteQueueRepo) ResetPending(ctx context.Context, maxAttempts int) err
 	return r.db(ctx).ResetOrphanedDownloads(ctx, int64(maxAttempts))
 }
 
-func (r *SQLiteQueueRepo) Next(ctx context.Context) (QueueEntry, bool, error) {
-	entry, err := r.db(ctx).GetNextActionableDownload(ctx)
-	if err == sql.ErrNoRows {
-		return QueueEntry{}, false, nil
-	}
-	if err != nil {
-		return QueueEntry{}, false, err
-	}
-
-	return QueueEntry{
-		ID:       int(entry.ID),
-		SourceID: entry.SourceID,
-		Status:   QueueStatus(entry.Status),
-		Attempts: int(entry.Attempts),
-		ErrorMsg: db.FromNullString(entry.ErrorMsg),
-	}, true, nil
-}
-
 func (r *SQLiteQueueRepo) Start(ctx context.Context, id int) error {
 	return r.db(ctx).StartDownload(ctx, int64(id))
 }

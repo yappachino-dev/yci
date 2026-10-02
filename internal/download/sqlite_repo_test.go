@@ -105,10 +105,7 @@ func TestQueueLifecycle(t *testing.T) {
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
 
-	next, ok, err := repo.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	next, ok := nextPending(t, repo)
 	if !ok {
 		t.Fatal("no actionable entry for a pending queue")
 	}
@@ -124,9 +121,7 @@ func TestQueueLifecycle(t *testing.T) {
 	}
 
 	// A processing entry is not actionable, or two runs would race for it.
-	if _, ok, err := repo.Next(ctx); err != nil {
-		t.Fatal(err)
-	} else if ok {
+	if _, ok := nextPending(t, repo); ok {
 		t.Error("a processing entry was offered as actionable")
 	}
 
@@ -158,10 +153,7 @@ func TestFailureRecordsTheReasonAndRetries(t *testing.T) {
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
 
-	next, _, err := repo.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	next, _ := nextPending(t, repo)
 	if err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -178,8 +170,8 @@ func TestFailureRecordsTheReasonAndRetries(t *testing.T) {
 	if after.ErrorMsg != "HTTP Error 503: Service Unavailable" {
 		t.Errorf("error message = %q, want the reason to be kept", after.ErrorMsg)
 	}
-	if _, ok, err := repo.Next(ctx); err != nil || !ok {
-		t.Errorf("a retried entry should be actionable again (ok=%v err=%v)", ok, err)
+	if _, ok := nextPending(t, repo); !ok {
+		t.Error("a retried entry should be actionable again")
 	}
 
 	// Exhausting the attempts makes it terminal, and it stops being offered.
@@ -199,7 +191,7 @@ func TestFailureRecordsTheReasonAndRetries(t *testing.T) {
 	if final.Attempts != 2 {
 		t.Errorf("attempts = %d, want 2", final.Attempts)
 	}
-	if _, ok, _ := repo.Next(ctx); ok {
+	if _, ok := nextPending(t, repo); ok {
 		t.Error("a failed entry was still offered as actionable")
 	}
 }
@@ -210,10 +202,7 @@ func TestRetryReArmsAFailedEntry(t *testing.T) {
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
-	next, _, err := repo.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	next, _ := nextPending(t, repo)
 	if err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -311,15 +300,12 @@ func TestResetPendingClearsInterruptedRuns(t *testing.T) {
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "interrupted")
-	next, _, err := repo.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	next, _ := nextPending(t, repo)
 	if err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok, _ := repo.Next(ctx); ok {
+	if _, ok := nextPending(t, repo); ok {
 		t.Fatal("a processing entry should not be actionable before the reset")
 	}
 
@@ -330,8 +316,8 @@ func TestResetPendingClearsInterruptedRuns(t *testing.T) {
 	if got := entryBySource(t, repo, "interrupted").Status; got != QueueStatusPending {
 		t.Errorf("status after ResetPending = %q, want pending", got)
 	}
-	if _, ok, err := repo.Next(ctx); err != nil || !ok {
-		t.Errorf("the reset entry should be actionable (ok=%v err=%v)", ok, err)
+	if _, ok := nextPending(t, repo); !ok {
+		t.Error("the reset entry should be actionable")
 	}
 }
 
@@ -391,4 +377,28 @@ func TestDependenciesAreReportedNotFatal(t *testing.T) {
 	if !strings.Contains(err.Error(), "yt-dlp") && !strings.Contains(err.Error(), "ffmpeg") {
 		t.Errorf("the error does not name the missing tool: %v", err)
 	}
+}
+
+// nextPending returns the oldest actionable entry, as the production loop
+// used to with its Next cursor.
+//
+// The cursor is gone: ProcessQueue now walks a fixed snapshot, because a
+// cursor re-served a row that a transient failure had just put back to
+// pending, and one run then burned a track's whole retry budget. These tests
+// still need to ask "which row would the loop pick", so they ask it the same
+// way the loop does — from the ordered queue.
+func nextPending(t *testing.T, r *SQLiteQueueRepo) (QueueEntry, bool) {
+	t.Helper()
+
+	all, err := r.All(t.Context())
+	if err != nil {
+		t.Fatalf("list queue: %v", err)
+	}
+
+	for _, e := range all {
+		if isActionable(e) {
+			return e, true
+		}
+	}
+	return QueueEntry{}, false
 }

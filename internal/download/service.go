@@ -3,6 +3,8 @@ package download
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -100,7 +102,6 @@ type QueueRepo interface {
 	All(ctx context.Context) ([]QueueEntry, error)
 	Enqueue(ctx context.Context, sourceID string) (bool, error)
 	ResetPending(ctx context.Context, maxAttempts int) error
-	Next(ctx context.Context) (QueueEntry, bool, error)
 	Start(ctx context.Context, id int) error
 	Complete(ctx context.Context, id int) error
 	Fail(ctx context.Context, id int, status string, err error) error
@@ -118,29 +119,74 @@ type Transactor interface {
 	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+// Downloader fetches one track.
+//
+// It exists so the queue state machine can be tested. Everything else on that
+// path — the queue repository, the reporter, the transactor, the directory
+// reader — was already an interface, and leaving this one as a package-level
+// function calling exec made the whole loop unreachable without a network and
+// a toolchain, even though the logic being tested is pure: attempt counting,
+// retry versus terminal classification, the reporter sequence, and the
+// cancellation path that must not burn an attempt.
+type Downloader interface {
+	Download(ctx context.Context, cfg Config) error
+}
+
+// PlaylistFetcher resolves a playlist URL to its channels and videos, for the
+// same reason as Downloader.
+type PlaylistFetcher interface {
+	Fetch(ctx context.Context, url string) (PlaylistMetadata, error)
+}
+
 type ServiceConfig struct {
-	QueueRepo    QueueRepo
-	TrackChecker TrackChecker
-	DirReader    DirReader
-	Transactor   Transactor
-	StagingDirs  StagingDirProvider
+	QueueRepo       QueueRepo
+	TrackChecker    TrackChecker
+	DirReader       DirReader
+	Transactor      Transactor
+	StagingDirs     StagingDirProvider
+	Downloader      Downloader
+	PlaylistFetcher PlaylistFetcher
 }
 
 type Service struct {
-	repo         QueueRepo
-	trackChecker TrackChecker
-	dirReader    DirReader
-	transactor   Transactor
-	stagingDirs  StagingDirProvider
+	repo            QueueRepo
+	trackChecker    TrackChecker
+	dirReader       DirReader
+	transactor      Transactor
+	stagingDirs     StagingDirProvider
+	downloader      Downloader
+	playlistFetcher PlaylistFetcher
+}
+
+// ytDlp is the real implementation of both seams: the two places this
+// package shells out to another program.
+type ytDlp struct {
+	// out and errOut receive yt-dlp's own output. They default to the
+	// process streams because that is the correct behaviour for a CLI
+	// driving a real download, and a caller that needs them captured
+	// supplies its own.
+	out, errOut io.Writer
 }
 
 func NewService(cfg ServiceConfig) *Service {
+	dl := cfg.Downloader
+	if dl == nil {
+		dl = ytDlp{out: os.Stdout, errOut: os.Stderr}
+	}
+
+	fetcher := cfg.PlaylistFetcher
+	if fetcher == nil {
+		fetcher = ytDlp{out: os.Stdout, errOut: os.Stderr}
+	}
+
 	return &Service{
-		repo:         cfg.QueueRepo,
-		trackChecker: cfg.TrackChecker,
-		dirReader:    cfg.DirReader,
-		transactor:   cfg.Transactor,
-		stagingDirs:  cfg.StagingDirs,
+		repo:            cfg.QueueRepo,
+		trackChecker:    cfg.TrackChecker,
+		dirReader:       cfg.DirReader,
+		transactor:      cfg.Transactor,
+		stagingDirs:     cfg.StagingDirs,
+		downloader:      dl,
+		playlistFetcher: fetcher,
 	}
 }
 
@@ -236,14 +282,14 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 		case URLTypePlaylist:
 			reporter.OnPlaylistURL(u)
 
-			if err := processPlaylist(ctx, p.CleanURL(true), selector, addIDIfUnique); err != nil {
+			if err := s.processPlaylist(ctx, p.CleanURL(true), selector, addIDIfUnique); err != nil {
 				return result, err
 			}
 		case URLTypeHybrid:
 			reporter.OnHybridURL(u, params.ForcePlaylist)
 
 			if params.ForcePlaylist {
-				if err := processPlaylist(ctx, p.CleanURL(true), selector, addIDIfUnique); err != nil {
+				if err := s.processPlaylist(ctx, p.CleanURL(true), selector, addIDIfUnique); err != nil {
 					return result, err
 				}
 
@@ -291,8 +337,8 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 	return result, nil
 }
 
-func processPlaylist(ctx context.Context, url string, selector PlaylistSelector, addFn func(string) error) error {
-	output, err := parsePlaylist(ctx, url)
+func (s *Service) processPlaylist(ctx context.Context, url string, selector PlaylistSelector, addFn func(string) error) error {
+	output, err := s.playlistFetcher.Fetch(ctx, url)
 	if err != nil {
 		return fmt.Errorf("parse url: %w", err)
 	}
@@ -386,26 +432,29 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 		return result, fmt.Errorf("list queue entries: %w", err)
 	}
 
+	// The work list is fixed here and walked once.
+	//
+	// This used to pull one row at a time with a Next cursor. That made a
+	// transient failure self-feeding: the row went back to pending, the
+	// cursor handed it straight back, and one run burned the whole retry
+	// budget on a single track. Measured on a two-track queue, a rate-limited
+	// track was started four times, progress read 4/2, and result.Failed
+	// counted four failures for one track.
+	work := make([]QueueEntry, 0, len(pending))
 	for _, e := range pending {
 		if isActionable(e) {
-			total++
+			work = append(work, e)
 		}
 	}
+	total = len(work)
 
 	reporter.OnQueueStart(total)
 
-	for {
+	for _, entry := range work {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
 
-		entry, ok, err := s.repo.Next(ctx)
-		if err != nil {
-			return result, fmt.Errorf("read next queue entry: %w", err)
-		}
-		if !ok {
-			break
-		}
 		current++
 
 		reporter.OnTrackStart(current, total, entry.SourceID)
@@ -422,9 +471,15 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 			return result, fmt.Errorf("start queue entry %d: %w", entry.ID, err)
 		}
 
-		if err := Download(ctx, cfg); err != nil {
-			// Cancelled run: ResetPending re-arms the row on the next run;
-			// don't burn an attempt or record a bogus failure.
+		if err := s.downloader.Download(ctx, cfg); err != nil {
+			// Cancelled run: leave the row processing and let the next run's
+			// ResetPending re-arm it, and do not record a bogus failure.
+			//
+			// The attempt is still counted. Start increments it before the
+			// download runs, and the row cannot be written back here because
+			// that write would need the cancelled context. Ctrl-C three
+			// times will therefore fail a track without a real error; see
+			// TD-38.
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}

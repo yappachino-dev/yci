@@ -9,19 +9,8 @@ SELECT
     status,
     attempts,
     error_msg
-FROM download_queue;
-
--- name: GetNextActionableDownload :one
-SELECT
-    download_queue.id,
-    download_queue.source_id,
-    download_queue.status,
-    download_queue.attempts,
-    download_queue.error_msg
 FROM download_queue
-WHERE download_queue.status = 'pending'
-ORDER BY COALESCE(download_queue.updated_at, download_queue.created_at) ASC
-LIMIT 1;
+ORDER BY COALESCE(updated_at, created_at) ASC;
 
 -- name: StartDownload :exec
 UPDATE download_queue

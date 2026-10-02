@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -64,13 +63,15 @@ func buildArgs(cfg Config) []string {
 	return args
 }
 
-func Download(ctx context.Context, cfg Config) error {
+// Download fetches one track with yt-dlp. It is the method form of the
+// package-level runner, reachable through the Downloader seam.
+func (y ytDlp) Download(ctx context.Context, cfg Config) error {
 	cmd := exec.CommandContext(ctx, "yt-dlp", buildArgs(cfg)...)
 
 	var stderrBuf bytes.Buffer
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	cmd.Stdout = y.out
+	cmd.Stderr = io.MultiWriter(y.errOut, &stderrBuf)
 
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
