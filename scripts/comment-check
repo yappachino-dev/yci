@@ -6,7 +6,8 @@
 #
 # Limits:
 #   - a comment inside a function body:  3 lines
-#   - a godoc block (package doc, or directly above a top-level decl): 12
+#   - a godoc block (package doc, directly above a top-level decl, or a
+#     standalone header comment at column 0): 12
 #   - a trailing comment on a line of code: 2
 #
 # Not wired into `make check`: the codebase does not currently pass, and
@@ -23,15 +24,18 @@ INLINE_MAX=2
 report=$(find ./internal ./cmd -name '*.go' ! -name '*_test.go' ! -path '*/store/*' -print0 \
 	| sort -z \
 	| xargs -0 awk -v body="$BODY_MAX" -v godoc="$GODOC_MAX" -v inline="$INLINE_MAX" '
-function flush(   limit, kind) {
+function flush(isDecl,   limit, kind) {
 	if (len == 0) return
-	if (attached || pkgdoc) { kind = "godoc"; limit = godoc }
-	else if (indent > 0)     { kind = "body";  limit = body }
-	else                    { kind = "inline"; limit = inline }
+	# A block sitting directly above a declaration is godoc, so the isDecl
+	# argument decides it rather than a flag set after the fact.
+	if (isDecl || pkgdoc)   { kind = "godoc";   limit = godoc }
+	else if (trailing)      { kind = "trailing"; limit = inline }
+	else if (indent > 0)    { kind = "body";     limit = body }
+	else                    { kind = "header";   limit = godoc }
 	if (len > limit) {
 		printf "%s:%d\t%d lines\t%s\t%s\n", FILENAME, start, len, kind, first
 	}
-	len = 0; indent = 0; attached = 0; pkgdoc = 0
+	len = 0; indent = 0; pkgdoc = 0; trailing = 0
 }
 {
 	line = $0
@@ -39,17 +43,24 @@ function flush(   limit, kind) {
 	sub(/^[ \t]+/, "", trimmed)
 
 	if (trimmed ~ /^\/\//) {
-		if (len == 0) { start = FNR; first = substr(trimmed, 4, 58) }
+		if (len == 0) {
+		start = FNR
+		first = substr(trimmed, 4, 58)
+		# Anything on the line before the slashes makes this a trailing
+		# comment. Indentation does not count, so leading whitespace is
+		# stripped before looking.
+		pre = line
+		sub(/[ \t]+/, "", pre)
+		trailing = (match(pre, /\/\//) > 1)
+	}
 		if (trimmed ~ /^\/\/ ?Package [A-Za-z]/) pkgdoc = 1
 		len++
 		indent = (match(line, /[^ \t]/) > 1) ? 1 : 0
 		next
 	}
 
-	flush()
-
-	# A top-level declaration immediately below makes the block godoc.
-	if (trimmed ~ /^(func|type|var|const) /) attached = 1
+	isDecl = (trimmed ~ /^(func|type|var|const) /)
+	flush(isDecl)
 }
 END { flush() }
 ')
@@ -61,7 +72,7 @@ if [ -n "$report" ]; then
 	count=$(printf '%s\n' "$report" | wc -l)
 	echo
 	echo "comment-check: $count block(s) over the limits, across $files files."
-	echo "  body <= $BODY_MAX lines | godoc <= $GODOC_MAX | trailing <= $INLINE_MAX"
+	echo "  body <= $BODY_MAX | godoc/header <= $GODOC_MAX | trailing <= $INLINE_MAX"
 	echo "  Rationale belongs in docs/<feature>.md; history in docs/technical-debt.md."
 	exit 1
 fi
