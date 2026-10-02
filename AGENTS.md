@@ -4,10 +4,23 @@ Runtime notes for AI assistants working in `yci`. Read this, then
 `docs/README.md` for the index.
 
 **This file is for things an assistant cannot look up.** The rule for what
-belongs here: durable knowledge goes in `docs/`, progress goes in git history
-and `docs/technical-debt.md`, and only working state, owner preferences and
-project-specific guardrails stay in here. If a section grows into a changelog,
-it has stopped belonging here.
+belongs here: durable knowledge goes in `docs/`, progress goes in git history,
+and only working state, owner preferences and project-specific guardrails stay
+in here. If a section grows into a changelog, it has stopped belonging here.
+
+### Two kinds of file, two lifetimes
+
+| | `docs/` | `.agent/` |
+|---|---|---|
+| Holds | valuable, **proven** information | ephemeral working memory |
+| Contents | design rationale, contracts, rejected alternatives and why | task checklists, intermediate diffs, command dumps, scratch notes |
+| Lifetime | permanent; deleted or fixed when it goes stale | cleared when the task ends |
+| Committed | no — gitignored (see `technical-debt.md`) | **never** |
+
+A fact that is still useful after the task ends does not belong in `.agent/`.
+`.agent/` may contradict `docs/`; `docs/` is authoritative, which is why
+nothing in `.agent/` needs maintaining. Never write a checklist or a log into
+`docs/`.
 
 ## Ground truth
 
@@ -17,6 +30,7 @@ it has stopped belonging here.
 | Known flaws | `docs/technical-debt.md` — read before proposing architecture |
 | Standards | `docs/style-guide.md`, `docs/testing-go.md`, `docs/error-handling-go.md` |
 | What changed | `git log --oneline` — not this file |
+| Working material | `.agent/` — gitignored, ephemeral, cleared per task |
 
 ## Project orientation
 
