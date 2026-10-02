@@ -23,11 +23,40 @@ func runList(t *testing.T, c *app.Container, fn func(context.Context, *cobra.Com
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
+	// The flags a list command really has. The list helpers read them
+	// unconditionally, so a bare command would fail with "flag accessed but
+	// not defined" and quietly stop testing anything.
+	cmd.Flags().Bool(flagJSON, false, "")
+	cmd.Flags().Int(flagLimit, defaultTrackLimit, "")
+
 	if err := fn(WithContainer(context.Background(), c), cmd); err != nil {
 		t.Fatalf("list returned error: %v", err)
 	}
 
 	return out.String()
+}
+
+// newListCmd builds a list command with the flags it really has.
+//
+// The list helpers read those flags unconditionally, so a bare command
+// fails with "flag accessed but not defined" and stops testing anything.
+// Wiring them here keeps that in one place.
+func newListCmd(t *testing.T, c *app.Container, args ...string) (*cobra.Command, *strings.Builder) {
+	t.Helper()
+
+	var out strings.Builder
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(WithContainer(t.Context(), c))
+
+	cmd.Flags().Bool(flagJSON, false, "")
+	cmd.Flags().Int(flagLimit, defaultTrackLimit, "")
+	if err := cmd.Flags().Parse(args); err != nil {
+		t.Fatalf("parse %v: %v", args, err)
+	}
+
+	return cmd, &out
 }
 
 func seedLibrary(t *testing.T, c *app.Container) (library.FolderID, library.ArtistID) {

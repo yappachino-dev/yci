@@ -16,8 +16,14 @@ SELECT sqlc.embed(tracks) FROM tracks
 WHERE artist_id = :artist_id;
 
 -- name: GetTracksByPath :many
+-- Ordered for a person, not for SQLite: without this the rows come back in
+-- whatever order the table happens to yield, which is stable but arbitrary.
+-- `artist_id IS NULL` sorts orphaned tracks last rather than first, since
+-- NULL is the track with no artist to file it under. `id` breaks ties so two
+-- tracks sharing a title keep a fixed relative order.
 SELECT sqlc.embed(tracks) FROM tracks
-WHERE relative_path LIKE :path;
+WHERE relative_path LIKE :path
+ORDER BY artist_id IS NULL, artist_id, title, id;
 
 -- name: CheckTracksBySourceID :one
 SELECT EXISTS(

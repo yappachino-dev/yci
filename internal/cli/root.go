@@ -13,6 +13,7 @@ const (
 	flagID     = "id"
 	flagName   = "name"
 	flagJSON   = "json"
+	flagLimit  = "limit"
 	flagParent = "parent"
 	flagArtist = "artist"
 	flagFolder = "folder"

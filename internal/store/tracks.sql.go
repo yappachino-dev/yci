@@ -148,12 +148,18 @@ func (q *Queries) GetTracksByArtist(ctx context.Context, artistID sql.NullString
 const getTracksByPath = `-- name: GetTracksByPath :many
 SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
 WHERE relative_path LIKE ?1
+ORDER BY artist_id IS NULL, artist_id, title, id
 `
 
 type GetTracksByPathRow struct {
 	Track Track
 }
 
+// Ordered for a person, not for SQLite: without this the rows come back in
+// whatever order the table happens to yield, which is stable but arbitrary.
+// `artist_id IS NULL` sorts orphaned tracks last rather than first, since
+// NULL is the track with no artist to file it under. `id` breaks ties so two
+// tracks sharing a title keep a fixed relative order.
 func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]GetTracksByPathRow, error) {
 	rows, err := q.db.QueryContext(ctx, getTracksByPath, path)
 	if err != nil {

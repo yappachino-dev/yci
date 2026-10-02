@@ -21,6 +21,11 @@ var trackCmd = &cobra.Command{
 	Short: "Manage tracks in the library",
 }
 
+// defaultTrackLimit caps `track list` so a large library does not scroll
+// past unread. 0 is the opt-out: the footer always states the real total, so
+// a shortened list is never mistaken for the whole library.
+const defaultTrackLimit = 50
+
 var trackListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all tracks in the library (IDs truncated; prefixes work with delete)",
@@ -213,6 +218,20 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 		return fmt.Errorf("fetch tracks: %w", err)
 	}
 
+	limit, err := cmd.Flags().GetInt(flagLimit)
+	if err != nil {
+		return fmt.Errorf("read --%s: %w", flagLimit, err)
+	}
+	if limit < 0 {
+		return fmt.Errorf("--%s must not be negative, got %d", flagLimit, limit)
+	}
+
+	// Counted before trimming, so the footer can say what was left out.
+	total := len(tracks)
+	if limit > 0 && limit < total {
+		tracks = tracks[:limit]
+	}
+
 	// JSON before the empty-state message: a consumer asking for data should
 	// get an empty array, not a sentence explaining why there is none.
 	if jsonRequested(cmd) {
@@ -229,19 +248,31 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	table := NewTable(cmd.OutOrStdout(), "ID", "ARTIST_ID", "SOURCE_ID", "TITLE", "LENGTH")
+	// No SOURCE_ID column: it is the YouTube video ID, which no command takes
+	// as an argument, and at 11 cells it is what pushes the table past the
+	// width of a normal terminal. It is still in --json.
+	table := NewTable(cmd.OutOrStdout(), "ID", "ARTIST_ID", "TITLE", "LENGTH")
 
 	for _, t := range tracks {
 		table.Row(
 			shortTrackID(t.ID),
 			string(t.ArtistID),
-			t.SourceID,
-			truncateCell(t.Title, cellWidthTitleWide),
+			truncateCell(t.Title, cellWidthTitle),
 			formatDuration(int(t.DurationSec)),
 		)
 	}
 
 	table.Flush()
+
+	// A row count is the only way the reader learns the list was cut short.
+	// The total takes the plural in both sentences: "50 of 341 tracks" reads
+	// as a count out of a count, not as two unrelated nouns.
+	if limit > 0 && len(tracks) < total {
+		cmd.Printf("\nShowing %d of %s.\n", len(tracks), pluralOf(total, "tracks"))
+		return nil
+	}
+
+	cmd.Printf("\n%s.\n", plural(total, "track", "tracks"))
 	return nil
 }
 
@@ -261,4 +292,6 @@ func init() {
 	trackDeleteCmd.RegisterFlagCompletionFunc(flagID, trackIDCompletion)
 
 	trackListCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
+	trackListCmd.Flags().Int(flagLimit, defaultTrackLimit,
+		"Maximum rows to show; 0 shows every track")
 }

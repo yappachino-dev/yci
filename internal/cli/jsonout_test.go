@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
-
 	"github.com/yappachino-dev/yci/internal/app"
 	"github.com/yappachino-dev/yci/internal/library"
 )
@@ -105,12 +103,7 @@ func TestJSONCarriesFullIDs(t *testing.T) {
 	ids := seedUUIDTracks(t, c, "a / b", "c / d")
 	_ = ids
 
-	cmd := &cobra.Command{}
-	cmd.Flags().Bool(flagJSON, true, "")
-	cmd.SetContext(WithContainer(t.Context(), c))
-
-	var out strings.Builder
-	cmd.SetOut(&out)
+	cmd, out := newListCmd(t, c, "--json")
 
 	if err := listTracks(WithContainer(t.Context(), c), cmd); err != nil {
 		t.Fatal(err)
@@ -145,12 +138,7 @@ func TestJSONCarriesFullIDs(t *testing.T) {
 func TestJSONEmptyListIsAnArray(t *testing.T) {
 	c := newTestContainer(t)
 
-	cmd := &cobra.Command{}
-	cmd.Flags().Bool(flagJSON, true, "")
-	cmd.SetContext(WithContainer(t.Context(), c))
-
-	var out strings.Builder
-	cmd.SetOut(&out)
+	cmd, out := newListCmd(t, c, "--json")
 
 	if err := listTracks(WithContainer(t.Context(), c), cmd); err != nil {
 		t.Fatal(err)
@@ -172,13 +160,10 @@ func TestJSONIsOnStdoutOnly(t *testing.T) {
 	c := newTestContainer(t)
 	seedTracks(t, c, "a / b")
 
-	var out, errOut strings.Builder
+	var errOut strings.Builder
 
-	cmd := &cobra.Command{}
-	cmd.Flags().Bool(flagJSON, true, "")
-	cmd.SetOut(&out)
+	cmd, out := newListCmd(t, c, "--json")
 	cmd.SetErr(&errOut)
-	cmd.SetContext(WithContainer(t.Context(), c))
 
 	if err := listTracks(WithContainer(t.Context(), c), cmd); err != nil {
 		t.Fatal(err)
