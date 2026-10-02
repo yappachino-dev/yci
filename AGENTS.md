@@ -46,8 +46,8 @@ self-studies from `docs/*.md` between sessions.
 - **Autonomy**: implement features end to end — spec, code, tests, docs,
   commits. Do not hand work back unprompted. Informal mid-implementation
   checks ("how am I doing?") are still answered as a quick diff read and a
-  verdict. `docs/mentoring.md` describes an earlier review loop that is now
-  dormant, kept as a record.
+  verdict. The rubric that defines "done" for this project is in
+  `docs/style-guide.md` and `docs/testing-go.md`.
 - **New debt** found in any form lands in `docs/technical-debt.md` as a
   numbered entry. Never chat-only.
 - **Git**: Conventional Commits, subject line only, no body. One logical
@@ -58,7 +58,9 @@ self-studies from `docs/*.md` between sessions.
 - **Editing**: use the `edit` tool for targeted changes; scripted bulk edits
   only for genuinely mechanical multi-file rewrites. A scripted edit has
   already destroyed two register entries here — read back what you wrote.
-- **Teaching material** goes in `docs/*.md`, not in code comments.
+- **Docs are project documentation, not tutorials.** `docs/` records how this
+  codebase works and why. Generic Go instruction, exercises, and anything
+  written to guide one reader through learning do not belong there.
 
 ## Verification gates
 
