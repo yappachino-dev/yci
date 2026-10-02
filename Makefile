@@ -55,6 +55,12 @@ sqlc-check:
 	go tool sqlc generate
 	git diff --exit-code -- internal/store db/queries
 
+# Report comment blocks over the limits in docs/style-guide.md section 10.
+# Deliberately not part of `check`: the codebase does not pass it yet, and
+# failing every commit until it does would just get the target ignored.
+comment-check:
+	@./scripts/comment-check
+
 check: fmt-check vet build test sqlc-check
 
 # Copy the real database into a throwaway profile. Migrations and commands

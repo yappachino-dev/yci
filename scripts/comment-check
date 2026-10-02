@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Report comment blocks that exceed the limits in docs/style-guide.md §10.
+#
+# The rule was written down twice before and ignored, which is what a prose
+# rule invites. This makes it countable.
+#
+# Limits:
+#   - a comment inside a function body:  3 lines
+#   - a godoc block (package doc, or directly above a top-level decl): 12
+#   - a trailing comment on a line of code: 2
+#
+# Not wired into `make check`: the codebase does not currently pass, and
+# turning that on is the owner's call. See docs/technical-debt.md.
+
+set -uo pipefail
+
+cd "$(dirname "$0")/.." || exit 1
+
+BODY_MAX=3
+GODOC_MAX=12
+INLINE_MAX=2
+
+report=$(find ./internal ./cmd -name '*.go' ! -name '*_test.go' ! -path '*/store/*' -print0 \
+	| sort -z \
+	| xargs -0 awk -v body="$BODY_MAX" -v godoc="$GODOC_MAX" -v inline="$INLINE_MAX" '
+function flush(   limit, kind) {
+	if (len == 0) return
+	if (attached || pkgdoc) { kind = "godoc"; limit = godoc }
+	else if (indent > 0)     { kind = "body";  limit = body }
+	else                    { kind = "inline"; limit = inline }
+	if (len > limit) {
+		printf "%s:%d\t%d lines\t%s\t%s\n", FILENAME, start, len, kind, first
+	}
+	len = 0; indent = 0; attached = 0; pkgdoc = 0
+}
+{
+	line = $0
+	trimmed = line
+	sub(/^[ \t]+/, "", trimmed)
+
+	if (trimmed ~ /^\/\//) {
+		if (len == 0) { start = FNR; first = substr(trimmed, 4, 58) }
+		if (trimmed ~ /^\/\/ ?Package [A-Za-z]/) pkgdoc = 1
+		len++
+		indent = (match(line, /[^ \t]/) > 1) ? 1 : 0
+		next
+	}
+
+	flush()
+
+	# A top-level declaration immediately below makes the block godoc.
+	if (trimmed ~ /^(func|type|var|const) /) attached = 1
+}
+END { flush() }
+')
+
+files=$(find ./internal ./cmd -name '*.go' ! -name '*_test.go' ! -path '*/store/*' | wc -l)
+
+if [ -n "$report" ]; then
+	printf '%s\n' "$report" | sort -t$'\t' -k3 -rn | head -40
+	count=$(printf '%s\n' "$report" | wc -l)
+	echo
+	echo "comment-check: $count block(s) over the limits, across $files files."
+	echo "  body <= $BODY_MAX lines | godoc <= $GODOC_MAX | trailing <= $INLINE_MAX"
+	echo "  Rationale belongs in docs/<feature>.md; history in docs/technical-debt.md."
+	exit 1
+fi
+
+echo "comment-check: $files files, no comment block over the limits."
