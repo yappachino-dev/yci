@@ -160,10 +160,9 @@ type Service struct {
 // ytDlp is the real implementation of both seams: the two places this
 // package shells out to another program.
 type ytDlp struct {
-	// out and errOut receive yt-dlp's own output. They default to the
-	// process streams because that is the correct behaviour for a CLI
-	// driving a real download, and a caller that needs them captured
-	// supplies its own.
+	// out and errOut receive yt-dlp's output. Defaulting to the process
+	// streams is correct for a CLI driving a real download; a caller that
+	// needs them captured supplies its own.
 	out, errOut io.Writer
 }
 
@@ -431,14 +430,9 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 		return result, fmt.Errorf("list queue entries: %w", err)
 	}
 
-	// The work list is fixed here and walked once.
-	//
-	// This used to pull one row at a time with a Next cursor. That made a
-	// transient failure self-feeding: the row went back to pending, the
-	// cursor handed it straight back, and one run burned the whole retry
-	// budget on a single track. Measured on a two-track queue, a rate-limited
-	// track was started four times, progress read 4/2, and result.Failed
-	// counted four failures for one track.
+	// The work list is fixed here and walked once. A cursor that re-reads
+	// the queue would re-pick a track that a transient failure had just
+	// returned to pending, spending its whole retry budget in one run.
 	work := make([]QueueEntry, 0, len(pending))
 	for _, e := range pending {
 		if isActionable(e) {

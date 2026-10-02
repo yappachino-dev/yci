@@ -6,19 +6,12 @@ import (
 	"unicode"
 )
 
-// Fragment extraction turns one seed track into a set of tokens that select
-// its family, so `playlist create --from-track` can propose membership the
-// user confirms once. The strategy was measured against the 341-title corpus:
-// take the right-hand side of a title separator, keep it only if it recurs,
-// otherwise fall back to the most recurrent token. On labelled performer
-// seeds that scored 1.00 precision and 1.00 recall.
-//
-// Selection is a token set rather than a joined substring, so "星街 すいせい"
-// still matches "星街すいせい" and "Mori Calliope" still matches
-// "MoriCalliope". How the tokens combine is a mode: AND (every token present)
-// is the default and is what the derivation proposes, because it is what
-// keeps unrelated titles out. ANY (at least one token present) is available
-// for deliberately widening a selection.
+// Fragment extraction turns one seed track into a token set that selects its
+// family, so `playlist create --from-track` can propose membership the user
+// confirms once. A token set rather than a joined substring: "星街 すいせい"
+// still matches "星街すいせい", and "Mori Calliope" still matches
+// "MoriCalliope". AND is the default because it keeps unrelated titles out;
+// ANY is available for deliberately widening.
 
 // foldFragment normalises a title for comparison: ASCII and fullwidth letters
 // fold to one case, so "Mori Calliope" and "calliope" share a family.
@@ -164,10 +157,8 @@ func DeriveFragment(seedTitle string, corpus []string) Fragment {
 type MatchMode string
 
 const (
-	// MatchAll requires every token to be present. This is the default: it
-	// is what the derivation proposes, and it is why a seed like
-	// "Cry Baby / 星街すいせい" does not also select every 星街すいせい
-	// collab.
+	// MatchAll requires every token to be present, so a seed naming one
+	// performer does not also select that performer's collabs.
 	MatchAll MatchMode = "all"
 	// MatchAny requires at least one token. Deliberately wider, so it will
 	// pull in titles that share only one word; useful when the goal is

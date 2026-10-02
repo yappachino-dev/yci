@@ -107,10 +107,8 @@ func (s *TrackService) BackfillDuration(
 
 	for r := range results {
 		switch {
-		// Both ways a context can end abort the whole pass. Testing only
-		// for Canceled let a deadline fall through to the generic failure
-		// branch, so a run stopped by its deadline reported N corrupt files
-		// instead of saying it ran out of time.
+		// Both ways a context can end abort the whole pass, or a run
+		// stopped by its deadline reports N corrupt files.
 		case r.err != nil && isContextEnd(r.err):
 			return result, r.err
 
@@ -161,13 +159,9 @@ func probeTrackDuration(ctx context.Context, prober probe.Prober, track Track, l
 
 	path := filepath.Join(libraryDir, filepath.FromSlash(string(track.RelativePath)))
 
-	// The file is checked here rather than inferred from the prober's error
-	// text. ffprobe exits non-zero with a diagnostic both for a file that is
-	// absent and for one it cannot decode, so the two were being told apart
-	// by matching on the wording of a message from another program — and a
-	// wording change there would have silently reclassified every absent
-	// file as corrupt, sending the repair path after files that simply are
-	// not there.
+	// The file is checked rather than inferred from the prober's error text:
+	// ffprobe exits non-zero both for an absent file and an undecodable one,
+	// so message wording would misclassify missing files as corrupt.
 	if _, statErr := os.Stat(path); statErr != nil {
 		if os.IsNotExist(statErr) {
 			return 0, false, errTrackFileMissing

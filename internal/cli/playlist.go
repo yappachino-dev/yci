@@ -166,10 +166,9 @@ var playlistShowCmd = &cobra.Command{
 		table := NewTable(cmd.OutOrStdout(), "#", "TRACK_ID", "TITLE", "LENGTH")
 
 		for i, e := range entries {
-			// The row number is the human handle for "remove track 4"; the
-			// track ID is printed alongside it because renumbering after a
-			// removal is exactly why positions should not be the only
-			// identifier given.
+			// The row number is the human handle for "remove track 4". The
+			// ID is printed too, because renumbering after a removal is why
+			// positions must not be the only identifier given.
 			table.Row(
 				strconv.Itoa(i+1),
 				shortTrackID(e.Track.ID),

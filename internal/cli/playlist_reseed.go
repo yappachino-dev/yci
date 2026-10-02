@@ -49,10 +49,9 @@ device.`,
 			return fmt.Errorf("plan reseed for %q: %w", name, err)
 		}
 
-		// The plan already says what it found, including the explicit
-		// "Nothing to change" when there is nothing. Returning straight out
-		// keeps the most common outcome of this command to one sentence
-		// rather than two that say the same thing.
+		// The plan already reported what it found, including "Nothing to
+		// change". Returning here keeps the commonest outcome to one
+		// sentence rather than two saying the same thing.
 		printReseedPlan(cmd, name, report)
 
 		if !report.Changed() {
@@ -105,10 +104,9 @@ func printReseedPlan(cmd *cobra.Command, name string, report library.ReseedRepor
 		plural(report.Unchanged, "track", "tracks"))
 
 	if !report.Changed() {
-		// "Nothing to do" is the most common outcome of this command, and
-		// it used to be reported only implicitly, by leaving out the change
-		// table. Without the sentence the counts read as an invitation to go
-		// looking for a diff that is not there.
+		// Said explicitly because this is the commonest outcome, and the
+		// counts alone read as an invitation to look for a diff that is not
+		// there.
 		cmd.Println("Nothing to change; the recipe already matches the membership.")
 		return
 	}

@@ -13,30 +13,8 @@ import (
 
 // Machine-readable output.
 //
-// The default rendering of every list command is a column-aligned table
-// built with tabwriter, which replaces each tab with padding spaces. That is
-// the right shape for a person and useless for a script:
-//
-//	$ yci track list | cut -f1
-//	5ead5f5e   nekomata-okayu       bRp8fX44icE   少女A / 猫又おかゆ
-//
-// cut sees no tabs, so it returns the whole row, and feeding that back as an
-// ID fails. There was no way to recover the full 36-character ID either, since
-// list output prints an 8-character prefix. `--json` exists to close both gaps:
-// it is the only output in this CLI that is a contract.
-//
-// The types below are declared here rather than marshalled from the domain
-// structs so the schema is deliberate. Reflecting internal structs would tie
-// the published shape to internal field names, so renaming a Go field would
-// silently break every script that reads yci's output. The downside is that
-// they can drift, which is what TestJSONOutputSchemaIsStable pins.
-//
-// No field uses omitempty. A consumer reading `.artist_id` should get an
-// empty string, not a missing key: absence and emptiness are different
-// things, and a schema that changes shape based on the data is not a schema.
-// It is harder to read by eye and it breaks `jq` expressions written against
-// a row that happened to be populated.
-
+// The DTOs below are hand-written rather than reflected from the domain
+// structs, and carry no omitempty. The reasoning is in style-guide 7a.
 // jsonTrack is one track as `--json` reports it.
 type jsonTrack struct {
 	ID           string `json:"id"`

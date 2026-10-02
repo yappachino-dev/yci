@@ -50,10 +50,9 @@ func initApplication(ctx context.Context, autoMigrate bool, logOut io.Writer) (*
 		return nil, fmt.Errorf("create config directory: %w", err)
 	}
 
-	// db.Open, not sql.Open: the foreign key and busy-timeout pragmas are
-	// SQLite connection settings, and issuing them once with Exec would
-	// apply them to a single pooled connection. Every other connection
-	// would then enforce nothing, silently.
+	// db.Open, not sql.Open: the pragmas are connection settings, so
+	// issuing them once with Exec would enforce them on one pooled
+	// connection and silently not on the rest.
 	dbConn, err := db.Open(filepath.Join(configDir, "data.db"))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)

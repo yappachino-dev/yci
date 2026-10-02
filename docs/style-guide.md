@@ -189,6 +189,39 @@ to break. Enums are typed `iota` constants.
 - Dependencies reach commands through the container carried on
   `cmd.Context()` or command structs — not package variables.
 
+## 7a. JSON output
+
+`--json` is a published contract, not a dump of internal state.
+
+**Why not reflect the domain structs.** Reflecting them would tie the
+published shape to Go field names, so renaming a field would silently break
+every script reading yci's output. The cost is that the DTOs can drift from
+the domain types, which is what `TestJSONOutputSchemaIsStable` exists to
+catch.
+
+**Why the table output is unusable for scripts.** Tables are padded with
+spaces, not tabs:
+
+```text
+$ yci track list | cut -f1
+5ead5f5e   nekomata-okayu       bRp8fX44icE   少女A / 猫又おかゆ
+```
+
+`cut` sees no tabs and returns the whole row, which is not a usable ID. And
+list output prints an 8-character prefix, so the full ID cannot be recovered
+from it at all. Human output therefore uses short IDs while JSON uses full
+ones; the two are different presentations of one row.
+
+**No `omitempty`, ever.** A consumer reading `.artist_id` should get an empty
+string, not a missing key. Absence and emptiness are different things, and a
+schema that changes shape based on the data is not a schema.
+
+**Empty lists are `[]`, never `null`.** A script doing `.tracks[]` should not
+need to guard for either.
+
+**stdout carries the requested data;** advisory output goes to stderr, so
+`yci track list --json | jq` works with warnings present.
+
 ## 8. Testing (binding)
 
 Full standard in [`testing-go.md`](testing-go.md). Non-negotiables:
@@ -256,9 +289,11 @@ Rules:
 - **No comment restates what the next line does.** `// increment the counter`
   beside `i++` is pure cost.
 
-Verified by `make comment-check`, which reports comment blocks over the
-limits above. It is not wired into `make check`; see the count noted in
-`docs/technical-debt.md`.
+Enforced by `make comment-check`, which is part of `make check` and part of
+the pre-commit hook. The four longest blocks found when this rule was written
+were written *in the sessions that wrote the rule* — the failure mode was not
+ignoring the limit but treating a fix's reasoning as if it belonged next to
+the fix.
 
 ## 11. Commit conventions
 

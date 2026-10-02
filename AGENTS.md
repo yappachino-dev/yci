@@ -148,10 +148,10 @@ at the CLI boundary. Wrap with `%w` and add context at each layer. See
 ### Comments
 
 `docs/style-guide.md` §10: three lines maximum inside a function body; design
-rationale in `docs/<feature>.md`; history in `docs/technical-debt.md`. Run
-`make comment-check` before committing and do not introduce new violations.
-The command currently fails on pre-existing blocks; that is recorded in the
-register, not a reason to stop.
+rationale in `docs/<feature>.md`; history in `docs/technical-debt.md`. A
+comment that needs a second paragraph means the knowledge should be
+extracted — a constant, a type, a doc — not that the comment should grow.
+Enforced by `make comment-check`, which is part of `make check`.
 
 ### Testing
 

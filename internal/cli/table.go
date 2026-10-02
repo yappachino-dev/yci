@@ -7,22 +7,12 @@ import (
 
 // Table rendering.
 //
-// Every list command draws an aligned table, and until this type existed each
-// one invented its own header dialect: some wrote a row of dashes beneath the
-// header, some wrote one dash per column and some wrote nothing at all. A
-// user moving between `track list` and `playlist show` was reading two
-// different-looking tables with two different header styles, which is a small
-// tax paid on every command.
+// One dialect for every list command: upper-case headers, a dash rule sized
+// to the header, and rows given as pre-formatted cells.
 //
-// The dialect is therefore defined once, here: upper-case column names
-// separated in the source, a rule of dashes sized to each header, and rows
-// supplied as pre-formatted cells.
-//
-// Alignment is computed from display width rather than delegated to
-// text/tabwriter. tabwriter measures a cell in bytes, so a column of Japanese
-// titles is padded as though every character were three cells wide and every
-// row after it starts at a different place on screen. The tests pin this
-// against real CJK text.
+// Alignment is computed from display width, not delegated to text/tabwriter,
+// which measures a cell in bytes and misaligns any column of CJK text. See
+// style-guide 7.
 
 // tablePadding is the gap between columns, in terminal cells.
 const tablePadding = 2
@@ -61,10 +51,8 @@ func (t *Table) Flush() {
 		return
 	}
 
-	// The widest cell in each column sets that column's width. Rows may be
-	// short, or wider than the header row if a caller passed more values
-	// than there are headers, so the width scan covers the union rather than
-	// trusting the header count.
+	// The widest cell sets each column's width. The scan covers the union of
+	// headers and rows rather than trusting the header count.
 	widths := make([]int, len(t.headers))
 	for i, h := range t.headers {
 		widths[i] = displayWidth(h)

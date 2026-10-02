@@ -111,10 +111,9 @@ func parseError(stderr string) error {
 		strings.Contains(s, "403 forbidden"),
 		strings.Contains(s, "error 403"),
 		strings.Contains(s, "status code 403"),
-		// yt-dlp reports a bot check without a status code. It is the
-		// failure the cookies_file setting exists to fix, so it belongs
-		// with the 403s rather than in the generic bucket where the user
-		// is told nothing actionable.
+		// A bot check arrives without a status code. It belongs with the
+		// 403s because cookies_file is the fix, and the generic bucket
+		// tells the user nothing actionable.
 		strings.Contains(s, "sign in to confirm you"),
 		strings.Contains(s, "confirm you're not a bot"),
 		strings.Contains(s, "confirm you are not a bot"),

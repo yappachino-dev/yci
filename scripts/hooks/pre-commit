@@ -29,4 +29,10 @@ if ! git diff --quiet -- internal/store; then
     exit 1
 fi
 
-echo "pre-commit checks passed (gofmt, vet, race tests, sqlc drift)"
+if ! ./scripts/comment-check > /dev/null 2>&1; then
+    echo "pre-commit: comments over the limits in docs/style-guide.md section 10:" >&2
+    ./scripts/comment-check 2>&1 | sed 's/^/    /' >&2
+    exit 1
+fi
+
+echo "pre-commit checks passed (gofmt, vet, race tests, sqlc drift, comment length)"

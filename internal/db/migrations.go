@@ -164,10 +164,9 @@ func Snapshot(database *sql.DB, current int64) (string, error) {
 		return "", err
 	}
 
-	// VACUUM INTO refuses to write onto an existing file. Renaming the
-	// finished temporary over the target is how the replacement happens
-	// atomically, and it is also what keeps a crash from leaving a
-	// truncated backup where a good one used to be.
+	// VACUUM INTO refuses to overwrite, so the copy lands on a temporary
+	// and is renamed over the target: atomic, and a crash mid-write cannot
+	// replace a good backup with a truncated one.
 	tmp, err := os.CreateTemp(dir, SnapshotName+".tmp-*")
 	if err != nil {
 		return "", fmt.Errorf("create temporary snapshot file: %w", err)

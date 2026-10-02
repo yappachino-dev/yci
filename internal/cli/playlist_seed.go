@@ -105,11 +105,9 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 		return fmt.Errorf("no track matches the fragment %s", describeTokens(tokens, mode))
 	}
 
-	// An interactive session gets a second pass in which individual
-	// matches can be deselected. Lexical matching selects on spelling, not
-	// on work identity, so a performer family also brings in collabs and
-	// self-covers; one-time review of the whole set is the only place that
-	// judgement can be applied.
+	// An interactive session gets a second pass in which matches can be
+	// deselected. Lexical matching brings in collabs and self-covers, and
+	// reviewing the whole set once is the only place to apply judgement.
 	if !acceptAll && fragmentFlag == "" && !flagChanged(cmd, flagExclude) && inputIsTTY(cmd) {
 		matched, excludes, err = pickCandidates(cmd, matched, excludes)
 		if err != nil {
@@ -443,15 +441,13 @@ func pickCandidates(cmd *cobra.Command, matched []library.Track, alreadyExcluded
 		}
 	}
 
-	// Order matters: Options must be set before Value, because Value is what
-	// walks the options and marks the ones already in the initial value as
-	// selected. Called the other way round, every row would come up
-	// unselected and the user would have to select the whole family by hand.
-	//
-	// Note the absence of Filtering(true). That call switches the field into
-	// filtering *permanently* and focuses the filter box, so space and enter
-	// go to the filter and the options can never be toggled at all.
-	// Filtering is already enabled; pressing / starts it on demand.
+	// Options must be set before Value: Value is what marks the rows already
+	// in the initial value as selected, and the other order leaves the whole
+	// family deselected.
+
+	// Filtering(true) is deliberately absent. It latches the field into
+	// filtering and focuses the box, so space and enter go to the filter and
+	// no option can be toggled. Filtering is on; / starts it on demand.
 	multi := huh.NewMultiSelect[candidateOption]().
 		Key(candidateSelectKey).
 		Title("Which of these belong in the playlist?").

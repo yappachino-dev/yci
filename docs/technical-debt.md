@@ -29,28 +29,6 @@ register finally has history of its own.
 
 ---
 
-## TD-41 — The comment-length checker fails, so it is not enforced — open
-
-**Severity: low. It is a rule the project does not currently follow.**
-
-`docs/style-guide.md` §10 sets three lines for comments inside a function
-body and twelve for godoc. `scripts/comment-check` enforces it and currently
-**fails on 33 blocks across 68 files**. `make comment-check` is therefore not
-wired into `make check`: a gate that fails every commit gets ignored within a
-week, which is how the prose version of the rule was ignored in the first
-place.
-
-**Fix:** shrink the violations to zero, then add `comment-check` to `check`.
-Mechanical but real work — best done as a deliberate pass, not folded into an
-unrelated change. Trimming a comment means moving its reasoning to
-`docs/<feature>.md` or the commit message, not deleting it silently.
-
-The four longest blocks were written *in the sessions that wrote the rule*.
-The failure mode was not ignoring it but treating a fix's reasoning as if it
-belonged next to the fix.
-
----
-
 ## Deferred by decision, not oversight
 
 These are not open work. They are recorded so they are not rediscovered as

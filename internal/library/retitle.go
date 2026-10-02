@@ -11,11 +11,9 @@ type TitleInterpretation struct {
 	// version markers removed. Structure is never inferred here, so this
 	// value can only be less noisy than the original, never rearranged.
 	Title string
-	// Performer and Version are the parser's guesses. They are untrusted:
-	// the confidence that once gated them was measured to be unreliable
-	// (it reported high confidence while swapping artist and song), so
-	// they are recorded as hints for a future consumer to weigh, and are
-	// never written into Title.
+	// Performer and Version are untrusted guesses, recorded as hints and
+	// never written into Title. The confidence that once gated them was
+	// measured to be unreliable.
 	Performer string
 	Version   string
 }

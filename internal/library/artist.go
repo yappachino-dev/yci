@@ -14,10 +14,9 @@ import (
 
 // Sentinel errors for artist lookups and writes.
 var (
-	// ErrNameEmpty reports a blank artist, folder or channel name. It is a
-	// sentinel because validation runs at the boundary of Create and Rename,
-	// and a caller that needs to distinguish "the user typed nothing" from
-	// any other failure cannot do it with an anonymous fmt.Errorf.
+	// ErrNameEmpty reports a blank artist, folder or channel name. A
+	// sentinel, so a caller can tell "the user typed nothing" from any
+	// other failure.
 	ErrNameEmpty = errors.New("name cannot be empty")
 
 	ErrArtistNotFound      = errors.New("artist not found")

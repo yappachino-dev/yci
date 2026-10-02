@@ -268,10 +268,9 @@ func listQueue(ctx context.Context, cmd *cobra.Command) error {
 			q.SourceID,
 			string(q.Status),
 			strconv.Itoa(q.Attempts),
-			// Bounded, because the full yt-dlp diagnostic runs to around 120
-			// characters and a single one of those pushes every other row's
-			// columns out of alignment. The whole message is still in
-			// --json, where a column width cannot break a consumer.
+			// Bounded: one full yt-dlp diagnostic is ~120 characters and
+			// would push every other row out of alignment. The whole
+			// message is still in --json, where a width breaks nothing.
 			queueErrorSummary(q.ErrorMsg),
 		)
 	}

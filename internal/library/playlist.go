@@ -41,10 +41,8 @@ type Playlist struct {
 	// silently change meaning.
 	MatchMode MatchMode
 	// FragmentExcludes are track IDs the user deselected from the derived
-	// set. Token matching is lexical rather than work-identity based, so it
-	// also selects collabs and titles that merely share a word; these are
-	// the deliberate exceptions, recorded in the recipe so that re-deriving
-	// does not put them back.
+	// set. They live in the recipe, not in the membership, so that
+	// re-deriving does not put them back.
 	FragmentExcludes []TrackID
 }
 

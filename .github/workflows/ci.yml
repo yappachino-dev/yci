@@ -39,3 +39,7 @@ jobs:
         run: |
           go tool sqlc generate
           git diff --exit-code -- internal/store db/queries
+
+      # Comments stay short and precise: docs/style-guide.md section 10.
+      - name: Comment length
+        run: ./scripts/comment-check

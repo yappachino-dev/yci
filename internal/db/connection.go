@@ -7,41 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	// The driver is imported here because this file is what calls
-	// sql.Open("sqlite", ...). It happened to be registered transitively
-	// via the error types in errors.go, which is a dependency that can
-	// disappear without any visible cause.
+	// Imported here rather than relied on transitively: this is the file
+	// that opens the database, so this is where the driver belongs.
 	_ "modernc.org/sqlite"
 )
 
 // Pragma settings every connection must agree on.
 //
-// foreign_keys is the load-bearing one. yci's correctness depends on it:
-// playlist membership cascades on delete, a playlist's seed track goes NULL
-// rather than dangling, and folder deletes cascade. Setting it with a plain
-// `db.Exec("PRAGMA foreign_keys = ON")` looks correct and is not, because
-// SQLite scopes the pragma to the connection that ran it and database/sql
-// hands out a pool. Every other connection opened afterwards silently has
-// foreign_keys=0 and enforces nothing. The DSN form is applied by the driver
-// to each connection as it is created, so there is no connection that can
-// miss it.
-//
-// busy_timeout is a second per-connection setting with the same problem and
-// the same fix. Without it a writer that finds the database locked fails
-// immediately with SQLITE_BUSY instead of waiting.
-//
-// journal_mode is set to WAL. It is the one pragma here that is persistent
-// rather than per-connection, so it only takes effect the first time a
-// database is opened, and it adds -wal and -shm sidecars beside the database.
-//
-// It is worth having: yci is the only writer, and WAL removes the
-// reader-blocks-writer contention that produces SQLITE_BUSY, which this
-// project has already hit once. The sidecar hazard is handled by `make
-// sandbox`, which snapshots with VACUUM INTO rather than copying data.db —
-// a plain copy would have silently produced a stale sandbox.
-//
-// A side effect is that the config directory gains data.db-wal and
-// data.db-shm. They are transient: SQLite removes them on a clean close.
+// These belong in the DSN and nowhere else: SQLite scopes a pragma to the
+// connection that ran it, and database/sql hands out a pool, so a one-time
+// db.Exec leaves every later connection unenforced. See style-guide 5.
 const (
 	pragmaForeignKeys = "foreign_keys(1)"
 	pragmaBusyTimeout = "busy_timeout(5000)"
@@ -68,11 +43,9 @@ func DSN(path string) string {
 		base = path
 	}
 
-	// url.Values is used rather than a hand-written query string for two
-	// reasons: it escapes what needs escaping, and the repeated _pragma
-	// keys survive. The driver loops over q["_pragma"] and runs each value
-	// as its own statement, which is the only way to set more than one
-	// pragma — "pragma a(1),b(2)" is not valid SQLite.
+	// url.Values, not a hand-built string: the driver loops over the
+	// repeated _pragma key and runs each as its own statement, which is
+	// the only way to set several (SQLite has no "pragma a(1),b(2)").
 	q := url.Values{}
 	q.Add("_pragma", pragmaForeignKeys)
 	q.Add("_pragma", pragmaBusyTimeout)

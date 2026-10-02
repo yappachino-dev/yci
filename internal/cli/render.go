@@ -57,18 +57,14 @@ func shortTrackID(id library.TrackID) string {
 }
 
 // displayWidth is how many terminal cells s occupies, which is the only
-// column-width measure that matches what the reader sees.
+// width measure that matches what the reader sees: a byte count triples a CJK
+// character and a rune count calls it one, and this library is largely
+// Japanese, so that is the normal case rather than an edge case.
 //
-// Runes and bytes are both wrong here, in opposite directions. A byte count
-// triples a CJK character and a rune count calls it one, so a library of
-// Japanese tracks is either ragged or twice as wide as intended. The CLI
-// exists to display a library that is largely Japanese, so this is not an edge
-// case: it is the normal case.
-//
-// runewidth is already linked into this binary through huh, so using it here
-// costs no new dependency and gets the maintained East Asian Width tables
-// rather than a hand-rolled subset that would be wrong for every character
-// outside the block somebody thought of.
+// Uses runewidth.StringWidth, already linked through huh, rather than a
+// hand-rolled subset that would be wrong outside the block it was written
+// for. StringWidth rather than a per-rune sum, so that a variation sequence
+// such as U+25B6 U+FE0F measures as one two-cell unit.
 func displayWidth(s string) int {
 	return runewidth.StringWidth(s)
 }

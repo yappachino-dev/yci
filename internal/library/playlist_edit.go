@@ -48,9 +48,8 @@ func (s *PlaylistService) Rename(ctx context.Context, oldName, newName string) (
 	}
 
 	// A case-only rename is allowed through: SQLite excludes the row being
-	// updated from its own UNIQUE check, so "gym" -> "Gym" is a real
-	// change the user asked for, not a self-conflict. Short-circuiting it
-	// here would silently keep the old spelling.
+	// updated from its own UNIQUE check, so "gym" -> "Gym" is a real change
+	// the user asked for, not a self-conflict.
 	if err := s.repo.Rename(ctx, p.ID, trimmed); err != nil {
 		return result, err
 	}
