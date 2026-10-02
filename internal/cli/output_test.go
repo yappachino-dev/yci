@@ -109,6 +109,32 @@ func TestListOutput(t *testing.T) {
 		}
 	})
 
+	t.Run("channels show only what a command accepts", func(t *testing.T) {
+		c := newTestContainer(t)
+		_, artistID := seedLibrary(t, c)
+		if err := c.ChannelService.Link(t.Context(), artistID, library.ChannelName("Polka Ch. 尾丸ポルカ")); err != nil {
+			t.Fatalf("link channel: %v", err)
+		}
+
+		got := runList(t, c, listChannels)
+
+		// `channel create` and `channel delete` identify a link by artist
+		// plus channel name, so those are the two columns that can be typed
+		// back. The integer rowid is not accepted by anything.
+		if !strings.Contains(got, "ARTIST_ID") || !strings.Contains(got, "CHANNEL_NAME") {
+			t.Errorf("missing the identifying columns:\n%s", got)
+		}
+		if !strings.Contains(got, "Polka Ch. 尾丸ポルカ") {
+			t.Errorf("channel name missing from output:\n%s", got)
+		}
+		// Checked on the header line, not the whole output: "ARTIST_ID"
+		// itself ends in "ID" and would match a naive substring search.
+		header := strings.SplitN(got, "\n", 2)[0]
+		if strings.HasPrefix(header, "ID") {
+			t.Errorf("channel table still leads with a rowid column: %q", header)
+		}
+	})
+
 	t.Run("empty libraries explain how to fix it", func(t *testing.T) {
 		c := newTestContainer(t)
 

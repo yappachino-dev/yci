@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"strconv"
-
 	"context"
 	"fmt"
 	"strings"
@@ -97,10 +95,14 @@ func listChannels(ctx context.Context, cmd *cobra.Command) error {
 		return nil
 	}
 
-	table := NewTable(cmd.OutOrStdout(), "ID", "ARTIST_ID", "CHANNEL_NAME")
+	// No ID column: it is the row's integer primary key, and no command
+	// accepts it — `channel create` and `channel delete` both identify a
+	// link by artist plus channel name. Printing a value the reader cannot
+	// type back is worse than not printing it.
+	table := NewTable(cmd.OutOrStdout(), "ARTIST_ID", "CHANNEL_NAME")
 
 	for _, c := range channels {
-		table.Row(strconv.Itoa(c.ID), string(c.ArtistID), string(c.Name))
+		table.Row(string(c.ArtistID), string(c.Name))
 	}
 
 	table.Flush()
