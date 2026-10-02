@@ -191,7 +191,7 @@ func (q *Queries) GetTracksByPath(ctx context.Context, path string) ([]GetTracks
 
 const listTracksMissingDuration = `-- name: ListTracksMissingDuration :many
 SELECT tracks.id, tracks.title, tracks.album, tracks.artist_id, tracks.duration_sec, tracks.relative_path, tracks.source_id, tracks.source, tracks.raw_title, tracks.performer, tracks.version FROM tracks
-WHERE duration_sec = 0
+WHERE duration_sec IS NULL OR duration_sec = 0
 ORDER BY id
 `
 
@@ -199,6 +199,9 @@ type ListTracksMissingDurationRow struct {
 	Track Track
 }
 
+// NULL is listed alongside 0 so the probe's candidates match what the UI
+// shows as unknown. They are the same fact; the check is defensive, not
+// because both values are expected.
 func (q *Queries) ListTracksMissingDuration(ctx context.Context) ([]ListTracksMissingDurationRow, error) {
 	rows, err := q.db.QueryContext(ctx, listTracksMissingDuration)
 	if err != nil {

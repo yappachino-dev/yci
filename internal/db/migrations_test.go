@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pressly/goose/v3"
+
 	"testing"
 )
 
@@ -277,5 +279,80 @@ func TestMigrateIsNotBlockedByAnExistingSnapshot(t *testing.T) {
 
 	if msg := out.String(); !strings.Contains(msg, "pre-migration-v") {
 		t.Errorf("migration report does not name the snapshot it wrote: %q", msg)
+	}
+}
+
+// migrateTo applies migrations only up to version, so a test can create the
+// world a migration is meant to fix and then step into it.
+func migrateTo(t *testing.T, dbConn *sql.DB, version int64) {
+	t.Helper()
+
+	if err := goose.UpTo(dbConn, ".", version); err != nil {
+		t.Fatalf("migrate to %d: %v", version, err)
+	}
+}
+
+// TestMigration013NormalisesNullDurations is the reason 013 exists.
+//
+// NULL and 0 both render as "unknown", so the difference was invisible, but
+// the probe selects on 0. That left tracks showing as unknown which the probe
+// would never consider, and the two counts could not agree.
+func TestMigration013NormalisesNullDurations(t *testing.T) {
+	dbConn := openMigratedDB(t)
+	migrateTo(t, dbConn, 12)
+
+	const insert = `INSERT INTO tracks
+		(id, title, relative_path, duration_sec)
+		VALUES ('t1', 'With NULL', 'a.opus', NULL),
+		       ('t2', 'With zero', 'b.opus', 0),
+		       ('t3', 'With value', 'c.opus', 123)`
+
+	if _, err := dbConn.Exec(insert); err != nil {
+		t.Fatalf("seed tracks: %v", err)
+	}
+
+	var nullsBefore int
+	if err := dbConn.QueryRow(
+		`SELECT count(*) FROM tracks WHERE duration_sec IS NULL`,
+	).Scan(&nullsBefore); err != nil {
+		t.Fatal(err)
+	}
+	if nullsBefore != 1 {
+		t.Fatalf("setup: %d NULL durations before migration, want 1", nullsBefore)
+	}
+
+	if err := RunMigrations(t.Context(), dbConn); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+
+	var nullsAfter, zeroAfter int
+	if err := dbConn.QueryRow(
+		`SELECT count(*) FROM tracks WHERE duration_sec IS NULL`,
+	).Scan(&nullsAfter); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbConn.QueryRow(
+		`SELECT count(*) FROM tracks WHERE duration_sec = 0`,
+	).Scan(&zeroAfter); err != nil {
+		t.Fatal(err)
+	}
+
+	if nullsAfter != 0 {
+		t.Errorf("%d NULL durations remain, want 0", nullsAfter)
+	}
+	// The 0 that was already there and the 0 the migration produced must not
+	// be distinguishable: both are "not yet known".
+	if zeroAfter != 2 {
+		t.Errorf("%d zero durations, want 2 (one existing, one converted)", zeroAfter)
+	}
+
+	var known int64
+	if err := dbConn.QueryRow(
+		`SELECT duration_sec FROM tracks WHERE id = 't3'`,
+	).Scan(&known); err != nil {
+		t.Fatal(err)
+	}
+	if known != 123 {
+		t.Errorf("known duration = %d, want 123: the migration must not overwrite it", known)
 	}
 }

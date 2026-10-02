@@ -57,6 +57,9 @@ SET duration_sec = :duration_sec
 WHERE id = :id;
 
 -- name: ListTracksMissingDuration :many
+-- NULL is listed alongside 0 so the probe's candidates match what the UI
+-- shows as unknown. They are the same fact; the check is defensive, not
+-- because both values are expected.
 SELECT sqlc.embed(tracks) FROM tracks
-WHERE duration_sec = 0
+WHERE duration_sec IS NULL OR duration_sec = 0
 ORDER BY id;
