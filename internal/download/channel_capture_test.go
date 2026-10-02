@@ -3,6 +3,7 @@ package download
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -178,5 +179,37 @@ func TestConsumeStdoutWithNoMetadataLine(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "just some output") {
 		t.Errorf("output swallowed: %q", out.String())
+	}
+}
+
+// TestMetadataTemplateMatchesTheParser guards the coupling between the --print
+// template and parseMetadataLine. A template with a different field count
+// parses as "not our line", so the resolver silently reports no channel and
+// every backfill comes back empty with no error anywhere.
+func TestMetadataTemplateMatchesTheParser(t *testing.T) {
+	fields := strings.Split(metadataTemplate, "\t")
+	if len(fields) != 4 {
+		t.Fatalf("metadataTemplate has %d fields, parseMetadataLine requires 4: %q", len(fields), metadataTemplate)
+	}
+	if fields[0] != metadataPrefix {
+		t.Errorf("template starts with %q, want %q", fields[0], metadataPrefix)
+	}
+
+	// A line shaped exactly like the template's output must be recognised,
+	// which is the property the resolver depends on end to end.
+	sample := metadataPrefix + "\tdQw4w9WgXcQ\tUC8rcEBzJSleTkf_-agPM20g\tIRyS Ch. hololive"
+	if _, ok := parseMetadataLine(sample); !ok {
+		t.Error("a line shaped like the template's own output was not recognised")
+	}
+
+	// And the resolver must actually print that template. Asserting on the
+	// constant alone passed while the resolver used a shorter one, which made
+	// every lookup return no channel and no error.
+	resolverArgs := buildResolveArgs("dQw4w9WgXcQ", "")
+	if !slices.Contains(resolverArgs, metadataTemplate) {
+		t.Errorf("resolver does not print metadataTemplate: %v", resolverArgs)
+	}
+	if slices.Contains(resolverArgs, "--dump-json") {
+		t.Errorf("resolver uses --dump-json, which simulates the download: %v", resolverArgs)
 	}
 }
