@@ -19,13 +19,14 @@ This file is for **open** items only.
 - Anything here that describes a design decision or a measurement belongs in
   `docs/<feature>.md` instead.
 
-`TD-01`–`TD-39` were resolved and retired on 2026-10-02, including the
-resolved parts of the queue-loop and comment-checker work; the four entries
-below are the remainders of that work under fresh numbers. Their detail was
-removed rather than archived: the reasoning that mattered was promoted into
-`docs/style-guide.md`, `AGENTS.md` and the feature docs, which is the only
-reason removing it was safe. From this commit `docs/` is versioned, so this
-register finally has history of its own.
+`TD-01`–`TD-43` are all retired. Their detail was removed rather than
+archived: the reasoning that mattered was promoted into `docs/style-guide.md`,
+`AGENTS.md` and the feature docs, which is the only reason removing it was
+safe.
+
+**This file currently has no open entries**, which is a statement about when
+it was last read rather than a claim that the codebase is clean. The next
+flaw found starts at `TD-44`.
 
 ---
 
