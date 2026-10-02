@@ -357,3 +357,57 @@ func TestPlaylistJSONKeepsAStableShapeWhenEmpty(t *testing.T) {
 		t.Errorf("seed_track_id = %v, want empty", got["seed_track_id"])
 	}
 }
+
+// TestArtistJSONMapsEveryField exercises the artist mapping itself, not just
+// the shape of the DTO. TestJSONOutputSchemaIsStable marshals jsonArtist
+// directly, so it pins the keys while proving nothing about the mapping from
+// library.Artist: a field added to the domain type and never copied here
+// would pass every test and simply not appear in the output.
+func TestArtistJSONMapsEveryField(t *testing.T) {
+	raw, err := json.Marshal(toJSONArtist(library.Artist{
+		ID:       "mori-calliope",
+		Name:     "Mori Calliope",
+		FolderID: "vtuber",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got jsonArtist
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.ID != "mori-calliope" || got.Name != "Mori Calliope" || got.FolderID != "vtuber" {
+		t.Errorf("artist mapped as %+v", got)
+	}
+}
+
+// TestArtistJSONKeepsKeysWhenFolderless covers the no-omitempty rule for the
+// one artist field that is genuinely optional. An artist created before it
+// was filed, or created with no folder, must still emit folder_id; a consumer
+// reading it unconditionally would otherwise get a missing key.
+func TestArtistJSONKeepsKeysWhenFolderless(t *testing.T) {
+	raw, err := json.Marshal(toJSONArtist(library.Artist{
+		ID:   "unfiled",
+		Name: "未整理",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 3 {
+		t.Errorf("keys = %v, want exactly id, name, folder_id", got)
+	}
+	if got["folder_id"] != "" {
+		t.Errorf("folder_id = %v, want empty string", got["folder_id"])
+	}
+	if got["name"] != "未整理" {
+		t.Errorf("name = %v, want the untranslated name", got["name"])
+	}
+}
