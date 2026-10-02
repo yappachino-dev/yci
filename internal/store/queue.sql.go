@@ -138,18 +138,27 @@ func (q *Queries) ResetHardFailedDownloads(ctx context.Context, maxAttempts int6
 const resetOrphanedDownloads = `-- name: ResetOrphanedDownloads :exec
 UPDATE download_queue
 SET
+    attempts = MAX(attempts - 1, 0),
     status = CASE
-        WHEN attempts >= ?1 THEN 'failed'
+        WHEN attempts - 1 >= ?1 THEN 'failed'
         ELSE 'pending'
     END,
     error_msg = CASE
-        WHEN attempts >= ?1 THEN 'interruped while processing (attempts exhausted)'
+        WHEN attempts - 1 >= ?1 THEN 'interrupted while processing (attempts exhausted)'
         ELSE error_msg
     END,
     updated_at = CURRENT_TIMESTAMP
 WHERE status = 'processing'
 `
 
+// An orphaned row is one left 'processing' by a run that was interrupted
+// (Ctrl-C, crash, SIGTERM) rather than one that failed: a failure goes
+// through Fail and lands in 'failed'. Interrupting is not an attempt the
+// track spent, so attempts is given back. Without this, three interrupts
+// exhaust the retry budget and fail a track that never errored.
+//
+// The CASE reads the pre-update attempts, so the status decision and the
+// decremented counter stay consistent.
 func (q *Queries) ResetOrphanedDownloads(ctx context.Context, maxAttempts int64) error {
 	_, err := q.db.ExecContext(ctx, resetOrphanedDownloads, maxAttempts)
 	return err

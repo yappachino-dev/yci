@@ -472,14 +472,9 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 		}
 
 		if err := s.downloader.Download(ctx, cfg); err != nil {
-			// Cancelled run: leave the row processing and let the next run's
-			// ResetPending re-arm it, and do not record a bogus failure.
-			//
-			// The attempt is still counted. Start increments it before the
-			// download runs, and the row cannot be written back here because
-			// that write would need the cancelled context. Ctrl-C three
-			// times will therefore fail a track without a real error; see
-			// TD-38.
+			// Cancelled: leave the row processing and record nothing, since
+			// the write would need the cancelled context. The next run's
+			// ResetPending re-arms it and returns the attempt it never spent.
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}

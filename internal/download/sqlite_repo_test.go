@@ -319,6 +319,68 @@ func TestResetPendingClearsInterruptedRuns(t *testing.T) {
 	if _, ok := nextPending(t, repo); !ok {
 		t.Error("the reset entry should be actionable")
 	}
+
+	// Start already counted the attempt; an interrupted run never spent it.
+	if got := entryBySource(t, repo, "interrupted").Attempts; got != 0 {
+		t.Errorf("attempts after ResetPending = %d, want 0: an interrupt is not a failure", got)
+	}
+}
+
+// Interrupting repeatedly must not be able to fail a track on its own.
+func TestResetPendingGivesBackEveryInterruptedAttempt(t *testing.T) {
+	repo := newQueueRepo(t)
+	ctx := context.Background()
+
+	mustEnqueue(t, repo, "crtl-c")
+	entry, _ := nextPending(t, repo)
+
+	for range 5 {
+		if err := repo.Start(ctx, entry.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.ResetPending(ctx, maxAttempts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	after := entryBySource(t, repo, "crtl-c")
+	if after.Status != QueueStatusPending {
+		t.Errorf("status after 5 interrupts = %q, want pending", after.Status)
+	}
+	if after.Attempts != 0 {
+		t.Errorf("attempts after 5 interrupts = %d, want 0", after.Attempts)
+	}
+}
+
+// A genuinely exhausted entry stays terminal even if it was interrupted last.
+func TestResetPendingKeepsAnExhaustedEntryFailed(t *testing.T) {
+	repo := newQueueRepo(t)
+	ctx := context.Background()
+
+	mustEnqueue(t, repo, "spent")
+	entry, _ := nextPending(t, repo)
+
+	// The budget is the first attempt plus maxAttempts retries, so reaching
+	// the end of it takes maxAttempts+1 starts. The last one is interrupted.
+	for range maxAttempts + 1 {
+		if err := repo.Start(ctx, entry.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.ResetPending(ctx, maxAttempts); err != nil {
+		t.Fatal(err)
+	}
+
+	// Giving back the interrupted attempt lands exactly on the budget, not
+	// past it: the entry is spent, but not over-spent.
+	after := entryBySource(t, repo, "spent")
+	if after.Status != QueueStatusFailed {
+		t.Errorf("status = %q, want failed: the budget is spent", after.Status)
+	}
+	if after.Attempts != maxAttempts {
+		t.Errorf("attempts = %d, want %d: only the interrupted one is returned",
+			after.Attempts, maxAttempts)
+	}
 }
 
 // TestRepositoryRoutesThroughTheTransaction guards the SQLITE_BUSY fix at the

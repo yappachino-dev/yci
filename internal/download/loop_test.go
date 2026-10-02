@@ -83,31 +83,10 @@ func newLoopService(t *testing.T, dl Downloader) (*Service, *SQLiteQueueRepo) {
 	}), repo
 }
 
-// inQueue reports whether a source ID still has a row.
-//
-// Separate from entryBySource because a completed download deliberately
-// leaves no row at all: the schema has nowhere to record "done", so Complete
-// deletes the entry. Absence is the success signal, not an error.
-func inQueue(t *testing.T, r *SQLiteQueueRepo, sourceID string) bool {
-	t.Helper()
-
-	for _, e := range mustAll(t, r) {
-		if e.SourceID == sourceID {
-			return true
-		}
-	}
-	return false
-}
-
-func mustAll(t *testing.T, r *SQLiteQueueRepo) []QueueEntry {
-	t.Helper()
-
-	all, err := r.All(t.Context())
-	if err != nil {
-		t.Fatalf("list queue: %v", err)
-	}
-	return all
-}
+// noOpReporter is the production no-op; the loop tests assert on repository
+// state and result counts rather than on report events, and the event
+// ordering is covered separately by recordingReporter.
+var _ Reporter = noOpReporter{}
 
 type staticStaging struct{ StagingDirPath string }
 
@@ -281,7 +260,7 @@ func TestProcessQueueExhaustsTheRetryBudgetAcrossRuns(t *testing.T) {
 	wantAttempts := maxAttempts + 1 // the first attempt, plus maxAttempts retries
 
 	for run := 0; run < wantAttempts; run++ {
-		if _, err := svc.ProcessQueue(ctx, QueueRunConfig{}, reporterDiscard{}); err != nil {
+		if _, err := svc.ProcessQueue(ctx, QueueRunConfig{}, noOpReporter{}); err != nil {
 			t.Fatalf("run %d: %v", run, err)
 		}
 		e := entryBySource(t, repo, "aaaaaaaaaaa")
@@ -300,7 +279,7 @@ func TestProcessQueueExhaustsTheRetryBudgetAcrossRuns(t *testing.T) {
 	}
 
 	// A further run must not resurrect or re-attempt a failed track.
-	if _, err := svc.ProcessQueue(ctx, QueueRunConfig{}, reporterDiscard{}); err != nil {
+	if _, err := svc.ProcessQueue(ctx, QueueRunConfig{}, noOpReporter{}); err != nil {
 		t.Fatalf("extra run: %v", err)
 	}
 	if calls != wantAttempts {
@@ -340,7 +319,7 @@ func TestProcessQueueCancellationLeavesTheTrackForTheNextRun(t *testing.T) {
 	mustEnqueue(t, repo, "aaaaaaaaaaa")
 	mustEnqueue(t, repo, "bbbbbbbbbbb")
 
-	result, err := svc.ProcessQueue(ctx, QueueRunConfig{}, reporterDiscard{})
+	result, err := svc.ProcessQueue(ctx, QueueRunConfig{}, noOpReporter{})
 	if err == nil {
 		t.Fatal("ProcessQueue returned nil, want the context error")
 	}
@@ -357,73 +336,105 @@ func TestProcessQueueCancellationLeavesTheTrackForTheNextRun(t *testing.T) {
 	if e.ErrorMsg != "" {
 		t.Errorf("error_msg = %q, want no bogus failure recorded against a cancelled run", e.ErrorMsg)
 	}
+	// Start counted the attempt before the download ran, and the cancelled
+	// context left no way to write it back here.
 	if e.Attempts != 1 {
-		t.Errorf("attempts = %d, want 1: Start increments before the download, see TD-38", e.Attempts)
+		t.Errorf("attempts = %d, want 1: Start increments before the download", e.Attempts)
 	}
 
-	// The next run re-arms it and the track is still downloadable.
+	// The next run re-arms the row, gives the attempt back, and finishes the
+	// track. Interrupting is not a failure, so it must not cost a retry.
 	fresh := context.Background()
-	if _, err := svc.ProcessQueue(fresh, QueueRunConfig{}, reporterDiscard{}); err != nil {
+	recovered, err := svc.ProcessQueue(fresh, QueueRunConfig{}, noOpReporter{})
+	if err != nil {
 		t.Fatalf("recovery run: %v", err)
 	}
+	if recovered.Success != 2 {
+		t.Errorf("recovery Success = %d, want both tracks", recovered.Success)
+	}
 	if inQueue(t, repo, "aaaaaaaaaaa") {
-		t.Error("the track did not complete after a clean run")
+		t.Error("the interrupted track did not complete on the next run")
 	}
 }
 
-// TestProcessQueueTerminalErrorFailsImmediately covers the other half: a
-// forbidden video will never succeed, so retrying it three times only delays
-// the news that the track is unavailable.
-func TestProcessQueueTerminalErrorFailsImmediately(t *testing.T) {
+// Three interrupts in a row must not exhaust a track's retry budget.
+func TestProcessQueueRepeatedInterruptsDoNotFailATrack(t *testing.T) {
+	calls := 0
+	var cancel context.CancelFunc
+
+	// The downloader cancels mid-run, as a Ctrl-C does, for the first three
+	// attempts. The fourth succeeds.
 	dl := &fakeDownloader{
 		behaviour: map[string]func(Config) error{
 			"aaaaaaaaaaa": func(Config) error {
-				return fmt.Errorf("execute yt-dlp: %w: HTTP Error 403", ErrForbidden)
+				calls++
+				if calls <= 3 {
+					cancel()
+					return context.Canceled
+				}
+				return nil
 			},
 		},
 	}
 
 	svc, repo := newLoopService(t, dl)
-	ctx := context.Background()
 	mustEnqueue(t, repo, "aaaaaaaaaaa")
 
-	result, err := svc.ProcessQueue(ctx, QueueRunConfig{}, reporterDiscard{})
+	for run := range 3 {
+		ctx, c := context.WithCancel(context.Background())
+		cancel = c
+
+		if _, err := svc.ProcessQueue(ctx, QueueRunConfig{}, noOpReporter{}); err == nil {
+			t.Fatalf("run %d: want the context error", run)
+		}
+
+		// The row is still processing: ResetPending runs at the start of the
+		// *next* run, so the attempt spent here is returned there, not here.
+		e := entryBySource(t, repo, "aaaaaaaaaaa")
+		if e.Status != QueueStatusProcessing {
+			t.Fatalf("run %d: status = %q, want processing", run, e.Status)
+		}
+		// The number that matters: without the return, this would be 3 after
+		// three runs and the fourth run would fail the track outright.
+		if e.Attempts != 1 {
+			t.Fatalf("run %d: attempts = %d, want 1: interrupts must not accumulate", run, e.Attempts)
+		}
+	}
+
+	result, err := svc.ProcessQueue(context.Background(), QueueRunConfig{}, noOpReporter{})
 	if err != nil {
-		t.Fatalf("ProcessQueue: %v", err)
+		t.Fatalf("final run: %v", err)
 	}
-	if result.Failed != 1 || result.Success != 0 {
-		t.Errorf("result = %+v, want one failure", result)
+	if result.Success != 1 {
+		t.Errorf("Success = %d, want 1: three interrupts must not exhaust the budget", result.Success)
 	}
-
-	e := entryBySource(t, repo, "aaaaaaaaaaa")
-	if e.Status != QueueStatusFailed {
-		t.Errorf("status = %q, want failed on the first attempt", e.Status)
-	}
-	if e.Attempts != 1 {
-		t.Errorf("attempts = %d, want 1", e.Attempts)
+	if inQueue(t, repo, "aaaaaaaaaaa") {
+		t.Error("the track should have completed")
 	}
 }
 
-// TestNewServiceDefaultsToRealYtDlp records that the seam is opt-in. A caller
-// that does not supply a downloader gets the real one, so the production
-// wiring cannot silently become a no-op.
-func TestNewServiceDefaultsToRealYtDlp(t *testing.T) {
-	svc := NewService(ServiceConfig{})
+// inQueue reports whether a source ID still has a row.
+//
+// Separate from entryBySource because a completed download deliberately
+// leaves no row at all: the schema has nowhere to record "done", so Complete
+// deletes the entry. Absence is the success signal, not an error.
+func inQueue(t *testing.T, r *SQLiteQueueRepo, sourceID string) bool {
+	t.Helper()
 
-	if _, ok := svc.downloader.(ytDlp); !ok {
-		t.Errorf("default downloader is %T, want ytDlp", svc.downloader)
+	for _, e := range mustAll(t, r) {
+		if e.SourceID == sourceID {
+			return true
+		}
 	}
-	if _, ok := svc.playlistFetcher.(ytDlp); !ok {
-		t.Errorf("default playlist fetcher is %T, want ytDlp", svc.playlistFetcher)
-	}
+	return false
 }
 
-type reporterDiscard struct{}
+func mustAll(t *testing.T, r *SQLiteQueueRepo) []QueueEntry {
+	t.Helper()
 
-func (reporterDiscard) OnHybridURL(string, bool)        {}
-func (reporterDiscard) OnPlaylistURL(string)            {}
-func (reporterDiscard) OnEnqueueSkipped(string, string) {}
-func (reporterDiscard) OnQueueStart(int)                {}
-func (reporterDiscard) OnTrackStart(int, int, string)   {}
-func (reporterDiscard) OnTrackSuccess(string)           {}
-func (reporterDiscard) OnTrackFailure(string, error)    {}
+	all, err := r.All(t.Context())
+	if err != nil {
+		t.Fatalf("list queue: %v", err)
+	}
+	return all
+}

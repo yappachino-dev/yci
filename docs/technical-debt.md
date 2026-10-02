@@ -29,30 +29,6 @@ register finally has history of its own.
 
 ---
 
-## TD-40 — A cancelled run consumes a download attempt — open
-
-**Severity: low, but it corrupts a counter silently.**
-
-`QueueRepo.Start` increments `attempts` before the download runs. On
-cancellation `ProcessQueue` returns without writing the row back, because that
-write would need the cancelled context. The row is therefore left in
-`processing` with its attempt already counted, and the next run's
-`ResetOrphanedDownloads` re-arms the status without resetting `attempts`.
-
-Three interrupts during a run fail a track that never actually errored.
-
-**Fixing it is a product decision, not a cleanup.** Either decrement
-`attempts` for interrupted rows in `ResetOrphanedDownloads`, or move the
-increment to after the download succeeds. The second option changes what an
-attempt means for genuinely slow downloads, so it needs a decision rather
-than an edit.
-
-Verified by `TestProcessQueueCancellationLeavesTheTrackForTheNextRun`, which
-pins all three facts: the row is left `processing`, the next run picks it up,
-and the attempt is consumed.
-
----
-
 ## TD-41 — The comment-length checker fails, so it is not enforced — open
 
 **Severity: low. It is a rule the project does not currently follow.**
