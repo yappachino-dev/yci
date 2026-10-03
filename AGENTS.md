@@ -55,7 +55,10 @@ self-studies from `docs/*.md` between sessions.
   generated `internal/store` together — never code without the regenerated
   store. Stage `AGENTS.md` only when its guidelines genuinely changed; most
   feature commits leave it alone. `docs/` is versioned and updated in the same
-  commit as the code it describes.
+  commit as the code it describes. **Commit straight to `main`.** There is no
+  branch/PR/merge policy here, and this overrides the global baseline rule
+  against committing to the primary branch. Pushing is still opt-in and only
+  on request.
 - **Editing**: use the `edit` tool for targeted changes; scripted bulk edits
   only for genuinely mechanical multi-file rewrites. A scripted edit has
   already destroyed two register entries here — read back what you wrote.
