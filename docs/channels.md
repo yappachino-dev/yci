@@ -121,6 +121,25 @@ the rename is exactly the case being repaired.
 
 Outcomes are `attached`, `renamed`, `already known`, `unresolved`, `failed`.
 
+**It is paced and it narrates.** Requests use the same `download.delay` setting
+as downloads (default `5:30`), because each lookup is a separate yt-dlp process
+and yt-dlp's own `--sleep-interval` cannot apply *between* processes. An unspaced
+loop over the same host is how a run turns into a 403 half way through, which is
+the failure the download path already classifies.
+
+Progress goes to stderr, so stdout stays reserved for the table:
+
+```
+[*] Resolving 14 artists over 14 links, one request per artist (this talks to YouTube).
+[1/14] cecilia-immergreen
+      cecilia-immergreen -> UCvN5h1ShZtc7nly3pezRayg (Cecilia Immergreen Ch. hololive)
+```
+
+Without this the run is an unresponsive terminal for the duration, which is
+indistinguishable from a hang. There is no sleep after the final artist, and the
+wait honours cancellation, so Ctrl-C returns immediately rather than sitting out
+the timer.
+
 A `renamed` link keeps its old name. The backfill knows the ID and the current
 name, but not that the link is *correct*; import does, because the ID matched.
 Correcting the label is left to that proof rather than applied on a guess.

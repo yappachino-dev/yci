@@ -3,7 +3,9 @@ package library
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 )
 
 // stubProbe answers "which channel does this video belong to" without a
@@ -42,12 +44,35 @@ func backfillService(t *testing.T, probe *stubProbe) (*ChannelService, *libraryE
 	return svc, env
 }
 
+// musicFolder returns the shared folder, creating it once per env. Tests that
+// seed several artists would otherwise collide on the second create.
+func musicFolder(t *testing.T, env *libraryEnv) FolderID {
+	t.Helper()
+
+	if id, ok := env.testFolder["music"]; ok {
+		return id
+	}
+
+	f := env.mustCreateFolder(t, "Music")
+	if env.testFolder == nil {
+		env.testFolder = map[string]FolderID{}
+	}
+	env.testFolder["music"] = f.ID
+
+	return f.ID
+}
+
 // artistWithTrack creates an artist holding one track under a known video ID.
 func artistWithTrack(t *testing.T, env *libraryEnv, artistID, videoID string) {
 	t.Helper()
 
-	folder := env.mustCreateFolder(t, "Music")
-	artist, err := env.artists.Create(t.Context(), "", folder.ID, ArtistName(artistID))
+	folderID := musicFolder(t, env)
+	folder, err := env.folders.ByID(t.Context(), folderID)
+	if err != nil {
+		t.Fatalf("read folder: %v", err)
+	}
+	folderRef := folder
+	artist, err := env.artists.Create(t.Context(), "", folderRef.ID, ArtistName(artistID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +104,7 @@ func TestBackfillAttachesTheChannelID(t *testing.T) {
 		t.Fatalf("link: %v", err)
 	}
 
-	results, err := svc.BackfillChannels(t.Context(), false)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
 	if err != nil {
 		t.Fatalf("BackfillChannels: %v", err)
 	}
@@ -116,7 +141,7 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := svc.BackfillChannels(t.Context(), true)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: true})
 	if err != nil {
 		t.Fatalf("BackfillChannels: %v", err)
 	}
@@ -146,7 +171,7 @@ func TestBackfillReportsARename(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := svc.BackfillChannels(t.Context(), false)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +213,7 @@ func TestBackfillRefusesToGuessAcrossSeveralLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := svc.BackfillChannels(t.Context(), false)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,12 +248,12 @@ func TestBackfillSkipsAlreadyKnownLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.BackfillChannels(t.Context(), false); err != nil {
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false}); err != nil {
 		t.Fatal(err)
 	}
 	first := len(probe.calls)
 
-	results, err := svc.BackfillChannels(t.Context(), false)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +276,7 @@ func TestBackfillReportsLookupFailureWithoutGuessing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := svc.BackfillChannels(t.Context(), false)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
 	if err != nil {
 		t.Fatalf("BackfillChannels: %v", err)
 	}
@@ -287,7 +312,7 @@ func TestBackfillProbesOneVideoPerArtist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.BackfillChannels(t.Context(), false); err != nil {
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false}); err != nil {
 		t.Fatal(err)
 	}
 	if len(probe.calls) != 1 {
@@ -306,7 +331,7 @@ func TestBackfillWithoutConfigurationSaysSo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := svc.BackfillChannels(t.Context(), false)
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
 	if err != nil {
 		t.Fatalf("BackfillChannels: %v", err)
 	}
@@ -316,4 +341,185 @@ func TestBackfillWithoutConfigurationSaysSo(t *testing.T) {
 	if results[0].Reason == "" {
 		t.Error("failure gives no reason; the operator needs to know to configure it")
 	}
+}
+
+// recordingBackfillReporter captures the narration a run emits, which is the
+// only thing distinguishing a slow run from a hung terminal.
+type recordingBackfillReporter struct {
+	events []string
+}
+
+func (r *recordingBackfillReporter) OnBackfillStart(artists, links int) {
+	r.events = append(r.events, fmt.Sprintf("start: %d artists / %d links", artists, links))
+}
+
+func (r *recordingBackfillReporter) OnArtistStart(current, artists int, artistID ArtistID) {
+	r.events = append(r.events, fmt.Sprintf("artist: %d/%d %s", current, artists, artistID))
+}
+
+func (r *recordingBackfillReporter) OnArtistResolved(artistID ArtistID, id ChannelID, name ChannelName) {
+	r.events = append(r.events, fmt.Sprintf("resolved: %s %s", artistID, id))
+}
+
+func (r *recordingBackfillReporter) OnArtistUnresolved(artistID ArtistID, reason string) {
+	r.events = append(r.events, fmt.Sprintf("unresolved: %s", artistID))
+}
+
+// TestBackfillReportsProgress pins that a run says what it is doing. Each
+// lookup is a separate yt-dlp process taking seconds, so silence reads as a
+// hang rather than as progress.
+func TestBackfillReportsProgress(t *testing.T) {
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
+		"bbbbbbbbbbb": {id: "UC2", name: "Another"},
+	}}
+	svc, env := backfillService(t, probe)
+	reporter := &recordingBackfillReporter{}
+
+	artistWithTrack(t, env, "one", "aaaaaaaaaaa")
+	artistWithTrack(t, env, "two", "bbbbbbbbbbb")
+	if err := svc.Link(t.Context(), "one", "An Artist", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Link(t.Context(), "two", "Another", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{Reporter: reporter}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"start: 2 artists / 2 links",
+		"artist: 1/2 one",
+		"resolved: one UC1",
+		"artist: 2/2 two",
+		"resolved: two UC2",
+	}
+	if len(reporter.events) != len(want) {
+		t.Fatalf("events = %v, want %v", reporter.events, want)
+	}
+	for i := range want {
+		if reporter.events[i] != want[i] {
+			t.Errorf("event %d = %q, want %q", i, reporter.events[i], want[i])
+		}
+	}
+}
+
+// TestBackfillReportsNothingToDo: a library already backfilled must say so
+// rather than print an empty table and exit, which looks like a failure.
+func TestBackfillReportsNothingToDo(t *testing.T) {
+	probe := &stubProbe{}
+	svc, env := backfillService(t, probe)
+	reporter := &recordingBackfillReporter{}
+
+	artistWithTrack(t, env, "one", "aaaaaaaaaaa")
+	if err := svc.Link(t.Context(), "one", "An Artist", "UC1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{Reporter: reporter}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(probe.calls) != 0 {
+		t.Errorf("made %d lookups when every link was known: %v", len(probe.calls), probe.calls)
+	}
+	if len(reporter.events) != 1 || reporter.events[0] != "start: 0 artists / 1 links" {
+		t.Errorf("events = %v, want a single zero-work start", reporter.events)
+	}
+}
+
+// TestBackfillWaitsBetweenRequests: pacing is what keeps a long run from
+// drawing a 403, the failure the download path already classifies.
+func TestBackfillWaitsBetweenRequests(t *testing.T) {
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
+	}}
+	svc, env := backfillService(t, probe)
+
+	for i, spec := range []struct{ artist, video string }{
+		{"one", "aaaaaaaaaaa"}, {"two", "bbbbbbbbbbb"}, {"three", "ccccccccccc"},
+	} {
+		artistWithTrack(t, env, spec.artist, spec.video)
+		if err := svc.Link(t.Context(), ArtistID(spec.artist), ChannelName(spec.artist+" ch"), ""); err != nil {
+			t.Fatal(err)
+		}
+		probe.byVideo[spec.video] = struct{ id, name string }{id: fmt.Sprintf("UC%d", i+1), name: spec.artist + " ch"}
+	}
+
+	const gap = 100 * time.Millisecond
+
+	start := time.Now()
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{
+		MinWait: gap,
+		MaxWait: gap,
+	}); err != nil {
+		t.Fatalf("BackfillChannels: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	// Three artists means two gaps between requests, not three: there is no
+	// reason to sleep after the last one. The lower bound alone would not
+	// catch a third gap, so the upper bound is the real assertion here.
+	if elapsed < 2*gap {
+		t.Errorf("ran in %v, want at least two %v gaps", elapsed, gap)
+	}
+	if elapsed >= 3*gap {
+		t.Errorf("ran in %v, want no gap after the final artist (would be %v)", elapsed, 3*gap)
+	}
+}
+
+// TestBackfillStopsWhenCancelled: a paced run must remain interruptible, or
+// Ctrl-C waits out the timer.
+func TestBackfillStopsWhenCancelled(t *testing.T) {
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
+		"bbbbbbbbbbb": {id: "UC2", name: "Another"},
+	}}
+	svc, env := backfillService(t, probe)
+
+	artistWithTrack(t, env, "one", "aaaaaaaaaaa")
+	artistWithTrack(t, env, "two", "bbbbbbbbbbb")
+	for _, spec := range []struct{ artist, video string }{{"one", "aaaaaaaaaaa"}, {"two", "bbbbbbbbbbb"}} {
+		if err := svc.Link(t.Context(), ArtistID(spec.artist), ChannelName(spec.artist+" ch"), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Cancelled once the first artist is under way, so the run is sitting in
+	// the gap between requests rather than failing at the loop head. That is
+	// the path where a wait can swallow cancellation.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	reporter := &cancellingReporter{cancel: cancel}
+
+	start := time.Now()
+	if _, err := svc.BackfillChannels(ctx, BackfillParams{
+		MinWait:  2 * time.Second,
+		MaxWait:  2 * time.Second,
+		Reporter: reporter,
+	}); err == nil {
+		t.Error("BackfillChannels after cancellation = nil error, want cancellation")
+	}
+	// Returning promptly is the point: sitting out the timer would look like
+	// a hang, which is the failure this pacing introduced in the first place.
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Errorf("took %v to notice cancellation mid-wait", elapsed)
+	}
+}
+
+// cancellingReporter cancels the run as soon as the first artist starts, which
+// lands the cancellation inside the wait between requests.
+type cancellingReporter struct {
+	cancel context.CancelFunc
+}
+
+func (r *cancellingReporter) OnBackfillStart(int, int)                          {}
+func (r *cancellingReporter) OnArtistResolved(ArtistID, ChannelID, ChannelName) {}
+func (r *cancellingReporter) OnArtistUnresolved(ArtistID, string)               {}
+
+func (r *cancellingReporter) OnArtistStart(int, int, ArtistID) {
+	r.cancel()
 }

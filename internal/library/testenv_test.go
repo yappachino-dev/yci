@@ -55,17 +55,19 @@ func (p testPaths) StagingDir() string { return p.staging }
 // real SQLite, real temporary directories, journaled file moves flushed
 // through the transactor's post-commit hook.
 type libraryEnv struct {
-	dbConn    *sql.DB
-	queries   *store.Queries
-	txr       *db.SQLiteTransactor
-	actions   *db.FileActionExecutor
-	folders   *FolderService
-	artists   *ArtistService
-	tracks    *TrackService
-	channels  *ChannelService
-	staging   *StagingService
-	playlists *PlaylistService
-	repos     struct {
+	dbConn   *sql.DB
+	queries  *store.Queries
+	txr      *db.SQLiteTransactor
+	actions  *db.FileActionExecutor
+	folders  *FolderService
+	artists  *ArtistService
+	tracks   *TrackService
+	channels *ChannelService
+	// testFolder caches folders shared by helpers that seed several artists.
+	testFolder map[string]FolderID
+	staging    *StagingService
+	playlists  *PlaylistService
+	repos      struct {
 		folders *SQLiteFolderRepository
 		artists *SQLiteArtistRepository
 		tracks  *SQLiteTrackRepository
