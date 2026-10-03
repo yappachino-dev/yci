@@ -29,7 +29,7 @@ func TestChannelResolvesByImmutableID(t *testing.T) {
 	repo := NewSQLiteChannelRepository(queries)
 	seedChannelArtists(t, queries, "irys")
 
-	if err := repo.Create(t.Context(), "irys", "IRyS Ch. hololive-EN"); err != nil {
+	if err := repo.Create(t.Context(), "irys", "IRyS Ch. hololive-EN", ""); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -81,10 +81,10 @@ func TestChannelNameAmbiguityIsAnError(t *testing.T) {
 
 	// Legal today: uniqueness is on the pair, so one name can sit under two
 	// artists. Picking one silently would file downloads under the wrong one.
-	if err := repo.Create(t.Context(), "one", "Shared Ch."); err != nil {
+	if err := repo.Create(t.Context(), "one", "Shared Ch.", ""); err != nil {
 		t.Fatalf("create one: %v", err)
 	}
-	if err := repo.Create(t.Context(), "two", "Shared Ch."); err != nil {
+	if err := repo.Create(t.Context(), "two", "Shared Ch.", ""); err != nil {
 		t.Fatalf("create two: %v", err)
 	}
 

@@ -75,7 +75,7 @@ func TestBackfillAttachesTheChannelID(t *testing.T) {
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "An Artist"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
 		t.Fatalf("link: %v", err)
 	}
 
@@ -112,7 +112,7 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "An Artist"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +142,7 @@ func TestBackfillReportsARename(t *testing.T) {
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "Old Channel Name"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "Old Channel Name", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,10 +181,10 @@ func TestBackfillRefusesToGuessAcrossSeveralLinks(t *testing.T) {
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "Ch. A"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "Ch. A", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Link(t.Context(), "someone", "Ch. B"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "Ch. B", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -219,7 +219,7 @@ func TestBackfillSkipsAlreadyKnownLinks(t *testing.T) {
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "An Artist"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,7 +247,7 @@ func TestBackfillReportsLookupFailureWithoutGuessing(t *testing.T) {
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "An Artist"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -283,7 +283,7 @@ func TestBackfillProbesOneVideoPerArtist(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := svc.Link(t.Context(), "someone", "An Artist"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -302,7 +302,7 @@ func TestBackfillWithoutConfigurationSaysSo(t *testing.T) {
 	svc := NewChannelService(NewSQLiteChannelRepository(env.queries))
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "An Artist"); err != nil {
+	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 

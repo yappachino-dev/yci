@@ -154,7 +154,7 @@ func TestImportStoresParsedTitleAndProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := env.channels.Link(ctx, artist.ID, "An Artist"); err != nil {
+	if err := env.channels.Link(ctx, artist.ID, "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,7 +208,7 @@ func TestImportDoesNotOverwriteOccupiedDestination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := env.channels.Link(ctx, artist.ID, "An Artist"); err != nil {
+	if err := env.channels.Link(ctx, artist.ID, "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 

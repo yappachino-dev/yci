@@ -39,7 +39,7 @@ var channelCreateCmd = &cobra.Command{
 			})
 		}
 
-		if err := c.ChannelService.Link(cmd.Context(), resolvedID, library.ChannelName(channelName)); err != nil {
+		if err := c.ChannelService.Link(cmd.Context(), resolvedID, library.ChannelName(channelName), ""); err != nil {
 			return mapSentinels(err, map[error]string{
 				library.ErrChannelAlreadyLinked: fmt.Sprintf("channel %q is already linked to an artist", channelName),
 			})

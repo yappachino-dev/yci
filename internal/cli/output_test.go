@@ -112,7 +112,7 @@ func TestListOutput(t *testing.T) {
 	t.Run("channels show only what a command accepts", func(t *testing.T) {
 		c := newTestContainer(t)
 		_, artistID := seedLibrary(t, c)
-		if err := c.ChannelService.Link(t.Context(), artistID, library.ChannelName("Polka Ch. 尾丸ポルカ")); err != nil {
+		if err := c.ChannelService.Link(t.Context(), artistID, library.ChannelName("Polka Ch. 尾丸ポルカ"), ""); err != nil {
 			t.Fatalf("link channel: %v", err)
 		}
 

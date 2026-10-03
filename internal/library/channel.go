@@ -48,7 +48,7 @@ type Channel struct {
 }
 
 type ChannelRepository interface {
-	Create(ctx context.Context, artistID ArtistID, name ChannelName) error
+	Create(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error
 	FindArtistID(ctx context.Context, name ChannelName) (ArtistID, bool, error)
 	All(ctx context.Context) ([]Channel, error)
 	Delete(ctx context.Context, artistID ArtistID, name ChannelName) error
@@ -96,7 +96,17 @@ func NewChannelService(repo ChannelRepository, opts ...ChannelOption) *ChannelSe
 	return s
 }
 
-func (s *ChannelService) Link(ctx context.Context, artistID ArtistID, name ChannelName) error {
+// Link creates the association between an artist and a YouTube channel.
+//
+// id is the channel's immutable YouTube ID when the caller has one. Import
+// always does, because the download recorded it, and passing it here is what
+// stops links being born incomplete: a link created with a NULL id needs a
+// repair pass later, and until then attribution falls back to the display name
+// this feature exists to stop relying on.
+//
+// An empty id is accepted. It records a link made without a lookup, which
+// resolves by name until something fills it in.
+func (s *ChannelService) Link(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error {
 	if err := name.Validate(); err != nil {
 		return fmt.Errorf("link channel: %w", err)
 	}
@@ -104,7 +114,7 @@ func (s *ChannelService) Link(ctx context.Context, artistID ArtistID, name Chann
 		return fmt.Errorf("link channel: artist ID cannot be empty")
 	}
 
-	if err := s.repo.Create(ctx, artistID, name); err != nil {
+	if err := s.repo.Create(ctx, artistID, name, id); err != nil {
 		return fmt.Errorf("link channel %q to artist %q: %w", name, artistID, err)
 	}
 	return nil
@@ -169,11 +179,11 @@ func NewSQLiteChannelRepository(q *store.Queries) *SQLiteChannelRepository {
 	return &SQLiteChannelRepository{q: q}
 }
 
-func (r *SQLiteChannelRepository) Create(ctx context.Context, artistID ArtistID, name ChannelName) error {
+func (r *SQLiteChannelRepository) Create(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error {
 	err := r.db(ctx).CreateChannel(ctx, store.CreateChannelParams{
 		ArtistID:    string(artistID),
 		ChannelName: db.ToNullString(string(name)),
-		ChannelID:   db.ToNullString(""),
+		ChannelID:   db.ToNullString(string(id)),
 	})
 	if err != nil {
 		return db.MapSQLError(err, nil, ErrChannelAlreadyLinked)

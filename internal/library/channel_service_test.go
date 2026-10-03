@@ -14,10 +14,10 @@ func TestChannelServiceRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := env.channels.Link(ctx, artist.ID, "Some Channel"); err != nil {
+	if err := env.channels.Link(ctx, artist.ID, "Some Channel", ""); err != nil {
 		t.Fatalf("link: %v", err)
 	}
-	if err := env.channels.Link(ctx, artist.ID, "Some Channel"); !errors.Is(err, ErrChannelAlreadyLinked) {
+	if err := env.channels.Link(ctx, artist.ID, "Some Channel", ""); !errors.Is(err, ErrChannelAlreadyLinked) {
 		t.Errorf("duplicate link err = %v, want ErrChannelAlreadyLinked", err)
 	}
 

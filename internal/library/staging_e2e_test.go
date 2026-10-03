@@ -21,7 +21,7 @@ func TestStagingImportEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Channel resolution is lookup-based: the link must exist up front.
-	if err := env.channels.Link(ctx, artist.ID, "An Artist"); err != nil {
+	if err := env.channels.Link(ctx, artist.ID, "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -264,7 +264,7 @@ func TestStagingImportSurvivesChannelRename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := env.channels.Link(ctx, artist.ID, "Old Channel Name"); err != nil {
+	if err := env.channels.Link(ctx, artist.ID, "Old Channel Name", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := env.channels.AttachChannelID(ctx, artist.ID, "Old Channel Name", "UC8rcEBzJSleTkf_-agPM20g"); err != nil {
@@ -332,7 +332,7 @@ func TestStagingImportWithoutRecordedChannelFallsBackToName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := env.channels.Link(ctx, artist.ID, "An Artist"); err != nil {
+	if err := env.channels.Link(ctx, artist.ID, "An Artist", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -351,5 +351,91 @@ func TestStagingImportWithoutRecordedChannelFallsBackToName(t *testing.T) {
 	}
 	if len(tracks) != 1 || tracks[0].ArtistID != artist.ID {
 		t.Fatalf("tracks = %+v, want one track attributed to %q", tracks, artist.ID)
+	}
+}
+
+// TestStagingImportLinksTheNewChannelWithItsID is the common path, not an edge
+// case. Most links in a real library are created by this prompt rather than by
+// a typed command, and it runs when the download has already recorded the
+// channel ID.
+//
+// Creating the link without it is what left every real link needing a repair
+// pass, so the ID is passed through to the new link.
+func TestStagingImportLinksTheNewChannelWithItsID(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	artist, err := env.artists.Create(ctx, "", folder.ID, "New Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// No link exists yet: this is a first sighting of the channel.
+	const videoID = "dQw4w9WgXcQ"
+	if err := env.channels.RecordVideoChannel(ctx, videoID, "UC8rcEBzJSleTkf_-agPM20g"); err != nil {
+		t.Fatalf("record video channel: %v", err)
+	}
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), videoID+".opus"), "Brand New", "New Artist Ch.")
+
+	linked := false
+	onUnknown := func(channelName, title string) (StagingResult, error) {
+		linked = true
+		return StagingResult{Action: ActionImport, Artist: artist.ID, LinkArtist: true}, nil
+	}
+
+	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+		t.Fatalf("process staging: %v", err)
+	}
+	if !linked {
+		t.Fatal("unknown-channel handler never ran, so no link was created")
+	}
+
+	all, err := env.channels.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("channel links = %d, want 1", len(all))
+	}
+	if all[0].ChannelID != "UC8rcEBzJSleTkf_-agPM20g" {
+		t.Errorf("new link has channel id %q, want the ID the download recorded", all[0].ChannelID)
+	}
+	if all[0].ArtistID != artist.ID {
+		t.Errorf("new link artist = %q, want %q", all[0].ArtistID, artist.ID)
+	}
+}
+
+// TestStagingImportLinkWithoutARecordStaysPartial: a link made where no
+// download record exists has no ID to give, and must still be created rather
+// than refused.
+func TestStagingImportLinkWithoutARecordStaysPartial(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	folder := env.mustCreateFolder(t, "Music")
+	artist, err := env.artists.Create(ctx, "", folder.ID, "Hand Artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// No RecordVideoChannel: this file was placed in staging by hand.
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "dQw4w9WgXcQ.opus"), "Manual", "Hand Artist Ch.")
+
+	if err := env.staging.ProcessStaging(ctx, func(string, string) (StagingResult, error) {
+		return StagingResult{Action: ActionImport, Artist: artist.ID, LinkArtist: true}, nil
+	}); err != nil {
+		t.Fatalf("process staging: %v", err)
+	}
+
+	all, err := env.channels.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("channel links = %d, want 1: a link with no ID must still be made", len(all))
+	}
+	if all[0].ChannelID != "" {
+		t.Errorf("channel id = %q, want empty when no record existed", all[0].ChannelID)
 	}
 }

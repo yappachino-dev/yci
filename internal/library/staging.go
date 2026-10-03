@@ -44,7 +44,7 @@ type ArtistReader interface {
 }
 
 type ChannelLinker interface {
-	Link(ctx context.Context, artistID ArtistID, name ChannelName) error
+	Link(ctx context.Context, artistID ArtistID, name ChannelName, id ChannelID) error
 	ResolveArtist(ctx context.Context, name ChannelName) (ArtistID, bool, error)
 	All(ctx context.Context) ([]Channel, error)
 
@@ -210,14 +210,15 @@ type importDecision struct {
 // consulting onUnknown when the channel has no linked artist. Returns a nil
 // decision when the handler chose to skip the file.
 func (s *StagingService) resolveImportDecision(ctx context.Context, videoID VideoID, channelName ChannelName, m TrackMetadata, onUnknown LinkHandler) (*importDecision, error) {
-	artistID, ok, err := s.ResolveChannel(ctx, videoID, channelName)
+	match, err := s.ResolveChannel(ctx, videoID, channelName)
 	if err != nil {
 		return nil, err
 	}
 
+	artistID := match.ArtistID
 	var trackFolder FolderID
 
-	if !ok {
+	if !match.Found {
 		res, err := onUnknown(string(channelName), strings.TrimSpace(m.Title))
 		if err != nil {
 			return nil, err
@@ -234,7 +235,9 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, videoID Vide
 		}
 
 		if artistID != "" && res.LinkArtist {
-			if err := s.linker.Link(ctx, artistID, channelName); err != nil {
+			// The ID comes from the download record, so this link is born
+			// complete rather than needing a repair pass to be trusted.
+			if err := s.linker.Link(ctx, artistID, channelName, match.ChannelID); err != nil {
 				return nil, fmt.Errorf("failed linking unknown channel to artist: %w", err)
 			}
 		}
@@ -259,6 +262,16 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, videoID Vide
 	return &decision, nil
 }
 
+// ChannelMatch is what import resolved for one staged file.
+type ChannelMatch struct {
+	// ArtistID is the linked artist, meaningful only when Found.
+	ArtistID ArtistID
+	// ChannelID is the identity recorded at download time. It is set even
+	// when Found is false, so a link the handler creates can be born with it.
+	ChannelID ChannelID
+	Found     bool
+}
+
 // ResolveChannel maps a staged file to an artist, preferring the immutable
 // channel ID recorded at download time over the artist tag written into the
 // file.
@@ -270,30 +283,41 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, videoID Vide
 // refreshing.
 //
 // videoID may be empty, in which case only the name path is available.
-func (s *StagingService) ResolveChannel(ctx context.Context, videoID VideoID, name ChannelName) (ArtistID, bool, error) {
+func (s *StagingService) ResolveChannel(ctx context.Context, videoID VideoID, name ChannelName) (ChannelMatch, error) {
+	var match ChannelMatch
+
+	// The recorded identity is returned whether or not a link exists yet:
+	// when the handler creates one, it is what makes the new link complete.
 	if videoID != "" {
-		if id, found, err := s.linker.VideoChannel(ctx, videoID); err == nil && found && id != "" {
-			artistID, resolved, err := s.linker.ResolveArtistByID(ctx, id)
-			if err != nil {
-				return "", false, err
-			}
-			if resolved {
-				// The channel is known; keep the label honest.
-				s.refreshLabel(ctx, id, artistID, name)
-				return artistID, true, nil
+		if id, found, err := s.linker.VideoChannel(ctx, videoID); err == nil && found {
+			match.ChannelID = id
+
+			if id != "" {
+				artistID, resolved, err := s.linker.ResolveArtistByID(ctx, id)
+				if err != nil {
+					return ChannelMatch{}, err
+				}
+				if resolved {
+					s.refreshLabel(ctx, id, artistID, name)
+					match.ArtistID = artistID
+					match.Found = true
+					return match, nil
+				}
 			}
 		}
 	}
 
 	artistID, ok, err := s.linker.ResolveArtist(ctx, name)
 	if err != nil {
-		return "", false, err
+		return ChannelMatch{}, err
 	}
 	if ok {
 		s.promoteLabel(ctx, artistID, name, videoID)
+		match.ArtistID = artistID
+		match.Found = true
 	}
 
-	return artistID, ok, nil
+	return match, nil
 }
 
 // refreshLabel updates a stored channel name that has drifted. Best effort:

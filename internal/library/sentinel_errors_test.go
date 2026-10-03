@@ -130,11 +130,11 @@ func TestRepositorySentinels(t *testing.T) {
 					return err
 				}
 
-				if err := channelRepo.Create(ctx, "a1", "Channel"); err != nil {
+				if err := channelRepo.Create(ctx, "a1", "Channel", ""); err != nil {
 					return err
 				}
 
-				return channelRepo.Create(ctx, "a1", "Channel")
+				return channelRepo.Create(ctx, "a1", "Channel", "")
 			},
 			wantError: ErrChannelAlreadyLinked,
 		},

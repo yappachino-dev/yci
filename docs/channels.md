@@ -83,6 +83,26 @@ already holds the join key. Rows are dropped once the track exists.
 Step 4 is what keeps this backwards compatible. Files placed in staging by
 hand, and any file predating this work, still import through the name path.
 
+## Links are born complete
+
+Most links in a real library are created by **import**, not by a typed command.
+When a staged file's channel has no link, the handler prompts, and if the user
+attaches the channel to an artist the link is created:
+
+```
+internal/library/staging.go   res.LinkArtist ->
+                               s.linker.Link(ctx, artistID, channelName, match.ChannelID)
+```
+
+That last argument is the point. At that moment `video_channels` already holds
+the identity the download recorded, so the new link is created with it. Without
+it, links were born incomplete and every one needed a repair pass before
+attribution could be trusted — and since the prompt is the dominant creation
+path, that was most of them.
+
+`ChannelService.Link` takes the ID; an empty one is accepted for the cases with
+no record to draw on (a file placed in staging by hand).
+
 ## Recovering links made before this
 
 ```
