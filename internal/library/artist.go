@@ -57,6 +57,12 @@ type FolderChecker interface {
 	Exists(ctx context.Context, id FolderID) (bool, error)
 }
 
+// FolderCreator is the narrow slice of FolderService that CreateInFolder
+// needs: enough to mint the leaf folder an artist's files live under.
+type FolderCreator interface {
+	Create(ctx context.Context, id FolderID, parentID FolderID, name FolderName) (Folder, error)
+}
+
 type ArtistTracksMover interface {
 	MoveByArtist(ctx context.Context, id ArtistID, oldFolder, newFolder FolderID) error
 }
@@ -66,6 +72,7 @@ type ArtistTracksMover interface {
 type ArtistService struct {
 	repo          ArtistRepository
 	folderChecker FolderChecker
+	folderCreator FolderCreator
 	trackMover    ArtistTracksMover
 	transactor    Transactor
 	rootFolder    FolderID
@@ -74,6 +81,7 @@ type ArtistService struct {
 type ArtistServiceConfig struct {
 	ArtistRepo    ArtistRepository
 	FolderChecker FolderChecker
+	FolderCreator FolderCreator
 	TrackMover    ArtistTracksMover
 	Transactor    Transactor
 	RootFolder    FolderID
@@ -83,6 +91,7 @@ func NewArtistService(cfg ArtistServiceConfig) *ArtistService {
 	return &ArtistService{
 		repo:          cfg.ArtistRepo,
 		folderChecker: cfg.FolderChecker,
+		folderCreator: cfg.FolderCreator,
 		trackMover:    cfg.TrackMover,
 		transactor:    cfg.Transactor,
 		rootFolder:    cfg.RootFolder,
@@ -111,6 +120,56 @@ func (s *ArtistService) Create(ctx context.Context, id ArtistID, folderID Folder
 		}
 	}
 
+	return s.insert(ctx, id, folderID, name)
+}
+
+// CreateInFolder mints the artist's leaf folder under parentID and links the
+// artist to it in one transaction, so a failure never leaves an empty folder
+// behind. The leaf slug is derived from the artist name, matching Create's
+// same-named-folder convention.
+//
+// Unlike Create it never reuses an existing folder: a duplicate leaf id fails
+// the insert and rolls back, which is the signal to use Create's --folder.
+func (s *ArtistService) CreateInFolder(ctx context.Context, parentID FolderID, name ArtistName) (Artist, error) {
+	if err := name.Validate(); err != nil {
+		return Artist{}, fmt.Errorf("create artist in folder: %w", err)
+	}
+
+	if parentID == "" {
+		parentID = s.rootFolder
+	}
+
+	ok, err := s.folderChecker.Exists(ctx, parentID)
+	if err != nil {
+		return Artist{}, fmt.Errorf("check parent folder %q: %w", parentID, err)
+	}
+
+	if !ok {
+		return Artist{}, fmt.Errorf("%w: parent %q", ErrFolderNotFound, parentID)
+	}
+
+	id := name.ToSlugID()
+	leaf := FolderID(id)
+
+	var artist Artist
+
+	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := s.folderCreator.Create(txCtx, leaf, parentID, FolderName(name)); err != nil {
+			return fmt.Errorf("create leaf folder %q: %w", leaf, err)
+		}
+
+		artist, err = s.insert(txCtx, id, leaf, name)
+
+		return err
+	})
+	if txErr != nil {
+		return Artist{}, txErr
+	}
+
+	return artist, nil
+}
+
+func (s *ArtistService) insert(ctx context.Context, id ArtistID, folderID FolderID, name ArtistName) (Artist, error) {
 	draft := Artist{
 		ID:       id,
 		Name:     name,

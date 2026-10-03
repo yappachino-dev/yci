@@ -116,6 +116,7 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 	env.artists = NewArtistService(ArtistServiceConfig{
 		ArtistRepo:    env.repos.artists,
 		FolderChecker: env.repos.folders,
+		FolderCreator: env.folders,
 		TrackMover:    env.tracks,
 		Transactor:    env.txr,
 		RootFolder:    rootID,

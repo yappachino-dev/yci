@@ -105,6 +105,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 	artistService := library.NewArtistService(library.ArtistServiceConfig{
 		ArtistRepo:    artistRepo,
 		FolderChecker: folderRepo,
+		FolderCreator: folderService,
 		TrackMover:    trackService,
 		Transactor:    transactor,
 		RootFolder:    rootID,

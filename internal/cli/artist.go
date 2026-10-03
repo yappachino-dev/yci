@@ -23,7 +23,18 @@ var artistCmd = &cobra.Command{
 var artistCreateCmd = &cobra.Command{
 	Use:   "create [id]",
 	Short: "Create a new artist",
-	Args:  cobra.MaximumNArgs(1),
+	Long: "Create an artist.\n\n" +
+		"With --parent the artist's own folder is created under that parent and\n" +
+		"the artist is linked to it in one transaction. --parent and --folder are\n" +
+		"mutually exclusive.",
+	Args: cobra.MaximumNArgs(1),
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if cmd.Flags().Changed(flagParent) && cmd.Flags().Changed(flagFolder) {
+			return fmt.Errorf("--%s and --%s are mutually exclusive: the first creates a folder, the second links an existing one", flagParent, flagFolder)
+		}
+
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := idFromArgsOrFlag(cmd, flagID, args)
 		if err != nil {
@@ -32,11 +43,29 @@ var artistCreateCmd = &cobra.Command{
 
 		name, _ := cmd.Flags().GetString(flagName)
 		folder, _ := cmd.Flags().GetString(flagFolder)
+		parent, _ := cmd.Flags().GetString(flagParent)
 
 		c := Container(cmd.Context())
 
 		name = strings.TrimSpace(name)
 		folder = strings.TrimSpace(folder)
+		parent = strings.TrimSpace(parent)
+
+		if parent != "" {
+			a, err := c.ArtistService.CreateInFolder(cmd.Context(), library.FolderID(parent), library.ArtistName(name))
+			if err != nil {
+				return mapSentinels(err, map[error]string{
+					library.ErrArtistAlreadyExists: fmt.Sprintf("artist %q already exists", name),
+					library.ErrFolderAlreadyExists: fmt.Sprintf("a folder named after %q already exists; pass --%s to link it instead", name, flagFolder),
+					library.ErrFolderNotFound:      fmt.Sprintf("parent folder %q does not exist", parent),
+				})
+			}
+
+			cmd.Printf("Created folder: %s\n", a.FolderID)
+			cmd.Printf("Created artist: %q (ID: %s) in folder: %s\n", a.Name, a.ID, a.FolderID)
+
+			return nil
+		}
 
 		a, err := c.ArtistService.Create(cmd.Context(), library.ArtistID(id), library.FolderID(folder), library.ArtistName(name))
 		if err != nil {
@@ -202,7 +231,9 @@ func init() {
 
 	artistCreateCmd.Flags().String(flagID, "", "The unique slug ID for the artist")
 	artistCreateCmd.Flags().String(flagName, "", "Name of the artist (Required)")
-	artistCreateCmd.Flags().String(flagFolder, "", "Parent folder ID (defaults to folder with same id; root)")
+	artistCreateCmd.Flags().String(flagFolder, "", "Existing folder ID to place the artist in (defaults to folder with same id; root)")
+	artistCreateCmd.Flags().String(flagParent, "", "Create a folder named after the artist under this parent ID, and link the artist to it")
+	artistCreateCmd.RegisterFlagCompletionFunc(flagParent, folderIDCompletion)
 	artistCreateCmd.MarkFlagRequired(flagName)
 	artistCreateCmd.RegisterFlagCompletionFunc(flagFolder, folderIDCompletion)
 
