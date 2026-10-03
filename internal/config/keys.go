@@ -21,11 +21,29 @@ import (
 const DirPerm = 0o700
 
 // keySpec describes one user-configurable key: its dotted TOML path, how to
-// validate a candidate value, and how to read it back from a Config.
+// validate a candidate value, how to read it back from a Config, and which
+// precedence layer supplied it. Keeping the source here means the registry is
+// the only list of keys; a separate table of them goes stale silently.
 type keySpec struct {
 	name     string
 	validate func(string) error
 	resolve  func(Config) string
+	source   func(env LookupFunc, f File) Source
+}
+
+// sourced builds a keySpec source: an environment value wins over a file
+// value, and neither means the built-in default applied.
+func sourced(envVar string, fileValue func(File) string) func(LookupFunc, File) Source {
+	return func(env LookupFunc, f File) Source {
+		switch {
+		case env(envVar) != "":
+			return SourceEnv
+		case fileValue(f) != "":
+			return SourceFile
+		default:
+			return SourceDefault
+		}
+	}
 }
 
 var keyRegistry = []keySpec{
@@ -33,21 +51,25 @@ var keyRegistry = []keySpec{
 		name:     "library_dir",
 		validate: validateAbsPath,
 		resolve:  func(c Config) string { return c.LibraryDir },
+		source:   sourced(EnvLibraryPath, func(f File) string { return f.Library }),
 	},
 	{
 		name:     "staging_dir",
 		validate: validateAbsPath,
 		resolve:  func(c Config) string { return c.StagingDir },
+		source:   sourced(EnvStagingPath, func(f File) string { return f.Staging }),
 	},
 	{
 		name:     "download.delay",
 		validate: validateDelay,
 		resolve:  func(c Config) string { return c.DownloadDelay },
+		source:   sourced(EnvDownloadDelay, func(f File) string { return f.Download.Delay }),
 	},
 	{
 		name:     "download.cookies_file",
 		validate: validateAbsPath,
 		resolve:  func(c Config) string { return c.CookiesFile },
+		source:   sourced(EnvDownloadCookies, func(f File) string { return f.Download.CookiesFile }),
 	},
 }
 

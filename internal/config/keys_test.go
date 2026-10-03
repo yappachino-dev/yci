@@ -170,3 +170,77 @@ func TestParseDelayInvalid(t *testing.T) {
 		}
 	}
 }
+
+// TestRegistryIsTheOnlyKeyList closes the trap that motivated folding the
+// source lookup into the registry: the sources used to be a separate
+// hand-written table, so a key added to the registry without a matching entry
+// reported an empty source and `config get` blamed the wrong layer.
+//
+// Driven generically rather than per key, so adding a key does not mean
+// editing this test to match.
+func TestRegistryIsTheOnlyKeyList(t *testing.T) {
+	isolate(t)
+
+	// Every field populated, so whichever one a resolver reads is set.
+	full := File{
+		Library:  "/lib",
+		Staging:  "/staging",
+		Download: DownloadSection{Delay: "1:2", CookiesFile: "/cookies.txt"},
+	}
+
+	none := func(string) string { return "" }
+	any := func(string) string { return "set" }
+
+	missingSource := false
+
+	for _, key := range Keys() {
+		spec, ok := lookupKey(key)
+		if !ok {
+			t.Fatalf("Keys() listed %q but lookupKey does not find it", key)
+		}
+
+		if spec.source == nil {
+			t.Errorf("key %q has no source resolver, so its reported layer is always unset", key)
+			missingSource = true
+
+			continue
+		}
+
+		if got := spec.source(none, File{}); got != SourceDefault {
+			t.Errorf("key %q with nothing set = %q, want %q", key, got, SourceDefault)
+		}
+
+		if got := spec.source(none, full); got != SourceFile {
+			t.Errorf("key %q from file = %q, want %q", key, got, SourceFile)
+		}
+
+		if got := spec.source(any, File{}); got != SourceEnv {
+			t.Errorf("key %q from env = %q, want %q", key, got, SourceEnv)
+		}
+
+		if got := spec.source(any, full); got != SourceEnv {
+			t.Errorf("key %q with env and file both set = %q, want env to win", key, got)
+		}
+	}
+
+	// Load dereferences every entry, so a missing one would panic and take
+	// the diagnostics above down with it.
+	if missingSource {
+		t.Fatal("cannot check resolved sources: the registry is incomplete")
+	}
+
+	cfg, err := Load(os.Getenv)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	for _, key := range Keys() {
+		if _, ok := cfg.sources[key]; !ok {
+			t.Errorf("key %q is in the registry but has no source after Load", key)
+		}
+	}
+
+	if len(cfg.sources) != len(Keys()) {
+		t.Errorf("%d sources recorded for %d keys", len(cfg.sources), len(Keys()))
+	}
+}

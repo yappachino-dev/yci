@@ -45,6 +45,7 @@ type File struct {
 type Source string
 
 const (
+	SourceEnv     Source = "env"
 	SourceFile    Source = "file"
 	SourceDefault Source = "default"
 	SourceUnset   Source = ""
@@ -135,23 +136,12 @@ func Load(env LookupFunc) (Config, error) {
 }
 
 func sourcesFor(env LookupFunc, f File) map[string]Source {
-	return map[string]Source{
-		"library_dir":           pickSource(env(EnvLibraryPath), f.Library),
-		"staging_dir":           pickSource(env(EnvStagingPath), f.Staging),
-		"download.delay":        pickSource(env(EnvDownloadDelay), f.Download.Delay),
-		"download.cookies_file": pickSource(env(EnvDownloadCookies), f.Download.CookiesFile),
+	sources := make(map[string]Source, len(keyRegistry))
+	for _, k := range keyRegistry {
+		sources[k.name] = k.source(env, f)
 	}
-}
 
-func pickSource(envVal, fileVal string) Source {
-	switch {
-	case envVal != "":
-		return Source("env")
-	case fileVal != "":
-		return SourceFile
-	default:
-		return SourceDefault
-	}
+	return sources
 }
 
 func readFile(path string, explicit bool) (File, error) {
