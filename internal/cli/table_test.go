@@ -263,7 +263,7 @@ func TestTableAlignsJapaneseTitles(t *testing.T) {
 	titleOffset := displayWidth(strings.Split(lines[0], "\t")[0]) // placeholder, recomputed below
 	_ = titleOffset
 
-	offsets := table.ColumnOffsets()
+	offsets := table.offsets
 	wantTitle := offsets[1]
 
 	for i, line := range lines {

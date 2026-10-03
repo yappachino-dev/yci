@@ -69,7 +69,7 @@ func (t *Table) Flush() {
 	}
 
 	writeRow(t.w, t.headers, widths)
-	writeRow(t.w, dashRules(t.headers, widths), widths)
+	writeRow(t.w, dashRules(t.headers), widths)
 	for _, row := range t.rows {
 		writeRow(t.w, row, widths)
 	}
@@ -86,12 +86,6 @@ func columnOffsets(widths []int) []int {
 		at += w + tablePadding
 	}
 	return offsets
-}
-
-// ColumnOffsets reports where each column starts, in display cells. It is
-// populated by Flush; before that it is empty.
-func (t *Table) ColumnOffsets() []int {
-	return t.offsets
 }
 
 // writeRow emits one padded line. Trailing padding is dropped so a line does
@@ -118,7 +112,7 @@ func writeRow(w io.Writer, cells []string, widths []int) {
 }
 
 // dashRules builds the underline, sized to each header.
-func dashRules(headers []string, _ []int) []string {
+func dashRules(headers []string) []string {
 	rules := make([]string, len(headers))
 	for i, h := range headers {
 		// One dash per visible cell, so the rule spans the header and not

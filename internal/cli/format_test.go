@@ -164,7 +164,7 @@ func TestTableAlignsColumns(t *testing.T) {
 		t.Fatalf("got %d lines, want 4:\n%s", len(lines), out.String())
 	}
 
-	offsets := table.ColumnOffsets()
+	offsets := table.offsets
 	if len(offsets) != 2 {
 		t.Fatalf("got %d column offsets, want 2", len(offsets))
 	}
