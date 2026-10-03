@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/yappachino-dev/yci/internal/audit"
@@ -74,7 +75,7 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 	prober := probe.NewFFprobe()
 	metaReader := library.NewFileMetadataReader(prober)
 
-	channelService := library.NewChannelService(channelRepo)
+	channelResolver := download.NewVideoChannelResolver(cfg.CookiesFile)
 
 	folderService := library.NewFolderService(library.FolderServiceConfig{
 		FolderRepo:  folderRepo,
@@ -92,6 +93,14 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		Transactor:     transactor,
 		Paths:          paths,
 	})
+
+	// Built after trackService because the channel identity backfill needs
+	// one of the artist's videos to ask YouTube about.
+	channelService := library.NewChannelService(channelRepo,
+		library.WithBackfill(trackService, func(ctx context.Context, videoID string) (string, string, error) {
+			id, name, err := channelResolver.ResolveVideoChannel(ctx, videoID)
+			return string(id), string(name), err
+		}))
 
 	artistService := library.NewArtistService(library.ArtistServiceConfig{
 		ArtistRepo:    artistRepo,

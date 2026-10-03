@@ -67,10 +67,33 @@ type ChannelRepository interface {
 // ChannelService links YouTube channel names to artists.
 type ChannelService struct {
 	repo ChannelRepository
+
+	// tracks and probe back the identity backfill. Both are optional: without
+	// them the service still links, resolves and unlinks, and the backfill
+	// reports that it has no way to look anything up.
+	tracks TrackLister
+	probe  VideoChannelLookup
 }
 
-func NewChannelService(repo ChannelRepository) *ChannelService {
-	return &ChannelService{repo: repo}
+// ChannelOption configures the optional parts of ChannelService.
+type ChannelOption func(*ChannelService)
+
+// WithBackfill supplies what the identity backfill needs: a way to find a
+// video an artist published, and a way to ask the source about it.
+func WithBackfill(tracks TrackLister, probe VideoChannelLookup) ChannelOption {
+	return func(s *ChannelService) {
+		s.tracks = tracks
+		s.probe = probe
+	}
+}
+
+func NewChannelService(repo ChannelRepository, opts ...ChannelOption) *ChannelService {
+	s := &ChannelService{repo: repo}
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
 }
 
 func (s *ChannelService) Link(ctx context.Context, artistID ArtistID, name ChannelName) error {

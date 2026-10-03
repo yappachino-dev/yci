@@ -15,6 +15,7 @@ quirks), see `AGENTS.md` at the repository root.
 | Doc | Feature | Status |
 |---|---|---|
 | [title-interpretation.md](title-interpretation.md) | Title interpretation — stripping vs inference, why only stripping is applied, what is stored, and what is deliberately not done | implemented |
+| [channels.md](channels.md) | Channels — linking YouTube channels to artists, why the display name is not the identity, capturing the immutable channel ID at download time, and recovering links that predate it | implemented |
 | [playlists.md](playlists.md) | Playlists — DB-owned ordered track sequences, m3u export into the library, relative-path portability | implemented |
 | [config.md](config.md) | Configuration system — layered sources, strict TOML parsing, `yci config` command group, deliberate non-features | implemented |
 | [fs-journal.md](fs-journal.md) | Filesystem action journal — transactional outbox making file moves/deletes crash-safe (redo replay, post-commit flush, startup recovery, `yci repair`) | implemented |

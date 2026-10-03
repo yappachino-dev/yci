@@ -367,3 +367,36 @@ func collectCommandHints(t *testing.T) []string {
 
 	return hints
 }
+
+// TestChannelBackfillReportsWithoutGuessing pins the reporting contract: a
+// dry run must not claim to have written, and the summary must agree with the
+// table beside it.
+func TestChannelBackfillReportsWithoutGuessing(t *testing.T) {
+	for _, tt := range []struct {
+		result   library.BackfillResult
+		wantCell string
+	}{
+		{library.BackfillResult{Stored: "Ch.", Channel: "UC1", Outcome: library.BackfillAttached}, "Would attach"},
+		{library.BackfillResult{Stored: "Old", Found: "New", Channel: "UC2", Outcome: library.BackfillRenamed}, "renamed"},
+		{library.BackfillResult{Stored: "Ch.", Channel: "UC3", Outcome: library.BackfillAlreadyKnown}, "known"},
+		{library.BackfillResult{Stored: "Ch.", Outcome: library.BackfillUnresolved}, "unresolved"},
+		{library.BackfillResult{Stored: "Ch.", Outcome: library.BackfillFailed}, "failed"},
+	} {
+		var out strings.Builder
+		cmd := &cobra.Command{}
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+
+		reportBackfill(cmd, []library.BackfillResult{tt.result}, true)
+
+		got := out.String()
+		if !strings.Contains(got, tt.wantCell) {
+			t.Errorf("outcome %q: output missing %q:\n%s", tt.result.Outcome, tt.wantCell, got)
+		}
+		// A dry run that says "attached" in the summary while the table
+		// says "Would attach" reads as a write that happened.
+		if strings.Contains(got, "1 attached,") {
+			t.Errorf("dry-run summary claims a write:\n%s", got)
+		}
+	}
+}
