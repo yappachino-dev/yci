@@ -140,9 +140,19 @@ indistinguishable from a hang. There is no sleep after the final artist, and the
 wait honours cancellation, so Ctrl-C returns immediately rather than sitting out
 the timer.
 
-A `renamed` link keeps its old name. The backfill knows the ID and the current
-name, but not that the link is *correct*; import does, because the ID matched.
-Correcting the label is left to that proof rather than applied on a guess.
+A run **refreshes a drifted name as well as a missing ID**, and that includes
+links that already carry an identity. Skipping those looks like an optimisation
+and is not one: whether a *name* is current is not knowable from the ID, and a
+link whose label has drifted is exactly the broken state this repairs. An
+earlier version skipped them and left `IRyS Ch. hololive-EN` in place
+indefinitely while reporting the link as known.
+
+Each link is reconciled against the one channel the query answered about. An
+artist publishing on several channels has more links than that, and the others
+are left untouched: applying one channel's name to all of them would corrupt
+them.
+
+Re-running a converged library reports `14 already known` and changes nothing.
 
 ## Deliberately not done
 

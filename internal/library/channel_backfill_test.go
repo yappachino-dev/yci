@@ -235,33 +235,149 @@ func TestBackfillRefusesToGuessAcrossSeveralLinks(t *testing.T) {
 	}
 }
 
-// TestBackfillSkipsAlreadyKnownLinks: a second run must not re-query YouTube
-// for links that already answered.
-func TestBackfillSkipsAlreadyKnownLinks(t *testing.T) {
+// TestBackfillRefreshesADriftedNameOnAKnownLink is the case that was wrong.
+//
+// A link with an ID whose *name* has drifted was reported "known" and skipped,
+// so a renamed channel kept its old label forever. Whether a name is current
+// is not knowable from the ID, so the run has to ask.
+func TestBackfillRefreshesADriftedNameOnAKnownLink(t *testing.T) {
 	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
-		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
+		"aaaaaaaaaaa": {id: "UC1", name: "Current Name"},
 	}}
 	svc, env := backfillService(t, probe)
 
 	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
-	if err := svc.Link(t.Context(), "someone", "An Artist", ""); err != nil {
+	if err := svc.Link(t.Context(), "someone", "Old Name", "UC1"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false}); err != nil {
-		t.Fatal(err)
-	}
-	first := len(probe.calls)
-
-	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: false})
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(probe.calls) != first {
-		t.Errorf("second run made %d new lookups, want 0", len(probe.calls)-first)
+	if results[0].Outcome != BackfillRenamed {
+		t.Errorf("outcome = %q, want %q (reason: %s)", results[0].Outcome, BackfillRenamed, results[0].Reason)
+	}
+
+	all, err := svc.All(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all[0].Name != "Current Name" {
+		t.Errorf("stored name = %q, want it refreshed to the current one", all[0].Name)
+	}
+	if all[0].ChannelID != "UC1" {
+		t.Errorf("channel id = %q, want it left alone", all[0].ChannelID)
+	}
+}
+
+// TestBackfillLeavesACurrentNameAlone: nothing to do must still say nothing
+// to do rather than reporting a rename.
+func TestBackfillLeavesACurrentNameAlone(t *testing.T) {
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "Current Name"},
+	}}
+	svc, env := backfillService(t, probe)
+
+	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
+	if err := svc.Link(t.Context(), "someone", "Current Name", "UC1"); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{})
+	if err != nil {
+		t.Fatal(err)
 	}
 	if results[0].Outcome != BackfillAlreadyKnown {
 		t.Errorf("outcome = %q, want %q", results[0].Outcome, BackfillAlreadyKnown)
+	}
+
+	all, err := svc.All(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all[0].Name != "Current Name" {
+		t.Errorf("stored name = %q, want it untouched", all[0].Name)
+	}
+}
+
+// TestBackfillDryRunDoesNotRefreshNames: the dry run reports the rename but
+// must not write it, or "what would change" becomes "what changed".
+func TestBackfillDryRunDoesNotRefreshNames(t *testing.T) {
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "Current Name"},
+	}}
+	svc, env := backfillService(t, probe)
+
+	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
+	if err := svc.Link(t.Context(), "someone", "Old Name", "UC1"); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].Outcome != BackfillRenamed {
+		t.Errorf("outcome = %q, want the rename reported", results[0].Outcome)
+	}
+
+	all, err := svc.All(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all[0].Name != "Old Name" {
+		t.Errorf("stored name = %q, want a dry run to write nothing", all[0].Name)
+	}
+}
+
+// TestBackfillLeavesOtherChannelsOfAnArtistAlone: an artist publishing on two
+// channels has more links than the single channel the probe answered about.
+// Applying that name to all of them would corrupt the other.
+func TestBackfillLeavesOtherChannelsOfAnArtistAlone(t *testing.T) {
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "Channel One"},
+	}}
+	svc, env := backfillService(t, probe)
+
+	artistWithTrack(t, env, "someone", "aaaaaaaaaaa")
+	if err := svc.Link(t.Context(), "someone", "Channel One", "UC1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Link(t.Context(), "someone", "Channel Two", "UC2"); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Found stays empty for a link the probe never asked about, so the
+	// outcome is what distinguishes "left alone" from "rewritten".
+	for _, r := range results {
+		if r.Stored != "Channel Two" {
+			continue
+		}
+		if r.Outcome != BackfillAlreadyKnown {
+			t.Errorf("un-queried link outcome = %q, want %q", r.Outcome, BackfillAlreadyKnown)
+		}
+		if r.Reason == "" {
+			t.Error("un-queried link gives no reason, so the row reads as an unexplained no-op")
+		}
+	}
+
+	all, err := svc.All(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range all {
+		if c.Name == "Channel One" && c.ChannelID != "UC1" {
+			t.Errorf("channel id moved: %+v", c)
+		}
+		if c.Name != "Channel One" && c.Name != "Channel Two" {
+			t.Errorf("a link was renamed to something unasked for: %q", c.Name)
+		}
 	}
 }
 
@@ -406,10 +522,12 @@ func TestBackfillReportsProgress(t *testing.T) {
 	}
 }
 
-// TestBackfillReportsNothingToDo: a library already backfilled must say so
-// rather than print an empty table and exit, which looks like a failure.
+// TestBackfillReportsNothingToDo: a fully converged library must say so per
+// link rather than printing an empty result.
 func TestBackfillReportsNothingToDo(t *testing.T) {
-	probe := &stubProbe{}
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
+		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
+	}}
 	svc, env := backfillService(t, probe)
 	reporter := &recordingBackfillReporter{}
 
@@ -418,15 +536,15 @@ func TestBackfillReportsNothingToDo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{Reporter: reporter}); err != nil {
+	results, err := svc.BackfillChannels(t.Context(), BackfillParams{Reporter: reporter})
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	if len(probe.calls) != 0 {
-		t.Errorf("made %d lookups when every link was known: %v", len(probe.calls), probe.calls)
+	if len(results) != 1 || results[0].Outcome != BackfillAlreadyKnown {
+		t.Errorf("results = %+v, want one known link", results)
 	}
-	if len(reporter.events) != 1 || reporter.events[0] != "start: 0 artists / 1 links" {
-		t.Errorf("events = %v, want a single zero-work start", reporter.events)
+	if reporter.events[0] != "start: 1 artists / 1 links" {
+		t.Errorf("start event = %q, want the artist counted", reporter.events[0])
 	}
 }
 
@@ -523,3 +641,95 @@ func (r *cancellingReporter) OnArtistUnresolved(ArtistID, string)               
 func (r *cancellingReporter) OnArtistStart(int, int, ArtistID) {
 	r.cancel()
 }
+
+// TestBackfillNumbersArtistsConsistently pins the counter against the exact
+// bug it had: the numerator indexed every artist while the denominator counted
+// only those needing work, printing "[9/6]".
+//
+// The invariant is that no event number exceeds the total, and that the last
+// one equals it.
+func TestBackfillNumbersArtistsConsistently(t *testing.T) {
+	artists := []struct{ id, video string }{
+		{"one", "aaaaaaaaaaa"},
+		{"two", "bbbbbbbbbbb"},
+		{"three", "ccccccccccc"},
+		{"four", "ddddddddddd"},
+	}
+
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{}}
+	svc, env := backfillService(t, probe)
+	reporter := &numberingReporter{}
+
+	// Two are seeded already carrying an ID and a current name. A mix is the
+	// point: with every artist unknown the two counts coincide, which is why
+	// the original test could not see the mismatch it was written for.
+	known := map[string]bool{"one": true, "three": true}
+
+	for i, a := range artists {
+		artistWithTrack(t, env, a.id, a.video)
+
+		id := ChannelID(fmt.Sprintf("UC%d", i+1))
+		if known[a.id] {
+			// Distinct per artist: the v14 index forbids one channel
+			// ID on two artists, and sharing one fails the link.
+			id = ChannelID(fmt.Sprintf("UCKEEP%d", i+1))
+		}
+
+		if err := svc.Link(t.Context(), ArtistID(a.id), ChannelName(a.id+" ch"), id); err != nil {
+			t.Fatal(err)
+		}
+		probe.byVideo[a.video] = struct {
+			id, name string
+		}{id: fmt.Sprintf("UC%d", i+1), name: a.id + " ch"}
+	}
+
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{Reporter: reporter}); err != nil {
+		t.Fatal(err)
+	}
+
+	if reporter.total != len(artists) {
+		t.Errorf("start reported %d artists, want %d", reporter.total, len(artists))
+	}
+	if len(reporter.numbers) != len(artists) {
+		t.Fatalf("%d start events, want %d", len(reporter.numbers), len(artists))
+	}
+
+	for i, n := range reporter.numbers {
+		d := reporter.denoms[i]
+
+		// The exact shape of the reported bug: a number larger than its own
+		// denominator on the same line.
+		if n > d {
+			t.Errorf("event %d numbered %d of %d", i, n, d)
+		}
+		// And the denominator must agree with the count announced at the
+		// start, or progress contradicts itself across the two.
+		if d != reporter.total {
+			t.Errorf("event %d says %d of %d, but the start announced %d", i, n, d, reporter.total)
+		}
+		if n != i+1 {
+			t.Errorf("event %d numbered %d, want %d (out of order or repeated)", i, n, i+1)
+		}
+	}
+
+	if last := reporter.numbers[len(reporter.numbers)-1]; last != reporter.total {
+		t.Errorf("last event numbered %d, want %d", last, reporter.total)
+	}
+}
+
+// numberingReporter records both halves of each event, because the bug was a
+// disagreement between them within one line ("[9/6]"), not a disagreement with
+// the separate start message.
+type numberingReporter struct {
+	total   int
+	numbers []int
+	denoms  []int
+}
+
+func (r *numberingReporter) OnBackfillStart(artists, _ int) { r.total = artists }
+func (r *numberingReporter) OnArtistStart(current, artists int, _ ArtistID) {
+	r.numbers = append(r.numbers, current)
+	r.denoms = append(r.denoms, artists)
+}
+func (r *numberingReporter) OnArtistResolved(ArtistID, ChannelID, ChannelName) {}
+func (r *numberingReporter) OnArtistUnresolved(ArtistID, string)               {}

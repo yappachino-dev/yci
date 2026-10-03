@@ -74,31 +74,26 @@ type BackfillParams struct {
 	Reporter BackfillReporter
 }
 
-// BackfillChannels recovers channel identities for links created before yci
-// recorded them.
+// BackfillChannels converges stored channel links with what YouTube reports.
 //
-// Deliberately conservative: an ID is attached only when the evidence is
-// unambiguous. An artist with a single channel link is unambiguous even if the
-// name has drifted, because a rename is exactly what this repairs. An artist
-// with several links is not, and guessing would file downloads under the wrong
-// artist.
+// It refreshes two things: the missing identity, and a display name that has
+// drifted. Skipping links that already have an ID looks like an optimisation
+// and is not one, because whether the *name* is current is not knowable
+// without asking. A link whose name has drifted is exactly the broken state
+// this exists to repair, and it is invisible from the ID alone.
+//
+// So every artist is queried, and each link is reconciled against the one
+// channel the query answered about. Links belonging to a different channel
+// than the one queried are left alone: an artist can publish on several, and
+// applying one channel's name to all of them would corrupt them.
 func (s *ChannelService) BackfillChannels(ctx context.Context, params BackfillParams) ([]BackfillResult, error) {
 	links, err := s.repo.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list channels: %w", err)
 	}
 
-	// An artist with more than one link cannot be resolved by elimination.
-	linkCounts := make(map[ArtistID]int, len(links))
-	for _, l := range links {
-		linkCounts[l.ArtistID]++
-	}
-
-	// Grouped so the run iterates artists, which is the unit of work: one
-	// lookup each. Iterating links and caching would have made pacing and
-	// progress both wrong.
-	order := make([]ArtistID, 0, len(linkCounts))
-	grouped := make(map[ArtistID][]Channel, len(linkCounts))
+	order := make([]ArtistID, 0, len(links))
+	grouped := make(map[ArtistID][]Channel, len(links))
 	for _, l := range links {
 		if _, seen := grouped[l.ArtistID]; !seen {
 			order = append(order, l.ArtistID)
@@ -111,19 +106,7 @@ func (s *ChannelService) BackfillChannels(ctx context.Context, params BackfillPa
 		reporter = noOpBackfillReporter{}
 	}
 
-	// Only artists with something to learn are work; the rest need no
-	// request and must not be paced for.
-	var todo []ArtistID
-	for _, id := range order {
-		for _, l := range grouped[id] {
-			if l.ChannelID == "" {
-				todo = append(todo, id)
-				break
-			}
-		}
-	}
-
-	reporter.OnBackfillStart(len(todo), len(links))
+	reporter.OnBackfillStart(len(order), len(links))
 
 	results := make([]BackfillResult, 0, len(links))
 
@@ -132,25 +115,11 @@ func (s *ChannelService) BackfillChannels(ctx context.Context, params BackfillPa
 			return results, err
 		}
 
-		known := len(grouped[artistID]) > 1
-
-		// Already resolved? No request, and the link counts as known.
-		for _, l := range grouped[artistID] {
-			if l.ChannelID != "" {
-				results = append(results, BackfillResult{
-					ArtistID: l.ArtistID, Stored: l.Name, Channel: l.ChannelID,
-					Outcome: BackfillAlreadyKnown,
-				})
-			}
-		}
-
-		if !containsArtist(todo, artistID) {
-			continue
-		}
-
-		reporter.OnArtistStart(i+1, len(todo), artistID)
+		// Numbered over every artist, matching the total above it.
+		reporter.OnArtistStart(i+1, len(order), artistID)
 
 		id, currentName, probeErr := s.probeArtistChannel(ctx, artistID)
+
 		switch {
 		case probeErr != nil || id == "":
 			reason := "no video could be resolved for this artist"
@@ -166,48 +135,85 @@ func (s *ChannelService) BackfillChannels(ctx context.Context, params BackfillPa
 				})
 			}
 
-		case known:
-			// More than one link and nothing to resolve against. Reporting
-			// the ID found is still useful, but nothing is written.
-			reporter.OnArtistResolved(artistID, id, currentName)
-			for _, l := range grouped[artistID] {
-				results = append(results, BackfillResult{
-					ArtistID: l.ArtistID, Stored: l.Name, Found: currentName, Channel: id,
-					Outcome: BackfillUnresolved,
-					Reason:  fmt.Sprintf("artist has %d channel links; attach this ID by hand", len(grouped[artistID])),
-				})
-			}
-
 		default:
 			reporter.OnArtistResolved(artistID, id, currentName)
 
 			for _, l := range grouped[artistID] {
-				result := BackfillResult{
-					ArtistID: l.ArtistID, Stored: l.Name, Found: currentName, Channel: id,
-					Outcome: BackfillAttached,
-				}
-				if normalizeChannelName(string(currentName)) != normalizeChannelName(string(l.Name)) {
-					result.Outcome = BackfillRenamed
-					result.Reason = fmt.Sprintf("stored as %q, YouTube calls it %q", l.Name, currentName)
-				}
-
-				if !params.DryRun {
-					if err := s.repo.AttachID(ctx, l.ArtistID, l.Name, id); err != nil {
-						result.Outcome = BackfillFailed
-						result.Reason = err.Error()
-					}
-				}
-
+				result := s.reconcileLink(ctx, l, id, currentName, len(grouped[artistID]), params.DryRun)
 				results = append(results, result)
 			}
 		}
 
-		if err := backfillWait(ctx, params, i < len(todo)-1); err != nil {
+		if err := backfillWait(ctx, params, i < len(order)-1); err != nil {
 			return results, err
 		}
 	}
 
 	return results, nil
+}
+
+// reconcileLink decides what one stored link needs, given the identity and
+// current name the probe returned for that artist.
+func (s *ChannelService) reconcileLink(ctx context.Context, link Channel, id ChannelID, currentName ChannelName, artistLinks int, dryRun bool) BackfillResult {
+	renamed := normalizeChannelName(string(currentName)) != normalizeChannelName(string(link.Name))
+
+	// This link belongs to a channel the probe did not ask about. An artist
+	// can publish on several, and applying this channel's name to the others
+	// would be wrong, so they are left exactly as they are.
+	if link.ChannelID != "" && link.ChannelID != id {
+		return BackfillResult{
+			ArtistID: link.ArtistID, Stored: link.Name, Channel: link.ChannelID,
+			Outcome: BackfillAlreadyKnown,
+			Reason:  "belongs to another channel of this artist; not queried",
+		}
+	}
+
+	result := BackfillResult{
+		ArtistID: link.ArtistID,
+		Stored:   link.Name,
+		Found:    currentName,
+		Channel:  id,
+		Outcome:  BackfillAttached,
+	}
+
+	if renamed {
+		result.Outcome = BackfillRenamed
+		result.Reason = fmt.Sprintf("stored as %q, YouTube calls it %q", link.Name, currentName)
+	}
+
+	// No identity and several links: nothing to resolve against. Guessing
+	// would file future downloads under the wrong artist.
+	if link.ChannelID == "" && artistLinks > 1 {
+		result.Outcome = BackfillUnresolved
+		result.Reason = fmt.Sprintf("artist has %d channel links; attach this ID by hand", artistLinks)
+		return result
+	}
+
+	// The ID already matches, so the link is trusted and only its label may
+	// need correcting. This is the case that was being skipped, leaving a
+	// stale name in place indefinitely.
+	if link.ChannelID != "" && !renamed {
+		result.Outcome = BackfillAlreadyKnown
+		return result
+	}
+
+	if dryRun {
+		return result
+	}
+
+	var writeErr error
+	if link.ChannelID == "" {
+		writeErr = s.repo.AttachID(ctx, link.ArtistID, link.Name, id)
+	} else {
+		writeErr = s.repo.RenameByID(ctx, id, link.ArtistID, currentName)
+	}
+
+	if writeErr != nil {
+		result.Outcome = BackfillFailed
+		result.Reason = writeErr.Error()
+	}
+
+	return result
 }
 
 // backfillWait paces requests and honours cancellation. Skipped after the last
