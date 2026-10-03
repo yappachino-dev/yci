@@ -10,28 +10,11 @@ package videoid
 
 import "regexp"
 
-// Length is the fixed character count of a YouTube video ID.
-const Length = 11
-
-// Pattern matches a bare video ID: exactly Length characters drawn from the
+// valid matches a bare video ID: exactly eleven characters drawn from the
 // base64url alphabet YouTube uses.
-var Pattern = regexp.MustCompile(`^[A-Za-z0-9_-]{` + itoa(Length) + `}$`)
+var valid = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 // IsValid reports whether s is a bare video ID.
 func IsValid(s string) bool {
-	return Pattern.MatchString(s)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-
-	var digits []byte
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-
-	return string(digits)
+	return valid.MatchString(s)
 }

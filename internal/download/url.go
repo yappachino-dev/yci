@@ -40,13 +40,6 @@ var shortHosts = map[string]struct{}{
 	"www.youtu.be": {},
 }
 
-// isVideoID reports whether s looks like a YouTube video ID, the form stored
-// as track SourceID. The rule itself lives in internal/videoid so that this
-// and the staging importer cannot disagree about it.
-func isVideoID(s string) bool {
-	return videoid.IsValid(s)
-}
-
 func (p ParsedURL) CleanURL(forcePlaylist bool) string {
 	switch p.Type {
 	case URLTypeVideo:
@@ -64,8 +57,8 @@ func (p ParsedURL) CleanURL(forcePlaylist bool) string {
 	}
 }
 
-// ParseURL classifies rawURL as a video, playlist, or hybrid link. Bare
-// Bare video IDs (as stored by audit) are accepted as videos.
+// ParseURL classifies rawURL as a video, playlist, or hybrid link. Bare video
+// IDs (as stored by audit) are accepted as videos.
 // Unrecognized input yields URLTypeUnknown with a nil error; only truly
 // malformed URLs produce an error.
 func ParseURL(rawURL string) (ParsedURL, error) {
@@ -80,7 +73,7 @@ func ParseURL(rawURL string) (ParsedURL, error) {
 
 	switch {
 	case host == "":
-		if id := strings.Trim(u.Path, "/"); isVideoID(id) {
+		if id := strings.Trim(u.Path, "/"); videoid.IsValid(id) {
 			result.Type = URLTypeVideo
 			result.VideoID = id
 		}

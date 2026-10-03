@@ -30,19 +30,3 @@ func TestIsValid(t *testing.T) {
 		}
 	}
 }
-
-// TestPatternAndLengthAgree guards the one thing that could silently break:
-// the length constant and the regular expression are written separately, and
-// the pattern is built from the constant via itoa, so a length that is not
-// representable in a decimal literal would make the two disagree.
-func TestPatternAndLengthAgree(t *testing.T) {
-	if got := Pattern.FindString("abcdefghijk"); got != "abcdefghijk" {
-		t.Errorf("pattern matched %q for an ID of exactly %d characters", got, Length)
-	}
-	if Pattern.MatchString("abcdefghij") {
-		t.Error("pattern accepted an ID one character short")
-	}
-	if Pattern.MatchString("abcdefghijkl") {
-		t.Error("pattern accepted an ID one character long")
-	}
-}
