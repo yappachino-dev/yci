@@ -186,41 +186,25 @@ func (m *JournaledMover) recordOrExecute(ctx context.Context, entry FileActionEn
 	return ExecuteFileAction(ctx, m.disk, entry)
 }
 
-// FileActionExecutor replays journal entries on disk. Operations are applied
-// idempotently so replays converge after crashes.
+// FileActionExecutor is the journal's public surface: inspecting, retrying,
+// purging and replaying entries. It embeds the repository so `repair` reads
+// and replays through one object instead of learning the storage split.
+//
+// Only ExecutePending touches the disk. Operations are applied idempotently so
+// replays converge after crashes.
 type FileActionExecutor struct {
-	repo *FileActionRepository
+	*FileActionRepository
 	disk DiskMover
 }
 
 func NewFileActionExecutor(repo *FileActionRepository, disk DiskMover) *FileActionExecutor {
-	return &FileActionExecutor{repo: repo, disk: disk}
-}
-
-// Pending lists unexecuted journal entries in execution order.
-func (e *FileActionExecutor) Pending(ctx context.Context) ([]store.GetPendingFileActionsRow, error) {
-	return e.repo.Pending(ctx)
-}
-
-// Failed lists journal entries that failed during a previous execution.
-func (e *FileActionExecutor) Failed(ctx context.Context) ([]store.GetFailedFileActionsRow, error) {
-	return e.repo.Failed(ctx)
-}
-
-// ResetFailed requeues failed journal entries for another attempt.
-func (e *FileActionExecutor) ResetFailed(ctx context.Context) error {
-	return e.repo.ResetFailed(ctx)
-}
-
-// PurgeDone removes successfully executed entries from the journal.
-func (e *FileActionExecutor) PurgeDone(ctx context.Context) error {
-	return e.repo.PurgeDone(ctx)
+	return &FileActionExecutor{FileActionRepository: repo, disk: disk}
 }
 
 // ExecutePending applies pending entries in order and stops at the first
 // failure. Remaining entries stay pending for later retry.
 func (e *FileActionExecutor) ExecutePending(ctx context.Context) error {
-	pending, err := e.repo.Pending(ctx)
+	pending, err := e.Pending(ctx)
 	if err != nil {
 		return err
 	}
@@ -233,14 +217,14 @@ func (e *FileActionExecutor) ExecutePending(ctx context.Context) error {
 		}
 
 		if err := ExecuteFileAction(ctx, e.disk, entry); err != nil {
-			if markErr := e.repo.markFailed(ctx, row.ID, err); markErr != nil {
+			if markErr := e.markFailed(ctx, row.ID, err); markErr != nil {
 				return errors.Join(err, markErr)
 			}
 
 			return fmt.Errorf("execute file action #%d (%s %q -> %q): %w", row.ID, row.Op, row.Src, row.Dst.String, err)
 		}
 
-		if err := e.repo.markDone(ctx, row.ID); err != nil {
+		if err := e.markDone(ctx, row.ID); err != nil {
 			return fmt.Errorf("mark file action #%d done: %w", row.ID, err)
 		}
 	}

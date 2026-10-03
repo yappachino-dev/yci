@@ -239,15 +239,6 @@ func backfillWait(ctx context.Context, params BackfillParams, more bool) error {
 	}
 }
 
-func containsArtist(list []ArtistID, id ArtistID) bool {
-	for _, v := range list {
-		if v == id {
-			return true
-		}
-	}
-	return false
-}
-
 // noOpBackfillReporter is the default, so the service never nil-checks.
 type noOpBackfillReporter struct{}
 
