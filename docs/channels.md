@@ -101,6 +101,10 @@ the rename is exactly the case being repaired.
 
 Outcomes are `attached`, `renamed`, `already known`, `unresolved`, `failed`.
 
+A `renamed` link keeps its old name. The backfill knows the ID and the current
+name, but not that the link is *correct*; import does, because the ID matched.
+Correcting the label is left to that proof rather than applied on a guess.
+
 ## Deliberately not done
 
 - **No automatic backfill on upgrade.** It needs the network, and a command

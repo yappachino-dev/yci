@@ -22,7 +22,10 @@ rather than one per track. Links that cannot be determined without guessing are
 reported and left alone: an artist with several channel links gives nothing to
 resolve against, and picking one would file downloads under the wrong artist.
 
-Names that no longer match what YouTube reports are corrected in the same pass.`,
+A stored name that no longer matches what YouTube reports is reported as
+renamed and left alone. Correcting it here would edit artist attribution
+without knowing the link is right; import corrects the label once the ID has
+matched, which is the proof.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := Container(cmd.Context())
