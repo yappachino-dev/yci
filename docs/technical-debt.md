@@ -24,9 +24,52 @@ archived: the reasoning that mattered was promoted into `docs/style-guide.md`,
 `AGENTS.md` and the feature docs, which is the only reason removing it was
 safe.
 
-**This file currently has no open entries**, which is a statement about when
-it was last read rather than a claim that the codebase is clean. The next
-flaw found starts at `TD-44`.
+---
+
+## Open entries
+
+### TD-44 — A stored path can be byte-different from the file it names
+
+**Severity: high.** Silent data divergence, and it will create duplicate files.
+
+`tracks.relative_path` is stored exactly as derived from the yt-dlp title, but
+the file on disk is byte-normalized by whatever wrote it. On ext4
+`os.Stat` is byte-exact, so the two can disagree while both are "correct".
+
+**Evidence** (real library, 2026-10-03):
+
+| Check | Result |
+|---|---|
+| Library filenames | 342 NFC, 0 NFD |
+| `tracks.relative_path` | 340 NFC, 1 NFD |
+| The NFD row on disk | does not resolve |
+| The NFC file | exists |
+
+`nevermore ... [sasakure.UK x lasah].opus` stores `U+30A6 U+3099` (ア +
+combining dakuten) where the filesystem holds `U+30F4`. Confirmed live:
+`track probe-duration --dry-run` reports **"1 file is not on disk"** for a
+file that is on disk, and returns 340 of 341.
+
+**Root cause.** `StagingService.resolveDestination` builds the filename from
+the title and stats it. Against an existing NFC file the NFD stat misses, the
+name is judged free, and the move writes a *second* file. The collision loop
+cannot catch this because it asks the same byte-exact question.
+
+**Remediation.**
+
+1. Normalize to NFC where the destination filename is derived, so the stat and
+   the eventual write agree.
+2. Append-only migration `015` normalizing `tracks.relative_path`. It must
+   normalize **conditionally** — only when the NFC path exists on disk — so a
+   library that is genuinely NFD is not broken, and it must tolerate the
+   `UNIQUE` constraint rather than aborting the migration.
+3. A test pinning the actual failure: an NFD title against an existing NFC
+   file must not produce a second file, and must not report it missing.
+4. Re-run the duration backfill afterwards; it will not reach 341/341 until
+   this lands.
+
+The same mismatch would corrupt an exported `.m3u`, since `playlist_render`
+writes the stored path verbatim.
 
 ---
 
