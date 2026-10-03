@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/probe"
 )
 
@@ -159,15 +159,19 @@ func probeTrackDuration(ctx context.Context, prober probe.Prober, track Track, l
 
 	path := filepath.Join(libraryDir, filepath.FromSlash(string(track.RelativePath)))
 
-	// The file is checked rather than inferred from the prober's error text:
-	// ffprobe exits non-zero both for an absent file and an undecodable one,
-	// so message wording would misclassify missing files as corrupt.
-	if _, statErr := os.Stat(path); statErr != nil {
+	// Checked rather than inferred from the prober's text: ffprobe exits
+	// non-zero for both an absent and an undecodable file. Resolution also
+	// tolerates the other Unicode form, so byte drift is not "missing".
+	resolved, statErr := fs.ResolveExisting(path)
+	if statErr != nil {
 		if os.IsNotExist(statErr) {
 			return 0, false, errTrackFileMissing
 		}
+
 		return 0, false, fmt.Errorf("stat %q: %w", path, statErr)
 	}
+
+	path = resolved
 
 	info, err := prober.Probe(ctx, path)
 	if err != nil {
@@ -185,7 +189,7 @@ func probeTrackDuration(ctx context.Context, prober probe.Prober, track Track, l
 // on disk, as opposed to the file being unreadable. ffprobe exits non-zero
 // with a diagnostic in both cases, so this matches on the message.
 func isMissingFileError(err error) bool {
-	if errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
@@ -198,8 +202,8 @@ func isMissingFileError(err error) bool {
 func firstExistingTrackPath(tracks []Track, libraryDir string) string {
 	for _, t := range tracks {
 		candidate := filepath.Join(libraryDir, filepath.FromSlash(string(t.RelativePath)))
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+		if resolved, err := fs.ResolveExisting(candidate); err == nil {
+			return resolved
 		}
 	}
 

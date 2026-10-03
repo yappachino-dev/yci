@@ -168,3 +168,41 @@ corpus that catches regressions. If it ever grows enough to make editing
 the cascade risky, extracting the *vocabulary* into an embedded data file is
 the first move — not generalizing the mechanism, and not adding a plugin
 registry.
+
+## Path normalization
+
+The filename is derived from the interpreted title, so it inherits whatever
+normalization the source metadata used. YouTube titles arrive with combining
+marks — `ネヴァモア` as ア plus a combining dakuten rather than as the
+precomposed `ヴ` — while the filename on disk may hold the other form.
+
+NFC and NFD are visually identical but different bytes, and ext4 compares
+names byte for byte. A stored path that differs only in normalization is a
+path that will never open.
+
+**Imports cannot produce this.** `processSingleStagingFile` writes the row and
+`MoveFile`s the file to that same path inside one transaction, and a rename
+preserves bytes, so the stored path and the on-disk name agree by
+construction. Nothing guards `resolveDestination` for this, because nothing
+needs to.
+
+It does arise for files placed by something else — hand-copied, or written by a
+version that named files from `raw_title` before stripping existed. That is
+how the one real case arose: the file carried `【MV】` and a `[cover]` suffix
+the stored title had long since dropped.
+
+Two things handle it:
+
+- `internal/fs.ResolveExisting` tries a path's other normalization form, used
+  by the duration probe so byte drift is reported as the file it is rather
+  than as "not on disk".
+- `track reconcile-paths [--dry-run]` rewrites stored paths, and only when the
+  alternate form is provably present. A genuinely absent file is reported and
+  left alone rather than guessed at.
+
+**No migration repairs this.** Normalizing blindly to NFC would silently
+orphan every track in a library that is genuinely NFD, and a
+filesystem-probing migration is neither offline nor deterministic. Migrations
+also run once, at an arbitrary moment, possibly before a library exists.
+The M3U exporter writes stored paths verbatim, so reconcile before exporting:
+making a pure renderer filesystem-aware is worse than an explicit step.

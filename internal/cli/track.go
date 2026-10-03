@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -25,6 +26,72 @@ var trackCmd = &cobra.Command{
 // past unread. 0 is the opt-out: the footer always states the real total, so
 // a shortened list is never mistaken for the whole library.
 const defaultTrackLimit = 50
+
+var trackReconcilePathsCmd = &cobra.Command{
+	Use:   "reconcile-paths",
+	Short: "Rewrite track paths whose bytes differ from the file on disk",
+	Long: `Rewrite stored track paths that name a file the filesystem cannot find.
+
+NFC and NFD encode the same visible name as different bytes, and ext4 compares
+names byte for byte, so a track can store a path that will never open even
+though the file is present. Only paths whose alternate normalization form is
+provably on disk are rewritten; a genuinely absent file is reported and left
+alone rather than guessed at.
+
+Normally there is nothing to do: imports write the path and move the file in
+one transaction, so the two agree byte for byte. This repairs libraries whose
+files were placed by something else.`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		c := Container(ctx)
+
+		dryRun, _ := cmd.Flags().GetBool(flagDryRunRetitle)
+
+		report, err := c.TrackService.ReconcilePaths(ctx, dryRun)
+		if err != nil {
+			return fmt.Errorf("reconcile track paths: %w", err)
+		}
+
+		cmd.Printf("Checked %s.\n", plural(report.Checked, "track", "tracks"))
+
+		if report.Missing > 0 {
+			cmd.Printf("  %s absent under either Unicode form; left alone.\n",
+				plural(report.Missing, "file is", "files are"))
+		}
+
+		if len(report.Repairs) == 0 {
+			cmd.Println("Every stored path matches a file on disk.")
+
+			return nil
+		}
+
+		// The two paths render identically on screen: the difference is
+		// in the bytes. Reporting the form is both narrower and the only
+		// part of the change the user could not see.
+		table := NewTable(cmd.OutOrStdout(), "TRACK", "TITLE", "FORM")
+		for _, r := range report.Repairs {
+			table.Row(
+				shortTrackID(r.ID),
+				truncateCell(r.Title, cellWidthTitle),
+				fs.Form(string(r.OldPath))+" -> "+fs.Form(string(r.NewPath)),
+			)
+		}
+
+		table.Flush()
+
+		if dryRun {
+			cmd.Printf("\nDry run: %s would be rewritten. No changes made.\n",
+				plural(len(report.Repairs), "path", "paths"))
+
+			return nil
+		}
+
+		cmd.Printf("\nRewrote %s.\n", plural(len(report.Repairs), "path", "paths"))
+
+		return nil
+	},
+}
 
 var trackListCmd = &cobra.Command{
 	Use:   "list",
@@ -281,11 +348,13 @@ func init() {
 		trackListCmd,
 		trackRetitleCmd,
 		trackProbeDurationCmd,
+		trackReconcilePathsCmd,
 		trackDeleteCmd,
 	)
 
 	trackRetitleCmd.Flags().Bool(flagDryRunRetitle, false, "Report what would change without writing")
 	trackProbeDurationCmd.Flags().Bool(flagDryRunRetitle, false, "Report what would change without writing")
+	trackReconcilePathsCmd.Flags().Bool(flagDryRunRetitle, false, "Report what would change without writing")
 
 	trackDeleteCmd.Flags().String(flagID, "", "The UUID of the track to delete")
 	trackDeleteCmd.Flags().Bool(flagYes, false, "Skip confirmation prompt (required in non-interactive sessions)")
