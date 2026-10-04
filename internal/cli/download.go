@@ -54,7 +54,12 @@ var downloadCmd = &cobra.Command{
 
 		var selector download.PlaylistSelector
 		if interactive, _ := cmd.Flags().GetBool(flagInteractive); interactive {
-			selector = &EnqueueSelector{cmd: cmd}
+			selector = &EnqueueSelector{
+				cmd: cmd,
+				preset: func(ctx context.Context, offered []download.ChannelRef) ([]download.ChannelRef, error) {
+					return preselectFor(ctx, c, cmd, offered)
+				},
+			}
 		}
 
 		forcePlaylist, _ := cmd.Flags().GetBool(flagForcePlaylist)
@@ -144,6 +149,11 @@ func (r *consoleReporter) OnTrackFailure(_ string, err error) {
 // picker without selecting anything.
 var errNoChannelsSelected = errors.New("no channels selected")
 
+// PresetResolver computes the picker's starting selection. It is a function
+// because the playlist's channels are not known until the fetch has happened,
+// which is inside the enqueue path.
+type PresetResolver func(ctx context.Context, offered []download.ChannelRef) ([]download.ChannelRef, error)
+
 // EnqueueSelector picks which playlist channels to download, interactively.
 //
 // It holds the command rather than reading the process stdin, so the form
@@ -154,11 +164,25 @@ type EnqueueSelector struct {
 	// selected pre-marks choices, so re-picking a stored selection starts
 	// from what is already chosen instead of from nothing.
 	selected []download.ChannelRef
+	// preset is consulted with the channels the listing actually offered,
+	// which is the only point where "already linked" can be decided.
+	preset PresetResolver
 }
 
 func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []download.ChannelRef) ([]download.ChannelRef, error) {
+	preset := s.selected
+
+	if s.preset != nil {
+		resolved, err := s.preset(ctx, channels)
+		if err != nil {
+			return nil, err
+		}
+
+		preset = append(append([]download.ChannelRef{}, resolved...), s.selected...)
+	}
+
 	var selectedNames []string
-	for _, ref := range s.selected {
+	for _, ref := range preset {
 		selectedNames = append(selectedNames, ref.Name)
 	}
 
@@ -349,6 +373,8 @@ func init() {
 	downloadCmd.Flags().Bool(flagQueueOnly, false, "Add tracks to the queue without starting the download")
 	downloadCmd.Flags().Bool(flagInteractive, false, "Dynamically select channels upon downloading playlist")
 	downloadCmd.Flags().Bool(flagForcePlaylist, false, "Extract playlist ID instead of video ID from hybrid URLs")
+	downloadCmd.Flags().String(flagChannels, "", "Pre-select these channels by ID or name (comma-separated), on top of already-linked ones")
+	downloadCmd.Flags().Bool(flagNoPreselect, false, "Start the channel picker with nothing selected instead of the already-linked channels")
 
 	downloadQueueCmd.Flags().Bool(flagJSON, false, "Emit JSON instead of an aligned table, for scripts")
 }

@@ -143,6 +143,54 @@ func (s *ChannelService) All(ctx context.Context) ([]Channel, error) {
 	return s.repo.All(ctx)
 }
 
+// LinkedChannels reports which channel identities already point at an artist.
+//
+// Both halves are kept because a link can predate channel IDs: a row with no
+// ID is matched on its name, which is exactly the state that made the
+// backfill necessary.
+type LinkedChannels struct {
+	IDs   map[string]struct{}
+	Names map[string]struct{}
+}
+
+// Contains reports whether a channel is already linked, preferring the ID so
+// a rename does not read as an unlinked channel.
+func (l LinkedChannels) Contains(id, name string) bool {
+	if id != "" {
+		if _, ok := l.IDs[id]; ok {
+			return true
+		}
+	}
+
+	_, ok := l.Names[name]
+
+	return ok
+}
+
+// LinkedChannels collects the linked identities, for preselecting the
+// channels a playlist offers and for reporting the ones left hanging.
+func (s *ChannelService) LinkedChannels(ctx context.Context) (LinkedChannels, error) {
+	links, err := s.repo.All(ctx)
+	if err != nil {
+		return LinkedChannels{}, fmt.Errorf("list channel links: %w", err)
+	}
+
+	linked := LinkedChannels{
+		IDs:   make(map[string]struct{}, len(links)),
+		Names: make(map[string]struct{}, len(links)),
+	}
+
+	for _, l := range links {
+		if l.ChannelID != "" {
+			linked.IDs[string(l.ChannelID)] = struct{}{}
+		}
+
+		linked.Names[string(l.Name)] = struct{}{}
+	}
+
+	return linked, nil
+}
+
 func (s *ChannelService) ResolveArtistByID(ctx context.Context, id ChannelID) (ArtistID, bool, error) {
 	return s.repo.ResolveByID(ctx, id)
 }

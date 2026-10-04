@@ -29,6 +29,40 @@ the immutable `UC...`. yt-dlp populates `channel_id` for real playlist
 listings and omits it for a channel's own uploads list, so the stored ID is
 empty in that case and matching falls back to the name.
 
+The picker starts with those channels already ticked, because a playlist you
+watch is mostly artists you already have, and re-ticking them on every poll is
+the manual work the command exists to remove. `--channels ID,NAME` adds
+channels on top, for a channel with no artist yet that would otherwise have to
+be hunted for in the list. `--no-preselect` starts from nothing and still
+honours `--channels`.
+
+An entry in `--channels` the playlist does not offer is **reported**, not
+dropped: a typo there is indistinguishable from a working entry otherwise.
+
+## Channels that deliver nothing
+
+A selected channel with no linked artist receives downloads and then prompts
+on import; if nothing is imported, it delivers nothing at all, silently.
+`source list` counts them:
+
+```
+NAME   LINKED  CHANNELS                       URL
+----   ------  -----------------------------  --------------------
+mixed  2/3     Okayu Ch. 猫又おかゆ, ...       https://...
+
+1 selected channel(s) are not linked to an artist. ...
+```
+
+This is **derived**, not recorded. "Selected but not linked" is computable
+from the stored selection and the `channels` table at any moment, so it cannot
+drift, and it clears itself the instant the channel is linked — verified by
+linking one and watching the count drop from `1/3` to `2/3`.
+
+A table of manually selected channels would need rows inserted at selection,
+deleted on link, and a decision about what happens when a link is *removed*.
+Deriving it answers the same question with none of that, and answers it
+correctly when a link disappears rather than only when a table remembers.
+
 The reason to key on the ID is rename. A performer who renames their channel
 changes the display name only; a selection stored as a string would quietly
 stop matching and the playlist would silently deliver nothing. Both halves are

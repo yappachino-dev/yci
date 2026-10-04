@@ -17,7 +17,7 @@ quirks), see `AGENTS.md` at the repository root.
 | [title-interpretation.md](title-interpretation.md) | Title interpretation — stripping vs inference, why only stripping is applied, what is stored, path normalization and why it needs no migration, and what is deliberately not done | implemented |
 | [channels.md](channels.md) | Channels — linking YouTube channels to artists, why the display name is not the identity, capturing the immutable channel ID at download time, and recovering links that predate it | implemented |
 | [playlists.md](playlists.md) | Playlists — DB-owned ordered track sequences, m3u export into the library, relative-path portability | implemented |
-| [sources.md](sources.md) | Watched YouTube sources - polling remote playlists into the download queue, channel selection by immutable ID, and the deletion journal | implemented |
+| [sources.md](sources.md) | Watched YouTube sources - polling remote playlists into the download queue, channel selection by immutable ID, preselection of linked channels, and the deletion journal | implemented |
 | [library-structure.md](library-structure.md) | Artists and folders — slug identity, the leaf-folder convention, the three ways an artist gets placed, and why `--parent` refuses to reuse an existing folder | implemented |
 | [config.md](config.md) | Configuration system — layered sources, strict TOML parsing, `yci config` command group, deliberate non-features | implemented |
 | [fs-journal.md](fs-journal.md) | Filesystem action journal — transactional outbox making file moves/deletes crash-safe (redo replay, post-commit flush, startup recovery, `yci repair`) | implemented |

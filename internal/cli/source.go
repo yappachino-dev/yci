@@ -81,7 +81,14 @@ var sourceAddCmd = &cobra.Command{
 			return fmt.Errorf("%q offers no videos; nothing to watch", url)
 		}
 
-		refs, err := (&EnqueueSelector{cmd: cmd}).SelectChannels(ctx, output.Channels)
+		selector := &EnqueueSelector{
+			cmd: cmd,
+			preset: func(ctx context.Context, offered []download.ChannelRef) ([]download.ChannelRef, error) {
+				return preselectFor(ctx, c, cmd, offered)
+			},
+		}
+
+		refs, err := selector.SelectChannels(ctx, output.Channels)
 		if err != nil {
 			if errors.Is(err, errNoChannelsSelected) {
 				return errors.New("no channels selected; nothing to watch")
@@ -138,7 +145,12 @@ var sourceListCmd = &cobra.Command{
 		}
 
 		if jsonRequested(cmd) {
-			return writeJSON(cmd.OutOrStdout(), sourceListJSON(sources))
+			linked, err := c.ChannelService.LinkedChannels(ctx)
+			if err != nil {
+				return err
+			}
+
+			return writeJSON(cmd.OutOrStdout(), sourceListJSON(sources, linked))
 		}
 
 		if len(sources) == 0 {
@@ -146,23 +158,46 @@ var sourceListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := NewTable(cmd.OutOrStdout(), "NAME", "CHANNELS", "URL")
+		linked, err := c.ChannelService.LinkedChannels(ctx)
+		if err != nil {
+			return err
+		}
+
+		hanging := 0
+
+		table := NewTable(cmd.OutOrStdout(), "NAME", "LINKED", "CHANNELS", "URL")
 		for _, src := range sources {
-			table.Row(src.Name, summarizeNames(src.ChannelNames(), 3), src.URL)
+			linkedCount, unlinked := linkStatus(src.Channels, linked)
+			hanging += unlinked
+
+			table.Row(src.Name, fmt.Sprintf("%d/%d", linkedCount, len(src.Channels)),
+				summarizeNames(src.ChannelNames(), 3), src.URL)
 		}
 		table.Flush()
+
+		// A selected channel that was never attached to an artist delivers
+		// nothing and says nothing on its own, so it is called out here
+		// rather than left to be noticed as a playlist that went quiet.
+		if hanging > 0 {
+			cmd.Printf("\n%d selected channel(s) are not linked to an artist. Downloads from them "+
+				"will prompt to create one on import, or link one up front with yci channel create.\n", hanging)
+		}
 
 		return nil
 	},
 }
 
-func sourceListJSON(sources []library.Source) []sourceDTO {
+func sourceListJSON(sources []library.Source, linked library.LinkedChannels) []sourceDTO {
 	rows := make([]sourceDTO, 0, len(sources))
 	for _, src := range sources {
+		linkedCount, unlinked := linkStatus(src.Channels, linked)
+
 		rows = append(rows, sourceDTO{
-			Name:     src.Name,
-			URL:      src.URL,
-			Channels: src.ChannelNames(),
+			Name:           src.Name,
+			URL:            src.URL,
+			Channels:       src.ChannelNames(),
+			LinkedChannels: linkedCount,
+			UnlinkedCount:  unlinked,
 		})
 	}
 
@@ -175,6 +210,10 @@ type sourceDTO struct {
 	Name     string   `json:"name"`
 	URL      string   `json:"url"`
 	Channels []string `json:"channels"`
+	// LinkedChannels counts selections already attached to an artist.
+	// UnlinkedCount is the remainder, which is what delivers nothing.
+	LinkedChannels int `json:"linked_channels"`
+	UnlinkedCount  int `json:"unlinked_count"`
 }
 
 var sourceUpdateCmd = &cobra.Command{
@@ -337,6 +376,8 @@ func init() {
 	sourceCmd.AddCommand(sourceAddCmd, sourceListCmd, sourceUpdateCmd, sourceRemoveCmd, sourcePullCmd)
 
 	sourceAddCmd.Flags().String(flagName, "", "Name for this source (defaults to the playlist title)")
+	sourceAddCmd.Flags().String(flagChannels, "", "Pre-select these channels by ID or name (comma-separated), on top of already-linked ones")
+	sourceAddCmd.Flags().Bool(flagNoPreselect, false, "Start the picker with nothing selected instead of the already-linked channels")
 	sourceListCmd.Flags().Bool(flagJSON, false, "Output as JSON")
 
 }
