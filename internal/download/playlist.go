@@ -8,9 +8,22 @@ import (
 	"os/exec"
 )
 
+// ChannelRef is one channel of a playlist as the user selects it. Both halves
+// are kept because they answer different questions: the UC... ID is what a
+// selection is matched against and survives the performer renaming the
+// channel, while the name is what a person reads. ID is empty for listings
+// that do not report one, such as a channel's own uploads list.
+type ChannelRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type PlaylistMetadata struct {
-	Channels []string
+	Channels []ChannelRef
 	Videos   []VideoMetadata
+	// Title is the playlist's own name, taken from the first entry. Empty
+	// for a listing that does not report one.
+	Title string
 }
 
 type VideoMetadata struct {
@@ -20,6 +33,10 @@ type VideoMetadata struct {
 	// ChannelID is the immutable YouTube channel ID. A real playlist
 	// carries it; a @channel/videos listing does not, so empty is normal.
 	ChannelID string `json:"channel_id"`
+	// Title is the name of the playlist this entry came from, carried by
+	// every entry of a real playlist listing. Used to name a source when
+	// the user did not.
+	PlaylistTitle string `json:"playlist_title"`
 }
 
 // Fetch resolves a playlist URL with yt-dlp. It is the method form of the
@@ -70,7 +87,7 @@ func parsePlaylist(ctx context.Context, url string, errOut io.Writer) (PlaylistM
 	defer func() { _ = wait() }()
 
 	var videos []VideoMetadata
-	var channels []string
+	var channels []ChannelRef
 	seenChannels := make(map[string]struct{})
 
 	decoder := json.NewDecoder(stdoutPipe)
@@ -80,9 +97,17 @@ func parsePlaylist(ctx context.Context, url string, errOut io.Writer) (PlaylistM
 			return PlaylistMetadata{}, fmt.Errorf("decode playlist entry: %w", err)
 		}
 
-		if _, seen := seenChannels[video.Channel]; !seen {
-			seenChannels[video.Channel] = struct{}{}
-			channels = append(channels, video.Channel)
+		// Deduplicated on the ID when the listing carries one, so a
+		// playlist that spells a channel two ways across its entries
+		// still offers it once.
+		key := video.ChannelID
+		if key == "" {
+			key = video.Channel
+		}
+
+		if _, seen := seenChannels[key]; !seen {
+			seenChannels[key] = struct{}{}
+			channels = append(channels, ChannelRef{ID: video.ChannelID, Name: video.Channel})
 		}
 
 		videos = append(videos, video)
@@ -95,5 +120,18 @@ func parsePlaylist(ctx context.Context, url string, errOut io.Writer) (PlaylistM
 	return PlaylistMetadata{
 		Channels: channels,
 		Videos:   videos,
+		Title:    playlistTitle(videos),
 	}, nil
+}
+
+// playlistTitle reads the playlist name off the first entry that carries one.
+// A listing of a single video, or one that omits the field, yields empty.
+func playlistTitle(videos []VideoMetadata) string {
+	for _, video := range videos {
+		if video.PlaylistTitle != "" {
+			return video.PlaylistTitle
+		}
+	}
+
+	return ""
 }

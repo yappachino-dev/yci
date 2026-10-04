@@ -17,7 +17,16 @@ const (
 	SkipReasonDuplicate      = "duplicate in current request"
 	SkipReasonAlreadyInQueue = "already in download queue"
 	SkipReasonUnrecognized   = "unrecognized url format"
+	SkipReasonRetired        = "deleted from the library"
 )
+
+// RetirementChecker reports whether a video was deliberately removed from
+// the library. It is a separate seam from TrackChecker because the answers
+// mean opposite things: a track that exists is waiting to be skipped, and a
+// retired video is one the user asked not to see again.
+type RetirementChecker interface {
+	IsRetired(ctx context.Context, sourceID string) (bool, error)
+}
 
 // QueueStatus is the lifecycle state of a queue row. The SQL CHECK
 // constraint remains the defense in depth; this type catches typos at
@@ -73,14 +82,14 @@ func (noOpReporter) OnTrackFailure(string, error)  {}
 var _ Reporter = noOpReporter{}
 
 type PlaylistSelector interface {
-	SelectChannels(ctx context.Context, channels []string) ([]string, error)
+	SelectChannels(ctx context.Context, channels []ChannelRef) ([]ChannelRef, error)
 }
 
 type noOpSelector struct{}
 
 var _ PlaylistSelector = noOpSelector{}
 
-func (noOpSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
+func (noOpSelector) SelectChannels(ctx context.Context, channels []ChannelRef) ([]ChannelRef, error) {
 	return channels, nil
 }
 
@@ -222,6 +231,9 @@ type EnqueueParams struct {
 	Reporter      Reporter
 	Selector      PlaylistSelector
 	ForcePlaylist bool
+	// Retirement is optional. Without it a video the user deleted is
+	// downloaded again the next time a watched playlist offers it.
+	Retirement RetirementChecker
 }
 
 func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueResult, error) {
@@ -268,6 +280,20 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 			seenIDs[id] = SkipReasonExists
 			result.Skipped++
 			return nil
+		}
+
+		if params.Retirement != nil {
+			retired, err := params.Retirement.IsRetired(ctx, id)
+			if err != nil {
+				return fmt.Errorf("check retired source %q: %w", id, err)
+			}
+
+			if retired {
+				reporter.OnEnqueueSkipped(id, SkipReasonRetired)
+				seenIDs[id] = SkipReasonRetired
+				result.Skipped++
+				return nil
+			}
 		}
 
 		uniqueIDs = append(uniqueIDs, id)
@@ -349,6 +375,13 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 	return result, nil
 }
 
+// FetchPlaylist resolves a playlist URL without enqueuing anything. It backs
+// the source commands, which need the channel list to store a selection, and
+// would otherwise enqueue every video just to look at it.
+func (s *Service) FetchPlaylist(ctx context.Context, url string) (PlaylistMetadata, error) {
+	return s.playlistFetcher.Fetch(ctx, url)
+}
+
 func (s *Service) processPlaylist(ctx context.Context, url string, selector PlaylistSelector, addFn func(string) error) error {
 	output, err := s.playlistFetcher.Fetch(ctx, url)
 	if err != nil {
@@ -360,13 +393,23 @@ func (s *Service) processPlaylist(ctx context.Context, url string, selector Play
 		return fmt.Errorf("select channels: %w", err)
 	}
 
-	channelsSet := make(map[string]struct{}, len(channels))
+	channelsSet := make(map[string]struct{}, len(channels)*2)
 	for _, ch := range channels {
-		channelsSet[ch] = struct{}{}
+		if ch.ID != "" {
+			channelsSet[ch.ID] = struct{}{}
+		}
+
+		channelsSet[ch.Name] = struct{}{}
 	}
 
 	for _, video := range output.Videos {
-		if _, selected := channelsSet[video.Channel]; !selected {
+		_, byID := channelsSet[video.ChannelID]
+		_, byName := channelsSet[video.Channel]
+
+		// Either half matching is enough. A selection saved from a
+		// listing that reported IDs must keep working if the same
+		// playlist later stops reporting them, and vice versa.
+		if (video.ChannelID == "" || !byID) && !byName {
 			continue
 		}
 

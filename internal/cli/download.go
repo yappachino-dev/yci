@@ -151,19 +151,23 @@ var errNoChannelsSelected = errors.New("no channels selected")
 // &EnqueueSelector{cmd: cmd}.
 type EnqueueSelector struct {
 	cmd *cobra.Command
+	// selected pre-marks choices, so re-picking a stored selection starts
+	// from what is already chosen instead of from nothing.
+	selected []download.ChannelRef
 }
 
-func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string) ([]string, error) {
-	var selected []string
-
-	options := huh.NewOptions(channels...)
+func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []download.ChannelRef) ([]download.ChannelRef, error) {
+	var selectedNames []string
+	for _, ref := range s.selected {
+		selectedNames = append(selectedNames, ref.Name)
+	}
 
 	// Options must be set before Value: Value walks the options to mark the
 	// ones already present in the initial value as selected, and reading the
 	// list the other way round leaves every row unchecked.
 	multi := huh.NewMultiSelect[string]().
-		Options(options...).
-		Value(&selected)
+		Options(huh.NewOptions(namesOf(channels)...)...).
+		Value(&selectedNames)
 
 	form := newForm(s.cmd, huh.NewNote().Title("Select channels that will be downloaded"), multi)
 
@@ -171,11 +175,43 @@ func (s *EnqueueSelector) SelectChannels(ctx context.Context, channels []string)
 		return nil, fmt.Errorf("failed to read terminal input: %w", err)
 	}
 
-	if len(selected) == 0 {
+	if len(selectedNames) == 0 {
 		return nil, errNoChannelsSelected
 	}
 
-	return selected, nil
+	return refsNamed(channels, selectedNames), nil
+}
+
+// namesOf flattens refs to the labels the form shows. The name is the
+// identity here because the form returns strings; the ID is recovered by
+// looking the name back up.
+func namesOf(channels []download.ChannelRef) []string {
+	names := make([]string, 0, len(channels))
+	for _, ch := range channels {
+		names = append(names, ch.Name)
+	}
+
+	return names
+}
+
+// refsNamed pairs each selected label with its ID. A name the listing spelled
+// differently is dropped rather than matched loosely: a source selection that
+// silently lost its immutable ID would fall back to name matching, which is
+// the rename failure this design exists to avoid.
+func refsNamed(channels []download.ChannelRef, names []string) []download.ChannelRef {
+	byName := make(map[string]download.ChannelRef, len(channels))
+	for _, ch := range channels {
+		byName[ch.Name] = ch
+	}
+
+	refs := make([]download.ChannelRef, 0, len(names))
+	for _, name := range names {
+		if ref, ok := byName[name]; ok {
+			refs = append(refs, ref)
+		}
+	}
+
+	return refs
 }
 
 var downloadRetryCmd = &cobra.Command{

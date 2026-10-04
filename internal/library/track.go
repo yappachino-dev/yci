@@ -127,6 +127,9 @@ type TrackService struct {
 	diskMover      PhysicalTrackMover
 	transactor     Transactor
 	paths          PathsProvider
+	// journal is optional: without it a deleted track leaves no record, and
+	// a watched playlist that still offers the video re-downloads it.
+	journal TrackJournal
 }
 
 type TrackServiceConfig struct {
@@ -135,6 +138,7 @@ type TrackServiceConfig struct {
 	DiskMover      PhysicalTrackMover
 	Transactor     Transactor
 	Paths          PathsProvider
+	Journal        TrackJournal
 }
 
 func NewTrackService(cfg TrackServiceConfig) *TrackService {
@@ -144,6 +148,7 @@ func NewTrackService(cfg TrackServiceConfig) *TrackService {
 		diskMover:      cfg.DiskMover,
 		transactor:     cfg.Transactor,
 		paths:          cfg.Paths,
+		journal:        cfg.Journal,
 	}
 }
 
@@ -295,6 +300,15 @@ func (s *TrackService) Delete(ctx context.Context, id TrackID) error {
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.repo.Delete(txCtx, id); err != nil {
 			return err
+		}
+
+		// Journalled inside the same transaction as the delete: a recorded
+		// removal for a track that survived would suppress a download the
+		// user never cancelled.
+		if s.journal != nil {
+			if err := s.journal.Record(txCtx, id, VideoID(track.SourceID), TrackEventDeleted); err != nil {
+				return err
+			}
 		}
 
 		absPath := filepath.Join(s.paths.LibraryDir(), filepath.FromSlash(string(track.RelativePath)))

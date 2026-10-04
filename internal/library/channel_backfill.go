@@ -3,7 +3,6 @@ package library
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 	"time"
 )
@@ -144,7 +143,7 @@ func (s *ChannelService) BackfillChannels(ctx context.Context, params BackfillPa
 			}
 		}
 
-		if err := backfillWait(ctx, params, i < len(order)-1); err != nil {
+		if err := Pace(ctx, params.MinWait, params.MaxWait, len(order)-i); err != nil {
 			return results, err
 		}
 	}
@@ -214,29 +213,6 @@ func (s *ChannelService) reconcileLink(ctx context.Context, link Channel, id Cha
 	}
 
 	return result
-}
-
-// backfillWait paces requests and honours cancellation. Skipped after the last
-// one so a finished run does not sit there sleeping.
-func backfillWait(ctx context.Context, params BackfillParams, more bool) error {
-	if !more || (params.MinWait <= 0 && params.MaxWait <= 0) {
-		return ctx.Err()
-	}
-
-	wait := params.MinWait
-	if params.MaxWait > params.MinWait {
-		wait += time.Duration(rand.Int64N(int64(params.MaxWait-params.MinWait) + 1))
-	}
-
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 // noOpBackfillReporter is the default, so the service never nil-checks.

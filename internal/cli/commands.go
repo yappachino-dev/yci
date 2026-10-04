@@ -42,6 +42,7 @@ func init() {
 	channelCmd.GroupID = groupEntities
 	trackCmd.GroupID = groupEntities
 	playlistCmd.GroupID = groupEntities
+	sourceCmd.GroupID = groupFiles
 
 	configCmd.GroupID = groupSetup
 
@@ -71,6 +72,7 @@ func init() {
 		asGroup(importCmd),
 		syncCmd,
 		repairCmd,
+		asGroup(sourceCmd),
 
 		asGroup(debugCmd),
 		versionCmd,

@@ -57,6 +57,15 @@ type Playlist struct {
 	FragmentExcludes string
 }
 
+type PlaylistSource struct {
+	ID        int64
+	Name      string
+	Url       string
+	Channels  string
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
+}
+
 type PlaylistTrack struct {
 	PlaylistID int64
 	TrackID    string
@@ -75,6 +84,14 @@ type Track struct {
 	RawTitle     sql.NullString
 	Performer    string
 	Version      string
+}
+
+type TrackJournal struct {
+	ID        int64
+	TrackID   string
+	SourceID  sql.NullString
+	Op        string
+	CreatedAt time.Time
 }
 
 type VideoChannel struct {

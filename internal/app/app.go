@@ -29,6 +29,8 @@ type Container struct {
 	StagingService  *library.StagingService
 	PlaylistService *library.PlaylistService
 	DownloadService *download.Service
+	SourceService   *library.SourceService
+	TrackJournal    *library.TrackJournalService
 	AuditService    *audit.Service
 	FileActions     *db.FileActionExecutor
 }
@@ -86,12 +88,16 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		Paths:       paths,
 	})
 
+	trackJournal := library.NewTrackJournalService(library.NewSQLiteTrackJournal(queries))
+	sourceService := library.NewSourceService(library.NewSQLiteSourceRepository(queries))
+
 	trackService := library.NewTrackService(library.TrackServiceConfig{
 		TrackRepo:      trackRepo,
 		FolderResolver: folderService,
 		DiskMover:      journaledMover,
 		Transactor:     transactor,
 		Paths:          paths,
+		Journal:        trackJournal,
 	})
 
 	// Built after trackService because the channel identity backfill needs
@@ -151,6 +157,8 @@ func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 		StagingService:  stagingService,
 		PlaylistService: playlistService,
 		DownloadService: downloadService,
+		SourceService:   sourceService,
+		TrackJournal:    trackJournal,
 		AuditService:    auditService,
 		FileActions:     fileActionExecutor,
 		Config:          cfg,

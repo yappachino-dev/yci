@@ -550,21 +550,12 @@ func TestBackfillReportsNothingToDo(t *testing.T) {
 
 // TestBackfillWaitsBetweenRequests: pacing is what keeps a long run from
 // drawing a 403, the failure the download path already classifies.
+//
+// Seven artists, because the run has to clear noPaceThreshold before any
+// wait happens at all. Three is enough to prove gaps are skipped after the
+// last request, but too few to prove pacing engages.
 func TestBackfillWaitsBetweenRequests(t *testing.T) {
-	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
-		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
-	}}
-	svc, env := backfillService(t, probe)
-
-	for i, spec := range []struct{ artist, video string }{
-		{"one", "aaaaaaaaaaa"}, {"two", "bbbbbbbbbbb"}, {"three", "ccccccccccc"},
-	} {
-		artistWithTrack(t, env, spec.artist, spec.video)
-		if err := svc.Link(t.Context(), ArtistID(spec.artist), ChannelName(spec.artist+" ch"), ""); err != nil {
-			t.Fatal(err)
-		}
-		probe.byVideo[spec.video] = struct{ id, name string }{id: fmt.Sprintf("UC%d", i+1), name: spec.artist + " ch"}
-	}
+	svc, _, _ := backfillWithArtists(t, 7)
 
 	const gap = 100 * time.Millisecond
 
@@ -577,33 +568,68 @@ func TestBackfillWaitsBetweenRequests(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 
-	// Three artists means two gaps between requests, not three: there is no
-	// reason to sleep after the last one. The lower bound alone would not
-	// catch a third gap, so the upper bound is the real assertion here.
-	if elapsed < 2*gap {
-		t.Errorf("ran in %v, want at least two %v gaps", elapsed, gap)
+	// The run paces while more than noPaceThreshold requests remain: with
+	// seven artists that is the first three. The lower bound alone would not
+	// catch a fourth gap, so the upper bound is the real assertion here.
+	if elapsed < 3*gap {
+		t.Errorf("ran in %v, want at least three %v gaps", elapsed, gap)
 	}
-	if elapsed >= 3*gap {
-		t.Errorf("ran in %v, want no gap after the final artist (would be %v)", elapsed, 3*gap)
+	if elapsed >= 4*gap {
+		t.Errorf("ran in %v, want no gap once pacing stops applying", elapsed)
 	}
+}
+
+// TestBackfillSkipsPacingForSmallRuns: a handful of flat lookups costs less
+// bandwidth than the wait before the first of them would take.
+func TestBackfillSkipsPacingForSmallRuns(t *testing.T) {
+	svc, _, _ := backfillWithArtists(t, noPaceThreshold-1)
+
+	const gap = 2 * time.Second
+
+	start := time.Now()
+	if _, err := svc.BackfillChannels(t.Context(), BackfillParams{
+		MinWait: gap,
+		MaxWait: gap,
+	}); err != nil {
+		t.Fatalf("BackfillChannels: %v", err)
+	}
+
+	if elapsed := time.Since(start); elapsed >= gap {
+		t.Errorf("ran in %v with %d artists, want no %v wait below the threshold", elapsed, noPaceThreshold-1, gap)
+	}
+}
+
+// backfillWithArtists seeds n artists that each own one track and one channel
+// link, with a probe that resolves every one of them.
+func backfillWithArtists(t *testing.T, n int) (*ChannelService, *libraryEnv, *stubProbe) {
+	t.Helper()
+
+	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{}}
+	svc, env := backfillService(t, probe)
+
+	for i := range n {
+		artist := fmt.Sprintf("a%02d", i)
+		video := fmt.Sprintf("%011d", i+1)
+
+		artistWithTrack(t, env, artist, video)
+		if err := svc.Link(t.Context(), ArtistID(artist), ChannelName(artist+" ch"), ""); err != nil {
+			t.Fatal(err)
+		}
+
+		probe.byVideo[video] = struct{ id, name string }{id: fmt.Sprintf("UC%d", i+1), name: artist + " ch"}
+	}
+
+	return svc, env, probe
 }
 
 // TestBackfillStopsWhenCancelled: a paced run must remain interruptible, or
 // Ctrl-C waits out the timer.
+//
+// Seven artists, because below noPaceThreshold no wait happens and the run
+// would finish before cancellation could be observed at all: the test would
+// pass without ever exercising the select.
 func TestBackfillStopsWhenCancelled(t *testing.T) {
-	probe := &stubProbe{byVideo: map[string]struct{ id, name string }{
-		"aaaaaaaaaaa": {id: "UC1", name: "An Artist"},
-		"bbbbbbbbbbb": {id: "UC2", name: "Another"},
-	}}
-	svc, env := backfillService(t, probe)
-
-	artistWithTrack(t, env, "one", "aaaaaaaaaaa")
-	artistWithTrack(t, env, "two", "bbbbbbbbbbb")
-	for _, spec := range []struct{ artist, video string }{{"one", "aaaaaaaaaaa"}, {"two", "bbbbbbbbbbb"}} {
-		if err := svc.Link(t.Context(), ArtistID(spec.artist), ChannelName(spec.artist+" ch"), ""); err != nil {
-			t.Fatal(err)
-		}
-	}
+	svc, _, _ := backfillWithArtists(t, 7)
 
 	// Cancelled once the first artist is under way, so the run is sitting in
 	// the gap between requests rather than failing at the loop head. That is

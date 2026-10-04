@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/yappachino-dev/yci/internal/download"
 )
 
 // TestConsoleReporterOutput pins the download progress lines.
@@ -60,7 +62,7 @@ func TestChannelPickerRequiresASelection(t *testing.T) {
 	selector := &EnqueueSelector{cmd: session.cmd}
 
 	wait := await(func() error {
-		_, err := selector.SelectChannels(t.Context(), []string{"Alpha", "Beta"})
+		_, err := selector.SelectChannels(t.Context(), []download.ChannelRef{{Name: "Alpha"}, {Name: "Beta"}})
 		return err
 	})
 
@@ -84,10 +86,17 @@ func TestChannelPickerReturnsTheSelectedChannels(t *testing.T) {
 	session := newTTYCommand(t, nil)
 	selector := &EnqueueSelector{cmd: session.cmd}
 
-	var got []string
+	// IDs are present on purpose: the form shows names, so this pins that
+	// the immutable ID is recovered from the picked name rather than lost.
+	offered := []download.ChannelRef{
+		{ID: "UCaaa", Name: "Alpha"},
+		{ID: "UCbbb", Name: "Beta"},
+	}
+
+	var got []download.ChannelRef
 	wait := await(func() error {
 		var err error
-		got, err = selector.SelectChannels(t.Context(), []string{"Alpha", "Beta"})
+		got, err = selector.SelectChannels(t.Context(), offered)
 		return err
 	})
 
@@ -102,8 +111,9 @@ func TestChannelPickerReturnsTheSelectedChannels(t *testing.T) {
 		t.Fatalf("SelectChannels: %v\n--- rendered ---\n%s", err, session.output())
 	}
 
-	if len(got) != 1 || got[0] != "Alpha" {
-		t.Errorf("selected %v, want [Alpha]", got)
+	want := []download.ChannelRef{{ID: "UCaaa", Name: "Alpha"}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Errorf("selected %v, want %v", got, want)
 	}
 }
 

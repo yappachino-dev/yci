@@ -64,10 +64,13 @@ type libraryEnv struct {
 	tracks   *TrackService
 	channels *ChannelService
 	// testFolder caches folders shared by helpers that seed several artists.
-	testFolder map[string]FolderID
-	staging    *StagingService
-	playlists  *PlaylistService
-	repos      struct {
+	testFolder     map[string]FolderID
+	staging        *StagingService
+	playlists      *PlaylistService
+	journaledMover *db.JournaledMover
+	trackJournal   *TrackJournalService
+	sources        *SourceService
+	repos          struct {
 		folders *SQLiteFolderRepository
 		artists *SQLiteArtistRepository
 		tracks  *SQLiteTrackRepository
@@ -91,6 +94,7 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 	env.txr = db.NewSQLiteTransactor(dbConn)
 	env.txr.SetPostCommit(env.actions.ExecutePending)
 	journaled := db.NewJournaledMover(faRepo, mover)
+	env.journaledMover = journaled
 
 	env.repos.folders = NewSQLiteFolderRepository(queries, rootID)
 	env.repos.artists = NewSQLiteArtistRepository(queries, rootID)
@@ -98,6 +102,8 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 	channelRepo := NewSQLiteChannelRepository(queries)
 
 	env.channels = NewChannelService(channelRepo)
+	env.trackJournal = NewTrackJournalService(NewSQLiteTrackJournal(queries))
+	env.sources = NewSourceService(NewSQLiteSourceRepository(queries))
 	env.folders = NewFolderService(FolderServiceConfig{
 		FolderRepo:  env.repos.folders,
 		TrackWriter: env.repos.tracks,
@@ -112,6 +118,7 @@ func newLibraryEnv(t *testing.T) *libraryEnv {
 		DiskMover:      journaled,
 		Transactor:     env.txr,
 		Paths:          env.paths,
+		Journal:        env.trackJournal,
 	})
 	env.artists = NewArtistService(ArtistServiceConfig{
 		ArtistRepo:    env.repos.artists,
