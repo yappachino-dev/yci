@@ -232,9 +232,10 @@ var trackRetitleCmd = &cobra.Command{
 }
 
 var trackDeleteCmd = &cobra.Command{
-	Use:   "delete [id]",
-	Short: "Delete a track from the database AND remove the physical file",
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "delete [id]",
+	ValidArgsFunction: trackIDCompletion,
+	Short:             "Delete a track from the database AND remove the physical file",
+	Args:              cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)

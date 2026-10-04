@@ -228,14 +228,18 @@ func TestCompletionsWithoutAContainerDoNotPanic(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetContext(context.Background())
 
-	// These four read from the database, so with no container they must offer
+	// These read from the database, so with no container they must offer
 	// nothing. configKeyCompletion is deliberately absent: the key set is
 	// static and needs no boot, which is covered separately below.
 	completions := map[string]func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective){
-		"artist":  artistIDCompletion,
-		"folder":  folderIDCompletion,
-		"track":   trackIDCompletion,
-		"channel": channelNameCompletion,
+		"artist":          artistIDCompletion,
+		"folder":          folderIDCompletion,
+		"track":           trackIDCompletion,
+		"channel":         channelNameCompletion,
+		"playlist":        playlistNameCompletion,
+		"playlistOrTrack": playlistOrTrackCompletion,
+		"source":          sourceNameCompletion,
+		"queue":           queueIDCompletion,
 	}
 
 	for name, fn := range completions {

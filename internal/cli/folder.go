@@ -55,9 +55,10 @@ var folderListCmd = &cobra.Command{
 }
 
 var folderEditCmd = &cobra.Command{
-	Use:   "edit [id]",
-	Short: "Rename or move a folder",
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "edit [id]",
+	ValidArgsFunction: folderIDCompletion,
+	Short:             "Rename or move a folder",
+	Args:              cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		newSlug, _ := cmd.Flags().GetBool(flagUpdateIDSlug)
 		nameChanged := cmd.Flags().Changed(flagName)
@@ -110,9 +111,10 @@ var folderEditCmd = &cobra.Command{
 }
 
 var folderDeleteCmd = &cobra.Command{
-	Use:   "delete [id]",
-	Short: "Delete a folder",
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "delete [id]",
+	ValidArgsFunction: folderIDCompletion,
+	Short:             "Delete a folder",
+	Args:              cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)

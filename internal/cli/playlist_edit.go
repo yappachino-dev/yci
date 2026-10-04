@@ -12,8 +12,9 @@ import (
 )
 
 var playlistEditCmd = &cobra.Command{
-	Use:   "edit <name>",
-	Short: "Rename a playlist, or change its seed recipe",
+	Use:               "edit <name>",
+	ValidArgsFunction: playlistNameCompletion,
+	Short:             "Rename a playlist, or change its seed recipe",
 	Long: `Change a playlist's name, or the recipe its membership is derived from.
 
 Renaming also follows the exported .m3u. Leaving it behind would put a

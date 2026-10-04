@@ -239,9 +239,10 @@ func refsNamed(channels []download.ChannelRef, names []string) []download.Channe
 }
 
 var downloadRetryCmd = &cobra.Command{
-	Use:   "retry [ids...]",
-	Short: "Re-arm failed downloads for another attempt (no IDs: all hard-failed entries)",
-	Args:  cobra.ArbitraryArgs,
+	Use:               "retry [ids...]",
+	ValidArgsFunction: queueIDCompletion,
+	Short:             "Re-arm failed downloads for another attempt (no IDs: all hard-failed entries)",
+	Args:              cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)

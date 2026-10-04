@@ -217,9 +217,10 @@ type sourceDTO struct {
 }
 
 var sourceUpdateCmd = &cobra.Command{
-	Use:   "update <name>",
-	Short: "Re-pick which channels of a watched playlist are pulled",
-	Args:  cobra.ExactArgs(1),
+	Use:               "update <name>",
+	ValidArgsFunction: sourceNameCompletion,
+	Short:             "Re-pick which channels of a watched playlist are pulled",
+	Args:              cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
@@ -262,9 +263,10 @@ var sourceUpdateCmd = &cobra.Command{
 }
 
 var sourceRemoveCmd = &cobra.Command{
-	Use:   "remove <name>",
-	Short: "Stop watching a YouTube playlist",
-	Args:  cobra.ExactArgs(1),
+	Use:               "remove <name>",
+	ValidArgsFunction: sourceNameCompletion,
+	Short:             "Stop watching a YouTube playlist",
+	Args:              cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)

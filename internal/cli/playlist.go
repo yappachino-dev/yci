@@ -131,9 +131,10 @@ func formatDuration(secs int) string {
 }
 
 var playlistShowCmd = &cobra.Command{
-	Use:   "show <name>",
-	Short: "Print a playlist's tracks in playback order",
-	Args:  cobra.ExactArgs(1),
+	Use:               "show <name>",
+	ValidArgsFunction: playlistNameCompletion,
+	Short:             "Print a playlist's tracks in playback order",
+	Args:              cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := Container(cmd.Context())
 
@@ -182,9 +183,10 @@ var playlistShowCmd = &cobra.Command{
 }
 
 var playlistAddCmd = &cobra.Command{
-	Use:   "add <name> <track-id>...",
-	Short: "Append one or more tracks to a playlist",
-	Args:  cobra.MinimumNArgs(2),
+	Use:               "add <name> <track-id>...",
+	ValidArgsFunction: playlistOrTrackCompletion,
+	Short:             "Append one or more tracks to a playlist",
+	Args:              cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
@@ -212,9 +214,10 @@ var playlistAddCmd = &cobra.Command{
 }
 
 var playlistRemoveCmd = &cobra.Command{
-	Use:   "remove <name> <track-id>...",
-	Short: "Remove one or more tracks from a playlist",
-	Args:  cobra.MinimumNArgs(2),
+	Use:               "remove <name> <track-id>...",
+	ValidArgsFunction: playlistOrTrackCompletion,
+	Short:             "Remove one or more tracks from a playlist",
+	Args:              cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
@@ -242,9 +245,10 @@ var playlistRemoveCmd = &cobra.Command{
 }
 
 var playlistDeleteCmd = &cobra.Command{
-	Use:   "delete <name>",
-	Short: "Delete a playlist (exported .m3u files are left on disk)",
-	Args:  cobra.ExactArgs(1),
+	Use:               "delete <name>",
+	ValidArgsFunction: playlistNameCompletion,
+	Short:             "Delete a playlist (exported .m3u files are left on disk)",
+	Args:              cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
@@ -270,9 +274,10 @@ var playlistDeleteCmd = &cobra.Command{
 }
 
 var playlistExportCmd = &cobra.Command{
-	Use:   "export [name]",
-	Short: "Render playlists to .m3u files under the library (all playlists when no name given)",
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "export [name]",
+	ValidArgsFunction: playlistNameCompletion,
+	Short:             "Render playlists to .m3u files under the library (all playlists when no name given)",
+	Args:              cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)

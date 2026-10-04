@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -86,6 +87,84 @@ func channelNameCompletion(cmd *cobra.Command, _ []string, toComplete string) ([
 		if strings.HasPrefix(string(c.Name), toComplete) {
 			comps = append(comps, fmt.Sprintf("%s\tLinked to: %s", c.Name, c.ArtistID))
 		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
+}
+
+func playlistNameCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	playlists, err := c.PlaylistService.All(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, p := range playlists {
+		if strings.HasPrefix(p.Name, toComplete) {
+			comps = append(comps, p.Name)
+		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
+}
+
+// playlistOrTrackCompletion completes the playlist name first and track IDs
+// after it, because `playlist add` takes one of each in that order.
+func playlistOrTrackCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return playlistNameCompletion(cmd, args, toComplete)
+	}
+
+	return trackIDCompletion(cmd, args, toComplete)
+}
+
+func sourceNameCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	sources, err := c.SourceService.List(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, s := range sources {
+		if strings.HasPrefix(s.Name, toComplete) {
+			comps = append(comps, fmt.Sprintf("%s\t%d channels", s.Name, len(s.Channels)))
+		}
+	}
+
+	return comps, cobra.ShellCompDirectiveNoFileComp
+}
+
+// queueIDCompletion offers row IDs with their failure state attached, since
+// `retry` takes either and the state is what a user is scanning the queue for.
+func queueIDCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	c, ok := ContainerOK(cmd.Context())
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	entries, err := c.DownloadService.All(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var comps []string
+	for _, e := range entries {
+		id := strconv.Itoa(e.ID)
+		if !strings.HasPrefix(id, toComplete) {
+			continue
+		}
+
+		comps = append(comps, fmt.Sprintf("%s\t%s %s", id, e.Status, e.SourceID))
 	}
 
 	return comps, cobra.ShellCompDirectiveNoFileComp

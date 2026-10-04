@@ -16,8 +16,9 @@ const flagAccept = "accept"
 // differ by hundreds of rows, and the question being asked is how many,
 // not each one.
 var playlistReseedCmd = &cobra.Command{
-	Use:   "reseed <name>",
-	Short: "Re-derive a seeded playlist's membership and show what would change",
+	Use:               "reseed <name>",
+	ValidArgsFunction: playlistNameCompletion,
+	Short:             "Re-derive a seeded playlist's membership and show what would change",
 	Long: `Re-run a seeded playlist's recipe against the current library and show the
 difference before writing anything.
 

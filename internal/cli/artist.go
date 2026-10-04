@@ -89,9 +89,10 @@ var artistListCmd = &cobra.Command{
 }
 
 var artistEditCmd = &cobra.Command{
-	Use:   "edit [id]",
-	Short: "Rename or move an artist",
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "edit [id]",
+	ValidArgsFunction: artistIDCompletion,
+	Short:             "Rename or move an artist",
+	Args:              cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		newSlug, _ := cmd.Flags().GetBool(flagUpdateIDSlug)
 		nameChanged := cmd.Flags().Changed(flagName)
@@ -144,9 +145,10 @@ var artistEditCmd = &cobra.Command{
 }
 
 var artistDeleteCmd = &cobra.Command{
-	Use:   "delete [id]",
-	Short: "Delete an artist (linked channels cascade, tracks become orphaned)",
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "delete [id]",
+	ValidArgsFunction: artistIDCompletion,
+	Short:             "Delete an artist (linked channels cascade, tracks become orphaned)",
+	Args:              cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		c := Container(ctx)
