@@ -25,6 +25,8 @@ func TestOutputSchemaIsStable(t *testing.T) {
 		{"playlist", Playlist{}, []string{"id", "name", "seed_track_id", "fragment_tokens", "fragment_mode", "fragment_excludes"}},
 		{"playlist entry", PlaylistEntry{}, []string{"position", "track_id", "title", "duration_sec"}},
 		{"source", Source{}, []string{"name", "url", "channels", "linked_channels", "unlinked_count"}},
+		{"enqueue response", QueueEnqueueResponse{}, []string{"items"}},
+		{"enqueue item", QueueEnqueueItem{}, []string{"url", "video_id", "skipped", "reason"}},
 	}
 
 	for _, c := range cases {

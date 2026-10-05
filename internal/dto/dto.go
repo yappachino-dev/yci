@@ -80,6 +80,29 @@ type PlaylistEntry struct {
 	Duration int    `json:"duration_sec"`
 }
 
+// QueueEnqueueRequest is the body of POST /queue.
+type QueueEnqueueRequest struct {
+	URLs []string `json:"urls"`
+	// ForcePlaylist treats a hybrid watch/list URL as a playlist instead of
+	// the single video it names.
+	ForcePlaylist bool `json:"force_playlist"`
+}
+
+// QueueEnqueueResponse reports one item per video the request resolved to.
+// A playlist URL yields many items sharing its url.
+type QueueEnqueueResponse struct {
+	Items []QueueEnqueueItem `json:"items"`
+}
+
+// QueueEnqueueItem is what happened to a single video.
+type QueueEnqueueItem struct {
+	URL     string `json:"url"`
+	VideoID string `json:"video_id"`
+	Skipped bool   `json:"skipped"`
+	// Reason is a download.SkipReason, and is empty unless skipped.
+	Reason string `json:"reason"`
+}
+
 // Source is one watched YouTube playlist as reported to a machine consumer.
 type Source struct {
 	Name     string   `json:"name"`
@@ -142,6 +165,21 @@ func ToPlaylist(p library.Playlist) Playlist {
 
 // ToQueueEntry classifies the failure as it converts, so no caller can
 // forget the step and ship a raw yt-dlp message as a contract value.
+// QueueEnqueueItems converts enqueue outcomes into their wire form.
+func QueueEnqueueItems(outcomes []download.EnqueueOutcome) []QueueEnqueueItem {
+	items := make([]QueueEnqueueItem, 0, len(outcomes))
+	for _, o := range outcomes {
+		items = append(items, QueueEnqueueItem{
+			URL:     o.URL,
+			VideoID: o.VideoID,
+			Skipped: o.Skipped,
+			Reason:  o.Reason,
+		})
+	}
+
+	return items
+}
+
 func ToQueueEntry(e download.QueueEntry) QueueEntry {
 	return QueueEntry{
 		ID:        e.ID,

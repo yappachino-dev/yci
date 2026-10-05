@@ -222,6 +222,19 @@ type EnqueueResult struct {
 	Enqueued int
 	Skipped  int
 	Failed   int
+	// Outcomes says what happened to each video and which URL asked for it.
+	// Counts alone suit a CLI summary and are useless to a caller that posted
+	// several URLs and must learn which was refused.
+	Outcomes []EnqueueOutcome
+}
+
+// EnqueueOutcome is the result for a single video.
+type EnqueueOutcome struct {
+	URL     string
+	VideoID string
+	Skipped bool
+	// Reason is a SkipReason constant, set only when Skipped.
+	Reason string
 }
 
 func (s *Service) All(ctx context.Context) ([]QueueEntry, error) {
@@ -255,6 +268,9 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 	}
 
 	var result EnqueueResult
+	// currentURL attributes each expanded video to the URL that asked for it.
+	var currentURL string
+	urlByID := make(map[string]string)
 	seenIDs := make(map[string]string)
 
 	stagedFiles, err := s.dirReader.ReadDir(s.stagingDirs.StagingDir())
@@ -272,6 +288,9 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 		if reason, ok := seenIDs[id]; ok {
 			reporter.OnEnqueueSkipped(id, reason)
 			result.Skipped++
+			result.Outcomes = append(result.Outcomes, EnqueueOutcome{
+				URL: currentURL, VideoID: id, Skipped: true, Reason: reason,
+			})
 			return nil
 		}
 
@@ -286,6 +305,9 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 			reporter.OnEnqueueSkipped(id, SkipReasonExists)
 			seenIDs[id] = SkipReasonExists
 			result.Skipped++
+			result.Outcomes = append(result.Outcomes, EnqueueOutcome{
+				URL: currentURL, VideoID: id, Skipped: true, Reason: SkipReasonExists,
+			})
 			return nil
 		}
 
@@ -299,10 +321,14 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 				reporter.OnEnqueueSkipped(id, SkipReasonRetired)
 				seenIDs[id] = SkipReasonRetired
 				result.Skipped++
+				result.Outcomes = append(result.Outcomes, EnqueueOutcome{
+					URL: currentURL, VideoID: id, Skipped: true, Reason: SkipReasonRetired,
+				})
 				return nil
 			}
 		}
 
+		urlByID[id] = currentURL
 		uniqueIDs = append(uniqueIDs, id)
 		return nil
 	}
@@ -312,10 +338,15 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 			return result, err
 		}
 
+		currentURL = u
+
 		p, err := ParseURL(u)
 		if err != nil || p.Type == URLTypeUnknown {
 			reporter.OnEnqueueSkipped(u, SkipReasonUnrecognized)
 			result.Failed++
+			result.Outcomes = append(result.Outcomes, EnqueueOutcome{
+				URL: u, Skipped: true, Reason: SkipReasonUnrecognized,
+			})
 			continue
 		}
 
@@ -360,12 +391,18 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (EnqueueRes
 				return err
 			}
 
+			outcome := EnqueueOutcome{URL: urlByID[id], VideoID: id}
+
 			if enqueued {
 				txEnqueued++
 			} else {
 				reporter.OnEnqueueSkipped(id, SkipReasonAlreadyInQueue)
 				txSkipped++
+				outcome.Skipped = true
+				outcome.Reason = SkipReasonAlreadyInQueue
 			}
+
+			result.Outcomes = append(result.Outcomes, outcome)
 		}
 
 		return nil
