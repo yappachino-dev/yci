@@ -62,6 +62,7 @@ func buildArgs(cfg Config) []string {
 		// unless --no-simulate is also passed, which would quietly turn
 		// every download into a no-op.
 		"--print", metadataTemplate,
+		"--no-simulate",
 	}
 
 	if cfg.CookiesFile != "" {
