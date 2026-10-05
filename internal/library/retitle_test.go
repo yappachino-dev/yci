@@ -166,7 +166,7 @@ func TestImportStoresParsedTitleAndProvenance(t *testing.T) {
 		return StagingResult{Action: ActionSkip}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, skip); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, skip); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 
@@ -221,7 +221,7 @@ func TestImportDoesNotOverwriteOccupiedDestination(t *testing.T) {
 		return StagingResult{Action: ActionSkip}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, skip); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, skip); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 

@@ -13,6 +13,17 @@ import (
 // URLs; the limit is here so a mistaken upload is refused, not buffered.
 const maxEnqueueBody = 64 << 10
 
+// decodeBody reads a bounded json request body and answers 400 itself, so
+// every write endpoint rejects a malformed or oversized body the same way.
+func (s *Server) decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxEnqueueBody)).Decode(dst); err != nil {
+		s.error(w, http.StatusBadRequest, "body is not valid json")
+		return false
+	}
+
+	return true
+}
+
 // errPlaylistURL points at the command that already owns playlist watching.
 // The message names the command because a caller reading it has to know what
 // to run instead.
@@ -25,8 +36,7 @@ var errPlaylistURL = errors.New(
 func (s *Server) enqueue(w http.ResponseWriter, r *http.Request) {
 	var req dto.QueueEnqueueRequest
 
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxEnqueueBody)).Decode(&req); err != nil {
-		s.error(w, http.StatusBadRequest, "body is not valid json")
+	if !s.decodeBody(w, r, &req) {
 		return
 	}
 

@@ -48,7 +48,7 @@ func TestProcessStagingReadsThroughTheInjectedDirReader(t *testing.T) {
 	// Nothing on disk, but the injected reader claims there is a file.
 	reader.names = []string{"a track.opus"}
 
-	if err := env.staging.ProcessStaging(context.Background(), nil); err != nil {
+	if _, err := env.staging.ProcessStaging(context.Background(), nil); err != nil {
 		t.Fatalf("ProcessStaging: %v", err)
 	}
 
@@ -78,7 +78,7 @@ func TestProcessStagingDefaultsToTheRealReader(t *testing.T) {
 
 	// The real staging directory is empty, so this must succeed rather than
 	// fail on a missing directory.
-	if err := env.staging.ProcessStaging(context.Background(), nil); err != nil {
+	if _, err := env.staging.ProcessStaging(context.Background(), nil); err != nil {
 		t.Fatalf("ProcessStaging with the default reader: %v", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestProcessStagingReportsAMissingDirectory(t *testing.T) {
 		Paths:          env.paths,
 		DirReader:      &stagingDirReader{err: errors.New("boom")},
 	})
-	if err := env.staging.ProcessStaging(context.Background(), nil); err == nil {
+	if _, err := env.staging.ProcessStaging(context.Background(), nil); err == nil {
 		t.Fatal("want an error from the directory read, got nil")
 	} else if !strings.Contains(err.Error(), "read staging directory") {
 		t.Errorf("error lost its context: %v", err)

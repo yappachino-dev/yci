@@ -35,7 +35,7 @@ func TestStagingImportEndToEnd(t *testing.T) {
 		return StagingResult{Action: ActionSkip}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 	if handlerInvoked {
@@ -118,7 +118,7 @@ func TestStagingImportUnknownChannelHandlerDecisions(t *testing.T) {
 				return tt.result, nil
 			}
 
-			if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+			if _, err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
 				t.Fatalf("process staging: %v", err)
 			}
 
@@ -161,7 +161,7 @@ func TestStagingImportAbortStopsLoop(t *testing.T) {
 		return StagingResult{Action: ActionAbort}, nil
 	}
 
-	err := env.staging.ProcessStaging(ctx, onUnknown)
+	_, err := env.staging.ProcessStaging(ctx, onUnknown)
 	if !errors.Is(err, ErrProcessAborted) {
 		t.Fatalf("err = %v, want ErrProcessAborted", err)
 	}
@@ -193,7 +193,7 @@ func TestSanitizeFilenameInImportedTitle(t *testing.T) {
 		return StagingResult{Action: ActionImport, Artist: artist.ID}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 
@@ -227,7 +227,7 @@ func TestStagingImportRejectsForeignFilenames(t *testing.T) {
 		return StagingResult{Action: ActionImport, Artist: artist.ID}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 
@@ -283,7 +283,7 @@ func TestStagingImportSurvivesChannelRename(t *testing.T) {
 		return StagingResult{Action: ActionSkip}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 
@@ -338,7 +338,7 @@ func TestStagingImportWithoutRecordedChannelFallsBackToName(t *testing.T) {
 
 	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "dQw4w9WgXcQ.opus"), "Manual Song", "An Artist")
 
-	if err := env.staging.ProcessStaging(ctx, func(channelName, title string) (StagingResult, error) {
+	if _, err := env.staging.ProcessStaging(ctx, func(channelName, title string) (StagingResult, error) {
 		t.Errorf("handler ran for %q/%q despite a matching name link", channelName, title)
 		return StagingResult{Action: ActionSkip}, nil
 	}); err != nil {
@@ -384,7 +384,7 @@ func TestStagingImportLinksTheNewChannelWithItsID(t *testing.T) {
 		return StagingResult{Action: ActionImport, Artist: artist.ID, LinkArtist: true}, nil
 	}
 
-	if err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
+	if _, err := env.staging.ProcessStaging(ctx, onUnknown); err != nil {
 		t.Fatalf("process staging: %v", err)
 	}
 	if !linked {
@@ -422,7 +422,7 @@ func TestStagingImportLinkWithoutARecordStaysPartial(t *testing.T) {
 	// No RecordVideoChannel: this file was placed in staging by hand.
 	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), "dQw4w9WgXcQ.opus"), "Manual", "Hand Artist Ch.")
 
-	if err := env.staging.ProcessStaging(ctx, func(string, string) (StagingResult, error) {
+	if _, err := env.staging.ProcessStaging(ctx, func(string, string) (StagingResult, error) {
 		return StagingResult{Action: ActionImport, Artist: artist.ID, LinkArtist: true}, nil
 	}); err != nil {
 		t.Fatalf("process staging: %v", err)
@@ -437,5 +437,47 @@ func TestStagingImportLinkWithoutARecordStaysPartial(t *testing.T) {
 	}
 	if all[0].ChannelID != "" {
 		t.Errorf("channel id = %q, want empty when no record existed", all[0].ChannelID)
+	}
+}
+
+// TestStagingImportReportsABlockedFileWithItsChannel is the guarantee the
+// HTTP endpoint depends on. A handler that declines must leave behind a
+// report naming the channel, not just an absence: the caller has to link that
+// channel and retry, and it cannot do either from a file it was never told
+// about.
+func TestStagingImportReportsABlockedFileWithItsChannel(t *testing.T) {
+	env := newLibraryEnv(t)
+	ctx := t.Context()
+
+	const videoID = "dQw4w9WgXcQ"
+	if err := env.channels.RecordVideoChannel(ctx, videoID, "UC8rcEBzJSleTkf_-agPM20g"); err != nil {
+		t.Fatalf("record video channel: %v", err)
+	}
+
+	writeTaggedAudio(t, filepath.Join(env.paths.StagingDir(), videoID+".opus"), "Blocked", "Unlinked Ch.")
+
+	outcomes, err := env.staging.ProcessStaging(ctx, func(string, string) (StagingResult, error) {
+		return StagingResult{Action: ActionSkip}, nil
+	})
+	if err != nil {
+		t.Fatalf("process staging: %v", err)
+	}
+
+	if len(outcomes) != 1 {
+		t.Fatalf("%d outcomes, want 1", len(outcomes))
+	}
+
+	got := outcomes[0]
+	if got.Status != StagingBlocked {
+		t.Errorf("status = %q, want %q", got.Status, StagingBlocked)
+	}
+	if got.ChannelName != "Unlinked Ch." {
+		t.Errorf("channel name = %q, want %q", got.ChannelName, "Unlinked Ch.")
+	}
+	if got.ChannelID != "UC8rcEBzJSleTkf_-agPM20g" {
+		t.Errorf("channel id = %q, want the id the download recorded", got.ChannelID)
+	}
+	if got.Reason == "" {
+		t.Error("reason is empty: the caller is told it is blocked but not why")
 	}
 }

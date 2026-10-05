@@ -158,38 +158,90 @@ type TrackMetadata struct {
 // LinkHandler decides the fate of a file whose channel has no linked artist.
 type LinkHandler func(channelName string, title string) (StagingResult, error)
 
-func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) error {
+// StagingStatus is what became of one staged file.
+type StagingStatus string
+
+const (
+	// StagingImported: registered and moved into the library.
+	StagingImported StagingStatus = "imported"
+	// StagingBlocked: the channel has no linked artist and the handler
+	// declined, so the file is still waiting in staging.
+	StagingBlocked StagingStatus = "blocked"
+	// StagingSkipped: not a format this importer handles.
+	StagingSkipped StagingStatus = "skipped"
+	// StagingFailed: this one file errored. The rest still processed.
+	StagingFailed StagingStatus = "failed"
+)
+
+// StagingOutcome is the per-file result of an import pass.
+//
+// A summary cannot say which files still need attention, which is the only
+// thing a caller acting over HTTP has to act on: a client resolves the named
+// channels and retries, and a blocked file is the one it must not forget.
+type StagingOutcome struct {
+	File   string
+	Status StagingStatus
+	Reason string
+
+	// ChannelName and ChannelID are set when Status is StagingBlocked. The
+	// ID is the identity recorded at download time, so a client linking the
+	// artist afterwards does not have to guess.
+	ChannelName ChannelName
+	ChannelID   ChannelID
+}
+
+// ProcessStaging imports everything in the staging directory.
+//
+// It returns one outcome per file it looked at. The error return covers only
+// the pass itself: an unreadable staging directory, or a handler that aborted
+// the loop. A single bad file is reported in the outcomes and does not stop
+// the rest, because the alternative is one corrupt download blocking every
+// good one.
+func (s *StagingService) ProcessStaging(ctx context.Context, onUnknown LinkHandler) ([]StagingOutcome, error) {
 	stagingDir := s.paths.StagingDir()
 
 	files, err := s.dirReader.ReadDir(stagingDir)
 	if err != nil {
-		return fmt.Errorf("read staging directory: %w", err)
+		return nil, fmt.Errorf("read staging directory: %w", err)
 	}
+
+	outcomes := make([]StagingOutcome, 0, len(files))
 
 	// fs.DirReader returns file names only, already without subdirectories.
 	for _, file := range files {
 		ext := strings.ToLower(filepath.Ext(file))
 		if !isSupportedImportExtension(ext) {
-			// Report rather than skip silently: a misconfigured download
-			// command would otherwise look like "nothing to import".
-			if ext != "" {
-				fmt.Printf("Skipping staging file %s: unsupported format %q (supported: %s)\n",
-					file, ext, strings.Join(supportedImportExtensions, ", "))
+			// Recorded rather than dropped: a misconfigured download command
+			// would otherwise look like "nothing to import".
+			if ext == "" {
+				continue
 			}
+
+			outcomes = append(outcomes, StagingOutcome{
+				File:   file,
+				Status: StagingSkipped,
+				Reason: fmt.Sprintf("unsupported format %q (supported: %s)",
+					ext, strings.Join(supportedImportExtensions, ", ")),
+			})
 			continue
 		}
 
-		if err := s.processSingleStagingFile(ctx, file, onUnknown); err != nil {
+		outcome, err := s.processSingleStagingFile(ctx, file, onUnknown)
+		if err != nil {
 			if errors.Is(err, ErrProcessAborted) {
-				return err
+				return outcomes, err
 			}
 
-			fmt.Printf("Error processing staging file %s: %v\n", file, err)
+			outcomes = append(outcomes, StagingOutcome{
+				File: file, Status: StagingFailed, Reason: err.Error(),
+			})
 			continue
 		}
+
+		outcomes = append(outcomes, outcome)
 	}
 
-	return nil
+	return outcomes, nil
 }
 
 // stagingImportPlan is the resolved outcome of the import decision phase:
@@ -198,12 +250,27 @@ type stagingImportPlan struct {
 	params    TrackCreateParams
 	sourceAbs string
 	destAbs   string
+
+	// blocked is set instead of a destination when the file's channel has no
+	// linked artist and the handler declined. The file stays in staging.
+	blocked *blockedChannel
 }
 
 // importDecision is the chosen artist/folder target for one staged file.
 type importDecision struct {
 	artistID ArtistID
 	folder   FolderID
+
+	// blocked records a handler that declined, and which channel it was
+	// waiting on. Without it a caller cannot tell "no target" from "this
+	// channel needs linking", and the second is actionable.
+	blocked *blockedChannel
+}
+
+// blockedChannel names the unresolved channel behind a skipped file.
+type blockedChannel struct {
+	name ChannelName
+	id   ChannelID
 }
 
 // resolveImportDecision maps staged-file metadata to an artist/folder target,
@@ -226,7 +293,9 @@ func (s *StagingService) resolveImportDecision(ctx context.Context, videoID Vide
 
 		switch res.Action {
 		case ActionSkip:
-			return nil, nil
+			return &importDecision{blocked: &blockedChannel{
+				name: channelName, id: match.ChannelID,
+			}}, nil
 		case ActionAbort:
 			return nil, ErrProcessAborted
 		case ActionImport:
@@ -376,8 +445,8 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 	if err != nil {
 		return nil, err
 	}
-	if decision == nil {
-		return nil, nil // skipped by handler
+	if decision.blocked != nil {
+		return &stagingImportPlan{blocked: decision.blocked}, nil
 	}
 
 	folderPath, err := s.folderResolver.ResolvePath(ctx, decision.folder)
@@ -412,13 +481,20 @@ func (s *StagingService) planImport(ctx context.Context, fileName string, onUnkn
 	}, nil
 }
 
-func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName string, onUnknown LinkHandler) error {
+func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName string, onUnknown LinkHandler) (StagingOutcome, error) {
 	plan, err := s.planImport(ctx, fileName, onUnknown)
 	if err != nil {
-		return err
+		return StagingOutcome{}, err
 	}
-	if plan == nil {
-		return nil // skipped
+
+	if plan.blocked != nil {
+		return StagingOutcome{
+			File:        fileName,
+			Status:      StagingBlocked,
+			Reason:      fmt.Sprintf("channel %q is not linked to an artist", plan.blocked.name),
+			ChannelName: plan.blocked.name,
+			ChannelID:   plan.blocked.id,
+		}, nil
 	}
 
 	txErr := s.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -433,7 +509,11 @@ func (s *StagingService) processSingleStagingFile(ctx context.Context, fileName 
 		return nil
 	})
 
-	return txErr
+	if txErr != nil {
+		return StagingOutcome{}, txErr
+	}
+
+	return StagingOutcome{File: fileName, Status: StagingImported}, nil
 }
 
 // resolveDestination computes the library-relative and absolute paths for an

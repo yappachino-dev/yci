@@ -40,6 +40,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/sources", s.sources)
 	mux.HandleFunc("GET /api/v1/queue", s.queue)
 	mux.HandleFunc("POST /api/v1/queue", s.enqueue)
+	mux.HandleFunc("POST /api/v1/import", s.importStaging)
 
 	// The mux would otherwise answer an unknown path with plain text, so a
 	// client would have one shape to parse on failure and another on success.

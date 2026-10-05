@@ -167,7 +167,8 @@ var importStagingCmd = &cobra.Command{
 		cmd.PrintErrln("Processing staging directory...")
 		cmd.PrintErrln()
 
-		if err := c.StagingService.ProcessStaging(ctx, handler); err != nil {
+		outcomes, err := c.StagingService.ProcessStaging(ctx, handler)
+		if err != nil {
 			if errors.Is(err, library.ErrProcessAborted) {
 				cmd.PrintErrln("Processing loop aborted by user.")
 				return nil
@@ -176,10 +177,24 @@ var importStagingCmd = &cobra.Command{
 			return err
 		}
 
+		printImportOutcomes(cmd, outcomes)
+
 		cmd.Println()
 		cmd.Println("Success! Staging queue processed.")
 		return nil
 	},
+}
+
+// printImportOutcomes reports only the files that did not land. A clean
+// import prints nothing per file, so the common path stays one summary line.
+func printImportOutcomes(cmd *cobra.Command, outcomes []library.StagingOutcome) {
+	for _, o := range outcomes {
+		if o.Status == library.StagingImported {
+			continue
+		}
+
+		cmd.Printf("%s %s: %s\n", o.Status, o.File, o.Reason)
+	}
 }
 
 func init() {

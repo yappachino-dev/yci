@@ -26,6 +26,9 @@ func TestOutputSchemaIsStable(t *testing.T) {
 		{"playlist entry", PlaylistEntry{}, []string{"position", "track_id", "title", "duration_sec"}},
 		{"source", Source{}, []string{"name", "url", "channels", "linked_channels", "unlinked_count"}},
 		{"enqueue request", QueueEnqueueRequest{}, []string{"urls", "force_playlist", "force"}},
+		{"import request", StagingImportRequest{}, nil},
+		{"import response", StagingImportResponse{}, []string{"items"}},
+		{"import item", StagingImportItem{}, []string{"file", "status", "reason", "channel_name", "channel_id"}},
 		{"enqueue response", QueueEnqueueResponse{}, []string{"items"}},
 		{"enqueue item", QueueEnqueueItem{}, []string{"url", "video_id", "skipped", "reason"}},
 	}

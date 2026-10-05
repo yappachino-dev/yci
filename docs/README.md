@@ -23,7 +23,7 @@ quirks), see `AGENTS.md` at the repository root.
 | [sources.md](sources.md) | Watched YouTube sources - polling remote playlists into the download queue, channel selection by immutable ID, preselection of linked channels, and the deletion journal | implemented |
 | [library-structure.md](library-structure.md) | Artists and folders — slug identity, the leaf-folder convention, the three ways an artist gets placed, and why `--parent` refuses to reuse an existing folder | implemented |
 | [config.md](config.md) | Configuration system — layered sources, strict TOML parsing, `yci config` command group, deliberate non-features | implemented |
-| [api.md](api.md) | Remote API — `yci serve` over HTTP behind a bearer token; six reads, `POST /queue` and the background drain are built; import and the other writes are not | partial |
+| [api.md](api.md) | Remote API — `yci serve` over HTTP behind a bearer token; six reads, `POST /queue`, the background drain and `POST /import` are built; the other writes are not | partial |
 | [download-queue.md](download-queue.md) | Download queue — the conditional claim that serialises two workers, the heartbeat and staleness bound that make reclaiming safe, and the timestamp-format trap behind both | implemented |
 | [fs-journal.md](fs-journal.md) | Filesystem action journal — transactional outbox making file moves/deletes crash-safe (redo replay, post-commit flush, startup recovery, `yci repair`) | implemented |
 | [style-guide.md](style-guide.md) | Production-grade style guide — design principles, layering, naming, errors, SQL, CLI, comment length, tooling gates | living document |

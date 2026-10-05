@@ -214,6 +214,43 @@ func SourceList(sources []library.Source, linked library.LinkedChannels) []Sourc
 	return rows
 }
 
+// StagingImportRequest is the body of POST /import. It is empty on purpose:
+// the staging directory is the request.
+type StagingImportRequest struct{}
+
+// StagingImportResponse reports one item per file the import looked at.
+type StagingImportResponse struct {
+	Items []StagingImportItem `json:"items"`
+}
+
+// StagingImportItem is one file's outcome.
+type StagingImportItem struct {
+	File   string `json:"file"`
+	Status string `json:"status"`
+	Reason string `json:"reason"`
+	// ChannelName and ChannelID are set only when Status is "blocked", so
+	// a client can resolve the link and retry exactly those files.
+	ChannelName string `json:"channel_name"`
+	ChannelID   string `json:"channel_id"`
+}
+
+// StagingImportItems converts service outcomes to the wire shape.
+func StagingImportItems(outcomes []library.StagingOutcome) []StagingImportItem {
+	items := make([]StagingImportItem, 0, len(outcomes))
+
+	for _, o := range outcomes {
+		items = append(items, StagingImportItem{
+			File:        o.File,
+			Status:      string(o.Status),
+			Reason:      o.Reason,
+			ChannelName: string(o.ChannelName),
+			ChannelID:   string(o.ChannelID),
+		})
+	}
+
+	return items
+}
+
 // WriteJSON emits v and returns no error of its own beyond the write itself.
 func WriteJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)

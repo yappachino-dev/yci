@@ -81,12 +81,14 @@ Implemented:
 | GET | `/api/v1/sources` | `source list --json` |
 | GET | `/api/v1/queue` | `download queue --json` |
 | POST | `/api/v1/queue` | `DownloadService.Enqueue`, see below |
+| POST | `/api/v1/import` | `StagingService.ProcessStaging`, see below |
 
 Proposed. No route exists for any of these:
 
 | Method | Path | Service |
 |---|---|---|
 | GET | `/api/v1/playlists/{name}` | `PlaylistService` |
+| POST | `/api/v1/playlinks` | `ChannelService.Link` |
 | GET | `/api/v1/channels` | `ChannelService` |
 | POST | `/api/v1/queue/retry` `{ids?}` | `DownloadService.RetryFailed` |
 | POST | `/api/v1/sources/pull` | `SourceService.Pull` |
@@ -143,6 +145,40 @@ Version prefix from day one. The DTOs are a contract a mobile app compiles
 against; without a version it cannot be changed without breaking a shipped
 app, and this library is not released.
 
+## POST /api/v1/import
+
+```json
+{}
+```
+
+Imports everything in the staging directory and answers `200` with one item
+per file it looked at:
+
+```json
+{"items": [
+  {"file":"a.mp3","status":"imported","reason":"","channel_name":"","channel_id":""},
+  {"file":"b.mp3","status":"blocked","reason":"channel \"X\" is not linked to an artist",
+   "channel_name":"X","channel_id":"UC..."}
+]}
+```
+
+| `status` | Meaning |
+|---|---|
+| `imported` | registered and moved into the library |
+| `blocked` | the channel has no linked artist; the file is still in staging |
+| `skipped` | not a format the importer handles |
+| `failed` | this one file errored; the rest still processed |
+
+The call never fails wholesale because one file is blocked. A blanket `409`
+would discard the files that did resolve and tell the client nothing it could
+act on. Instead the blocked items name their channel, the client links the
+artist through `POST /playlinks`, and it re-posts to import just those.
+
+The endpoint supplies a handler that declines every unknown channel rather
+than prompting. There is nobody to prompt: the decision belongs to a client
+that can name the channel back and resolve it deliberately. This is the same
+seam the CLI uses for its own prompt, so the two cannot drift.
+
 ## The interactive problem, and why it is smaller than it looks
 
 Import asks a human when a downloaded video's channel has no linked artist.
@@ -198,9 +234,8 @@ effect, so an API that appeared to apply it would be lying.
 
 1. ~~**Read-only API** over the existing DTOs, plus auth.~~ Done: `yci serve`.
 2. ~~**Worker** and `POST /queue`, with `GET /queue` polling.~~ Done.
-3. **Import**, the missing half of the loop. A client can fetch audio but
-   cannot move it into the library; `import staging` is the only way, and it is
-   the one genuinely interactive command.
+3. ~~**Import**, the missing half of the loop.~~ Done: `POST /api/v1/import`.
+   A client can now fetch audio and place it in the library end to end.
 4. **Write endpoints**, the rest of the proposed table.
 5. A client.
 
