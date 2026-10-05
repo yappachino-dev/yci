@@ -8,9 +8,9 @@ material — checklists, diffs, command output — belongs in `.agent/` instead,
 which is gitignored and cleared when a task ends. If a file here stops being
 true, fix or delete it; do not let it accumulate status updates.
 
-One exception, marked `proposed` in the table: a design sketch for work that
-has not started. Those state plainly that no code exists, and become ordinary
-documentation when the work lands.
+An entry marked `proposed` or `partial` covers work that has not finished. Such
+a doc states plainly what exists and what does not, and says so in its header
+block.
 
 For AI-assistant session context (working agreements, momentum, environment
 quirks), see `AGENTS.md` at the repository root.
@@ -23,7 +23,7 @@ quirks), see `AGENTS.md` at the repository root.
 | [sources.md](sources.md) | Watched YouTube sources - polling remote playlists into the download queue, channel selection by immutable ID, preselection of linked channels, and the deletion journal | implemented |
 | [library-structure.md](library-structure.md) | Artists and folders — slug identity, the leaf-folder convention, the three ways an artist gets placed, and why `--parent` refuses to reuse an existing folder | implemented |
 | [config.md](config.md) | Configuration system — layered sources, strict TOML parsing, `yci config` command group, deliberate non-features | implemented |
-| [api.md](api.md) | Remote API — exposing yci as a network service for a mobile client; what the existing seams already give, the worker, and the import-prompting problem | proposed |
+| [api.md](api.md) | Remote API — `yci serve` over HTTP behind a bearer token; read-only endpoints today, plus the worker and the import-prompting problem still to come | partial |
 | [fs-journal.md](fs-journal.md) | Filesystem action journal — transactional outbox making file moves/deletes crash-safe (redo replay, post-commit flush, startup recovery, `yci repair`) | implemented |
 | [style-guide.md](style-guide.md) | Production-grade style guide — design principles, layering, naming, errors, SQL, CLI, comment length, tooling gates | living document |
 | [technical-debt.md](technical-debt.md) | Debt register — open flaws only, with severity and remediation plan; entries are deleted when fixed | living document |

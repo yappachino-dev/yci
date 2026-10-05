@@ -231,3 +231,29 @@ func LinkStatus(channels []library.SourceChannel, linked library.LinkedChannels)
 
 	return linkedCount, len(channels) - linkedCount
 }
+
+func FolderTree(folders []library.Folder) []Folder {
+	childrenOf := make(map[library.FolderID][]library.Folder)
+	for _, f := range folders {
+		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
+	}
+
+	root := library.FolderID(library.RootID)
+
+	var out []Folder
+
+	var traverse func(parentID library.FolderID, depth int)
+	traverse = func(parentID library.FolderID, depth int) {
+		for _, child := range childrenOf[parentID] {
+			if child.ID == root {
+				continue
+			}
+			out = append(out, ToFolder(child, depth))
+			traverse(child.ID, depth+1)
+		}
+	}
+
+	traverse(root, 0)
+
+	return out
+}

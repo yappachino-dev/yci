@@ -183,7 +183,7 @@ func TestFolderJSONIsFlatAndOrdered(t *testing.T) {
 		{ID: "hololive", Name: "Hololive", ParentID: "vt"},
 	}
 
-	got := folderTreeJSON(folders)
+	got := dto.FolderTree(folders)
 
 	if len(got) != 3 {
 		t.Fatalf("got %d folders, want 3 (root excluded): %+v", len(got), got)

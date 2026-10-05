@@ -3,14 +3,14 @@
 Exposing yci as a network service, so a remote client can drive downloads and
 browse the library without linking yt-dlp and ffprobe into itself.
 
-- **Status:** proposed — no code exists yet
-- **Introduced:** n/a
-- **Core package:** proposed `internal/api/`
-- **Related:** `internal/app/app.go`, `internal/download/service.go`,
-  `internal/library/staging.go`, `db/queries/queue.sql`
+- **Status:** read-only phase implemented; write endpoints and the worker are
+  not
+- **Introduced:** `internal/api/`
+- **Core package:** `internal/api/server.go`, `internal/dto/`
+- **Related:** `internal/cli/serve.go`, `internal/app/app.go`
 
-This is a design sketch, not documentation of behaviour. Nothing here is
-built, and every endpoint, path and payload below is open to change.
+What exists today is `yci serve`: six read-only endpoints behind a bearer
+token. Everything below the endpoint tables is still a proposal.
 
 ## Why this is mostly a transport problem
 
@@ -57,14 +57,15 @@ is far easier to reason about than leases.
 
 ## Endpoints
 
-Read, all backed by existing DTOs:
+Read, all backed by existing DTOs. `internal/dto` owns them: the API and the
+CLI are two consumers of one contract, and a contract that exists once per
+consumer drifts.
 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/tracks?limit=&offset=` | `track list --json` |
 | GET | `/api/v1/artists` | `artist list --json` |
 | GET | `/api/v1/folders` | `folder list --json` |
-| GET | `/api/v1/channels` | |
 | GET | `/api/v1/playlists`, `/playlists/{name}` | |
 | GET | `/api/v1/sources` | `source list --json` |
 | GET | `/api/v1/queue` | `download queue --json` |
@@ -113,6 +114,10 @@ Reachability is a separate problem and a better solved one: a VPN (Tailscale or
 WireGuard) rather than an exposed port. Auth is defence in depth, not the
 primary control.
 
+The token comes from `YCI_SERVE_TOKEN` and deliberately is **not** a config
+key: `config get` prints any key it knows, so a token in the TOML file would
+be one command away from a terminal scrollback.
+
 ## Concurrency
 
 SQLite in WAL mode with `busy_timeout` is already set per-connection through
@@ -132,12 +137,11 @@ effect, so an API that appeared to apply it would be lying.
 
 ## Phasing
 
-1. **Read-only API** over the existing DTOs, plus auth. Verifies the contract
-   against a real consumer before anything can write.
+1. ~~**Read-only API** over the existing DTOs, plus auth.~~ Done: `yci serve`.
 2. **Worker** and `POST /queue`, with `GET /queue` polling. This is what makes
-   the server useful.
+   the server able to act rather than only report.
 3. **Write endpoints**, deciding the import policy above.
-4. Mobile app.
+4. A client.
 
 ## Risks
 

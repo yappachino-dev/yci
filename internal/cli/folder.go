@@ -172,7 +172,7 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if jsonRequested(cmd) {
-		out := folderTreeJSON(folders)
+		out := dto.FolderTree(folders)
 		if out == nil {
 			out = []dto.Folder{}
 		}
@@ -219,38 +219,6 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 
 	table.Flush()
 	return nil
-}
-
-// folderTreeJSON flattens the folder hierarchy into parent-first order with a
-// depth per row.
-//
-// The root is omitted: it exists to give the tree a starting point and is not
-// a folder anyone creates or refers to. The order is the same one the human
-// view draws, so a diff between the two views lines up row for row.
-func folderTreeJSON(folders []library.Folder) []dto.Folder {
-	childrenOf := make(map[library.FolderID][]library.Folder)
-	for _, f := range folders {
-		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
-	}
-
-	root := library.FolderID(library.RootID)
-
-	var out []dto.Folder
-
-	var traverse func(parentID library.FolderID, depth int)
-	traverse = func(parentID library.FolderID, depth int) {
-		for _, child := range childrenOf[parentID] {
-			if child.ID == root {
-				continue
-			}
-			out = append(out, dto.ToFolder(child, depth))
-			traverse(child.ID, depth+1)
-		}
-	}
-
-	traverse(root, 0)
-
-	return out
 }
 
 func init() {
