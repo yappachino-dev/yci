@@ -152,6 +152,28 @@ func (q *Queries) RecordTrackEvent(ctx context.Context, arg RecordTrackEventPara
 	return err
 }
 
+const renameSource = `-- name: RenameSource :execrows
+UPDATE playlist_sources
+SET name = ?1,
+    updated_at = CURRENT_TIMESTAMP
+WHERE name = ?2
+`
+
+type RenameSourceParams struct {
+	NewName string
+	Name    string
+}
+
+// Only the label moves. The url and the channel selection describe the same
+// watched playlist either way, so a rename must not disturb them.
+func (q *Queries) RenameSource(ctx context.Context, arg RenameSourceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renameSource, arg.NewName, arg.Name)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setSourceChannels = `-- name: SetSourceChannels :execrows
 UPDATE playlist_sources
 SET channels = ?1,

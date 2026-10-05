@@ -31,6 +31,14 @@ SET channels = :channels,
     updated_at = CURRENT_TIMESTAMP
 WHERE name = :name;
 
+-- name: RenameSource :execrows
+-- Only the label moves. The url and the channel selection describe the same
+-- watched playlist either way, so a rename must not disturb them.
+UPDATE playlist_sources
+SET name = :new_name,
+    updated_at = CURRENT_TIMESTAMP
+WHERE name = :name;
+
 -- name: DeleteSource :execrows
 DELETE FROM playlist_sources
 WHERE name = :name;

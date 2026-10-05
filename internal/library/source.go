@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
@@ -54,6 +55,7 @@ type SourceRepository interface {
 	ByName(ctx context.Context, name string) (Source, error)
 	All(ctx context.Context) ([]Source, error)
 	SetChannels(ctx context.Context, name, channels string) error
+	Rename(ctx context.Context, name, newName string) error
 	Delete(ctx context.Context, name string) error
 }
 
@@ -115,6 +117,21 @@ func (s *SourceService) SetChannels(ctx context.Context, name string, channels [
 
 	if err := s.repo.SetChannels(ctx, name, encoded); err != nil {
 		return fmt.Errorf("update watched playlist %q: %w", name, err)
+	}
+
+	return nil
+}
+
+// Rename relabels a watched playlist. It deliberately needs neither the
+// network nor a prompt: the url and the channel selection are unchanged, and
+// re-running source update to achieve the same thing would force a refetch.
+func (s *SourceService) Rename(ctx context.Context, name, newName string) error {
+	if strings.TrimSpace(newName) == "" {
+		return errors.New("new name cannot be empty")
+	}
+
+	if err := s.repo.Rename(ctx, name, newName); err != nil {
+		return fmt.Errorf("rename watched playlist %q: %w", name, err)
 	}
 
 	return nil
@@ -197,6 +214,22 @@ func (r *SQLiteSourceRepository) SetChannels(ctx context.Context, name, channels
 	})
 	if err != nil {
 		return fmt.Errorf("update source %q: %w", name, err)
+	}
+
+	if affected == 0 {
+		return ErrSourceNotFound
+	}
+
+	return nil
+}
+
+func (r *SQLiteSourceRepository) Rename(ctx context.Context, name, newName string) error {
+	affected, err := r.db(ctx).RenameSource(ctx, store.RenameSourceParams{
+		Name:    name,
+		NewName: newName,
+	})
+	if err != nil {
+		return db.MapSQLError(err, nil, ErrSourceExists)
 	}
 
 	if affected == 0 {

@@ -23,6 +23,7 @@ var completionRule = map[string]cobra.CompletionFunc{
 	"playlist reseed": playlistNameCompletion,
 	"source update":   sourceNameCompletion,
 	"source remove":   sourceNameCompletion,
+	"source rename":   sourceNameCompletion,
 	"download retry":  queueIDCompletion,
 	"folder edit":     folderIDCompletion,
 	"folder delete":   folderIDCompletion,

@@ -105,12 +105,20 @@ requests and honours cancellation.
 source add <url> [--name <name>]   # fetch, pick channels, store the selection
 source list [--json]
 source update <name>               # re-pick channels, starting from the current selection
+source rename <current> <new>      # relabel only; url and selection are untouched
 source remove <name>
 source pull
 ```
 
 `source add` and `source update` run an interactive picker, so they need a
 terminal. `source pull` never asks anything: it replays the stored selection.
+
+`source rename` is separate precisely because it needs neither a refetch nor a
+picker. Relabelling is not a change to what is watched, and folding it into
+`update` would cost a network round trip and a re-pick of the channels to
+correct a typo. It is a label change: the url and the stored channel selection
+are the same playlist either way, and nothing else in the database refers to a
+source by name.
 
 There is no `--dry-run` on `pull`. It only adds to the download queue, which
 is inspectable with `download queue` and reversible from there. The dry-run

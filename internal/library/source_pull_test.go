@@ -63,6 +63,17 @@ func (s *stubSources) SetChannels(_ context.Context, name, channels string) erro
 	return ErrSourceNotFound
 }
 
+func (s *stubSources) Rename(_ context.Context, name, newName string) error {
+	for i := range s.sources {
+		if s.sources[i].Name == name {
+			s.sources[i].Name = newName
+			return nil
+		}
+	}
+
+	return ErrSourceNotFound
+}
+
 func (s *stubSources) Delete(_ context.Context, name string) error {
 	s.removed = append(s.removed, name)
 

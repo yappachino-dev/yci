@@ -377,8 +377,29 @@ func summarizeNames(names []string, cap int) string {
 	return fmt.Sprintf("%s +%d more", strings.Join(names[:cap], ", "), len(names)-cap)
 }
 
+var sourceRenameCmd = &cobra.Command{
+	Use:               "rename <current> <new>",
+	ValidArgsFunction: sourceNameCompletion,
+	Short:             "Rename a watched playlist, keeping its url and channel selection",
+	Args:              cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		c := Container(ctx)
+
+		from, to := args[0], args[1]
+
+		if err := c.SourceService.Rename(ctx, from, to); err != nil {
+			return err
+		}
+
+		cmd.Printf("Renamed %q to %q.\n", from, to)
+
+		return nil
+	},
+}
+
 func init() {
-	sourceCmd.AddCommand(sourceAddCmd, sourceListCmd, sourceUpdateCmd, sourceRemoveCmd, sourcePullCmd)
+	sourceCmd.AddCommand(sourceAddCmd, sourceListCmd, sourceUpdateCmd, sourceRemoveCmd, sourceRenameCmd, sourcePullCmd)
 
 	sourceAddCmd.Flags().String(flagName, "", "Name for this source (defaults to the playlist title)")
 	sourceAddCmd.Flags().String(flagChannels, "", "Pre-select these channels by ID or name (comma-separated), on top of already-linked ones")

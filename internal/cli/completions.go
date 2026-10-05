@@ -123,7 +123,14 @@ func playlistOrTrackCompletion(cmd *cobra.Command, args []string, toComplete str
 	return trackIDCompletion(cmd, args, toComplete)
 }
 
-func sourceNameCompletion(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func sourceNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Only the first positional names an existing source. In
+	// `source rename <current> <new>` the second is a name the user is
+	// choosing, so completing it would offer the names it cannot take.
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	c, ok := ContainerOK(cmd.Context())
 	if !ok {
 		return nil, cobra.ShellCompDirectiveNoFileComp
