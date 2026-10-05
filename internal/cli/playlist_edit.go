@@ -157,8 +157,8 @@ func renamePlaylist(cmd *cobra.Command, c *app.Container, from, to string) error
 	case result.OrphanedExport != "":
 		// Silently leaving this file would ship a playlist to the phone
 		// that never updates again, so it is named explicitly.
-		cmd.Printf("Warning: %s still exists under the old name and will sync to your phone as-is.\n", result.OrphanedExport)
-		cmd.Printf("Remove it yourself, or re-export and delete: yci playlist export %s\n", result.NewName)
+		cmd.PrintErrf("Warning: %s still exists under the old name and will sync to your phone as-is.\n", result.OrphanedExport)
+		cmd.PrintErrf("Remove it yourself, or re-export and delete: yci playlist export %s\n", result.NewName)
 	}
 
 	return nil

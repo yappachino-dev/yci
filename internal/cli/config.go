@@ -105,7 +105,7 @@ var configSetCmd = &cobra.Command{
 		}
 
 		cmd.Printf("Set %s = %s\n", args[0], args[1])
-		cmd.Println("Warning: comments in the config file were removed.")
+		cmd.PrintErrln("Warning: comments in the config file were removed.")
 		return nil
 	},
 }

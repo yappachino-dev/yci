@@ -136,55 +136,58 @@ var sourceListCmd = &cobra.Command{
 	Short: "List watched YouTube playlists",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		c := Container(ctx)
+		return listSources(cmd.Context(), cmd)
+	},
+}
 
-		sources, err := c.SourceService.List(ctx)
-		if err != nil {
-			return err
-		}
+func listSources(ctx context.Context, cmd *cobra.Command) error {
+	c := Container(ctx)
 
-		if jsonRequested(cmd) {
-			linked, err := c.ChannelService.LinkedChannels(ctx)
-			if err != nil {
-				return err
-			}
+	sources, err := c.SourceService.List(ctx)
+	if err != nil {
+		return err
+	}
 
-			return writeJSON(cmd.OutOrStdout(), sourceListJSON(sources, linked))
-		}
-
-		if len(sources) == 0 {
-			cmd.Println("No watched playlists. Add one with: yci source add <url>")
-			return nil
-		}
-
+	if jsonRequested(cmd) {
 		linked, err := c.ChannelService.LinkedChannels(ctx)
 		if err != nil {
 			return err
 		}
 
-		hanging := 0
+		return writeJSON(cmd.OutOrStdout(), sourceListJSON(sources, linked))
+	}
 
-		table := NewTable(cmd.OutOrStdout(), "NAME", "LINKED", "CHANNELS", "URL")
-		for _, src := range sources {
-			linkedCount, unlinked := linkStatus(src.Channels, linked)
-			hanging += unlinked
-
-			table.Row(src.Name, fmt.Sprintf("%d/%d", linkedCount, len(src.Channels)),
-				summarizeNames(src.ChannelNames(), 3), src.URL)
-		}
-		table.Flush()
-
-		// A selected channel that was never attached to an artist delivers
-		// nothing and says nothing on its own, so it is called out here
-		// rather than left to be noticed as a playlist that went quiet.
-		if hanging > 0 {
-			cmd.Printf("\n%d selected channel(s) are not linked to an artist. Downloads from them "+
-				"will prompt to create one on import, or link one up front with yci channel create.\n", hanging)
-		}
-
+	if len(sources) == 0 {
+		cmd.PrintErrln("No watched playlists. Add one with: yci source add <url>")
 		return nil
-	},
+	}
+
+	linked, err := c.ChannelService.LinkedChannels(ctx)
+	if err != nil {
+		return err
+	}
+
+	hanging := 0
+
+	table := NewTable(cmd.OutOrStdout(), "NAME", "LINKED", "CHANNELS", "URL")
+	for _, src := range sources {
+		linkedCount, unlinked := linkStatus(src.Channels, linked)
+		hanging += unlinked
+
+		table.Row(src.Name, fmt.Sprintf("%d/%d", linkedCount, len(src.Channels)),
+			summarizeNames(src.ChannelNames(), 3), src.URL)
+	}
+	table.Flush()
+
+	// A selected channel that was never attached to an artist delivers
+	// nothing and says nothing on its own, so it is called out here
+	// rather than left to be noticed as a playlist that went quiet.
+	if hanging > 0 {
+		cmd.PrintErrf("\n%d selected channel(s) are not linked to an artist. Downloads from them "+
+			"will prompt to create one on import, or link one up front with yci channel create.\n", hanging)
+	}
+
+	return nil
 }
 
 func sourceListJSON(sources []library.Source, linked library.LinkedChannels) []sourceDTO {
@@ -332,7 +335,7 @@ inspect with yci download queue.`,
 // thing to act on, not a number to average away.
 func reportPull(cmd *cobra.Command, results []library.PullResult) error {
 	if len(results) == 0 {
-		cmd.Println("No watched playlists. Add one with: yci source add <url>")
+		cmd.PrintErrln("No watched playlists. Add one with: yci source add <url>")
 		return nil
 	}
 

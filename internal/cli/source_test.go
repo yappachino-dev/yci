@@ -141,15 +141,17 @@ func TestReportPullFailsWhenEverySourceFails(t *testing.T) {
 
 func TestReportPullWithNoSourcesPointsAtAdd(t *testing.T) {
 	cmd := &cobra.Command{}
-	out := &bytes.Buffer{}
-	cmd.SetOut(out)
+	errOut := &bytes.Buffer{}
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(errOut)
 
 	if err := reportPull(cmd, nil); err != nil {
 		t.Fatalf("reportPull: %v", err)
 	}
 
-	if !strings.Contains(out.String(), "source add") {
-		t.Errorf("empty run does not say how to start: %q", out.String())
+	// Advisory, so stderr: stdout stays empty for anything piping the run.
+	if !strings.Contains(errOut.String(), "source add") {
+		t.Errorf("empty run does not say how to start: %q", errOut.String())
 	}
 }
 

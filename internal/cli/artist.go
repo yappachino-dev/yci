@@ -200,7 +200,7 @@ func listArtists(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if len(artists) == 0 {
-		cmd.Println("No artists yet. Create one with `yci artist create`.")
+		cmd.PrintErrln("No artists yet. Create one with `yci artist create`.")
 		return nil
 	}
 

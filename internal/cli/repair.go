@@ -42,7 +42,7 @@ var repairCmd = &cobra.Command{
 
 		if len(failed) > 0 {
 			cmd.Println()
-			cmd.Println("Retrying failed actions...")
+			cmd.PrintErrln("Retrying failed actions...")
 
 			if err := c.FileActions.ResetFailed(ctx); err != nil {
 				return fmt.Errorf("requeue failed file actions: %w", err)

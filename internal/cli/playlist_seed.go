@@ -149,8 +149,8 @@ func seedPlaylist(cmd *cobra.Command, name, seedInput, fragmentFlag string, acce
 		cmd.Printf("Excluded %s; they stay out when the recipe is re-derived.\n",
 			plural(len(excludes), "track", "tracks"))
 	}
-	cmd.Printf("Re-derive it later with: yci playlist reseed %s\n", playlist.Name)
-	cmd.Printf("Export it with: yci playlist export %s\n", playlist.Name)
+	cmd.PrintErrf("Re-derive it later with: yci playlist reseed %s\n", playlist.Name)
+	cmd.PrintErrf("Export it with: yci playlist export %s\n", playlist.Name)
 
 	return nil
 }

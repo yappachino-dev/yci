@@ -88,7 +88,7 @@ var playlistListCmd = &cobra.Command{
 		}
 
 		if len(playlists) == 0 {
-			cmd.Println("No playlists yet. Create one with: yci playlist create <name>")
+			cmd.PrintErrln("No playlists yet. Create one with: yci playlist create <name>")
 			return nil
 		}
 
@@ -299,7 +299,7 @@ var playlistExportCmd = &cobra.Command{
 			return fmt.Errorf("list playlists: %w", err)
 		}
 		if len(playlists) == 0 {
-			cmd.Println("No playlists to export.")
+			cmd.PrintErrln("No playlists to export.")
 			return nil
 		}
 

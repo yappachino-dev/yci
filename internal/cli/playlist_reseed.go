@@ -83,7 +83,7 @@ device.`,
 
 		cmd.Printf("\nApplied: %d added, %d removed, %d unchanged.\n",
 			report.Added(), report.Removed(), report.Unchanged)
-		cmd.Printf("Re-export to update the .m3u: yci playlist export %s\n", name)
+		cmd.PrintErrf("Re-export to update the .m3u: yci playlist export %s\n", name)
 
 		return nil
 	},

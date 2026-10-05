@@ -91,7 +91,7 @@ func listChannels(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if len(channels) == 0 {
-		cmd.Println("No channels linked. Link one with `yci channel create`.")
+		cmd.PrintErrln("No channels linked. Link one with `yci channel create`.")
 		return nil
 	}
 

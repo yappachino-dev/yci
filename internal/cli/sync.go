@@ -34,13 +34,13 @@ var syncCmd = &cobra.Command{
 
 		switch {
 		case artist != "":
-			cmd.Printf("Scanning missing files for artist: %s...\n", artist)
+			cmd.PrintErrf("Scanning missing files for artist: %s...\n", artist)
 			missing, err = c.AuditService.MissingByArtist(ctx, library.ArtistID(artist))
 		case folder != "":
-			cmd.Printf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
+			cmd.PrintErrf("Scanning missing files in folder: %s (Recursive: %t)...\n", folder, recursive)
 			missing, err = c.AuditService.MissingByFolder(ctx, library.FolderID(folder), recursive)
 		default:
-			cmd.Println("Scanning entire library for missing files...")
+			cmd.PrintErrln("Scanning entire library for missing files...")
 			missing, err = c.AuditService.MissingAll(ctx)
 		}
 
@@ -82,13 +82,13 @@ var syncCmd = &cobra.Command{
 			result.Enqueued, result.Skipped, result.Failed)
 
 		if queueOnly {
-			cmd.Println()
-			cmd.Println("▶ Flag --queue-only set. Run `yci download resume` to process them.")
+			cmd.PrintErrln()
+			cmd.PrintErrln("▶ Flag --queue-only set. Run `yci download resume` to process them.")
 			return nil
 		}
 
-		cmd.Println()
-		cmd.Println("Processing queue...")
+		cmd.PrintErrln()
+		cmd.PrintErrln("Processing queue...")
 		return executeDownloadLoop(cmd)
 	},
 }

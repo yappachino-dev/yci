@@ -72,12 +72,12 @@ var downloadCmd = &cobra.Command{
 		})
 		if err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
-				cmd.Println("[!] Operation cancelled by user.")
+				cmd.PrintErrln("[!] Operation cancelled by user.")
 				return nil
 			}
 
 			if errors.Is(err, errNoChannelsSelected) {
-				cmd.Println("[!] No channels selected — nothing enqueued.")
+				cmd.PrintErrln("[!] No channels selected — nothing enqueued.")
 				return nil
 			}
 
@@ -89,13 +89,13 @@ var downloadCmd = &cobra.Command{
 
 		queueOnly, _ := cmd.Flags().GetBool(flagQueueOnly)
 		if queueOnly {
-			cmd.Println()
-			cmd.Println("[!] Flag --queue-only detected. Items enqueued but download paused")
+			cmd.PrintErrln()
+			cmd.PrintErrln("[!] Flag --queue-only detected. Items enqueued but download paused")
 			return nil
 		}
 
-		cmd.Println()
-		cmd.Println("Processing queue...")
+		cmd.PrintErrln()
+		cmd.PrintErrln("Processing queue...")
 		return executeDownloadLoop(cmd)
 	},
 }
@@ -113,35 +113,35 @@ func newConsoleReporter(cmd *cobra.Command) *consoleReporter {
 
 func (r *consoleReporter) OnHybridURL(url string, forcePlaylist bool) {
 	if forcePlaylist {
-		r.cmd.Printf("[!] Extracting every video from hybrid-playlist URL: %s\n", url)
+		r.cmd.PrintErrf("[!] Extracting every video from hybrid-playlist URL: %s\n", url)
 		return
 	}
 
-	r.cmd.Printf("[!] Extracting video from hybrid URL: %s\n", url)
+	r.cmd.PrintErrf("[!] Extracting video from hybrid URL: %s\n", url)
 }
 
 func (r *consoleReporter) OnPlaylistURL(url string) {
-	r.cmd.Printf("[!] Extracting every video from playlist URL: %s\n", url)
+	r.cmd.PrintErrf("[!] Extracting every video from playlist URL: %s\n", url)
 }
 
 func (r *consoleReporter) OnEnqueueSkipped(id string, reason string) {
-	r.cmd.Printf("[-] Skipped %s: %s\n", id, reason)
+	r.cmd.PrintErrf("[-] Skipped %s: %s\n", id, reason)
 }
 
 func (r *consoleReporter) OnQueueStart(totalTracks int) {}
 
 func (r *consoleReporter) OnTrackStart(index int, total int, sourceID string) {
-	r.cmd.Printf("--- [Track %d / %d] ---\n", index, total)
-	r.cmd.Printf("[!] Target: %s\n", sourceID)
+	r.cmd.PrintErrf("--- [Track %d / %d] ---\n", index, total)
+	r.cmd.PrintErrf("[!] Target: %s\n", sourceID)
 }
 
 func (r *consoleReporter) OnTrackSuccess(_ string) {
-	r.cmd.Println("[+] Success!")
+	r.cmd.PrintErrln("[+] Success!")
 	r.cmd.Println()
 }
 
 func (r *consoleReporter) OnTrackFailure(_ string, err error) {
-	r.cmd.Printf("[-] Failed: %v\n", err)
+	r.cmd.PrintErrf("[-] Failed: %v\n", err)
 	r.cmd.Println()
 }
 
@@ -263,7 +263,7 @@ var downloadRetryCmd = &cobra.Command{
 		}
 
 		cmd.Printf("Re-armed %s.\n", plural(result.Retried, "failed download", "failed downloads"))
-		cmd.Println("▶ Run `yci download resume` to process them.")
+		cmd.PrintErrln("▶ Run `yci download resume` to process them.")
 		return nil
 	},
 }
@@ -277,7 +277,7 @@ var downloadResumeCmd = &cobra.Command{
 			return err
 		}
 
-		cmd.Println("Resuming queue...")
+		cmd.PrintErrln("Resuming queue...")
 		return executeDownloadLoop(cmd)
 	},
 }
@@ -317,7 +317,7 @@ func listQueue(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if len(queue) == 0 {
-		cmd.Println("Download queue is empty. Add items with `yci download` or `yci sync`.")
+		cmd.PrintErrln("Download queue is empty. Add items with `yci download` or `yci sync`.")
 		return nil
 	}
 
@@ -453,7 +453,7 @@ func executeDownloadLoop(cmd *cobra.Command) error {
 	cmd.Printf("Queue processed! Success: %d | Failed: %d\n", result.Success, result.Failed)
 
 	if result.Success > 0 {
-		cmd.Println("▶ Run `yci import staging` to import them into your library.")
+		cmd.PrintErrln("▶ Run `yci import staging` to import them into your library.")
 	}
 
 	return nil

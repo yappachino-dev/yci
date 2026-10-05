@@ -180,7 +180,7 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if userFolders == 0 {
-		cmd.Println("No folders yet. Create one with `yci folder create`.")
+		cmd.PrintErrln("No folders yet. Create one with `yci folder create`.")
 		return nil
 	}
 

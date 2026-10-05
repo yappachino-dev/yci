@@ -88,7 +88,7 @@ var importStagingCmd = &cobra.Command{
 
 			switch actionType {
 			case "skip":
-				cmd.Printf("Skipped track from %q\n", channelName)
+				cmd.PrintErrf("Skipped track from %q\n", channelName)
 				return library.StagingResult{Action: library.ActionSkip}, nil
 			case "abort":
 				return library.StagingResult{Action: library.ActionAbort}, nil
@@ -121,9 +121,9 @@ var importStagingCmd = &cobra.Command{
 				artistInput = strings.TrimSpace(artistInput)
 
 				if actionType == "artist-link" {
-					cmd.Printf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
+					cmd.PrintErrf("Linked Channel %q permanently to Artist %q\n", channelName, artistInput)
 				} else {
-					cmd.Printf("Linked track to Artist %q\n", artistInput)
+					cmd.PrintErrf("Linked track to Artist %q\n", artistInput)
 				}
 
 				return library.StagingResult{
@@ -153,7 +153,7 @@ var importStagingCmd = &cobra.Command{
 				}
 
 				folderInput = strings.TrimSpace(folderInput)
-				cmd.Printf("Routing track directly into folder %q\n", folderInput)
+				cmd.PrintErrf("Routing track directly into folder %q\n", folderInput)
 
 				return library.StagingResult{
 					Action: library.ActionImport,
@@ -164,12 +164,12 @@ var importStagingCmd = &cobra.Command{
 			return library.StagingResult{Action: library.ActionSkip}, nil
 		}
 
-		cmd.Println("Processing staging directory...")
-		cmd.Println()
+		cmd.PrintErrln("Processing staging directory...")
+		cmd.PrintErrln()
 
 		if err := c.StagingService.ProcessStaging(ctx, handler); err != nil {
 			if errors.Is(err, library.ErrProcessAborted) {
-				cmd.Println("Processing loop aborted by user.")
+				cmd.PrintErrln("Processing loop aborted by user.")
 				return nil
 			}
 

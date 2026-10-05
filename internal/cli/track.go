@@ -160,7 +160,7 @@ than failing per file.`,
 			plural(report.Updated, "track", "tracks"),
 			plural(report.Scanned, "track", "tracks"))
 		if report.Updated == 0 {
-			cmd.Printf("Try: yci track list\n")
+			cmd.PrintErrf("Try: yci track list\n")
 		}
 		return nil
 	},
@@ -312,7 +312,7 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if len(tracks) == 0 {
-		cmd.Println("No tracks in the library. Import some with `yci import staging`.")
+		cmd.PrintErrln("No tracks in the library. Import some with `yci import staging`.")
 		return nil
 	}
 

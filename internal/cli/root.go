@@ -60,8 +60,9 @@ var rootCmd = &cobra.Command{
 
 func Execute(v string) {
 	rootCmd.Version = v
-	// Route cmd.Print* to stdout so data and errors (which cobra sends to
-	// stderr) are stream-separated for piping.
+	// cmd.Print* is stdout: it carries the data a command was asked for.
+	// Everything else -- progress, warnings, next-step hints -- must be
+	// sent explicitly with cmd.PrintErr*, or it lands in a JSON pipe.
 	rootCmd.SetOut(os.Stdout)
 
 	if err := rootCmd.Execute(); err != nil {
