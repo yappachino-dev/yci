@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yappachino-dev/yci/internal/download"
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -29,7 +30,7 @@ func TestLinkStatusCountsWhatDeliversNothing(t *testing.T) {
 		{Name: "Legacy Name"},
 	}
 
-	gotLinked, gotUnlinked := linkStatus(channels, linked)
+	gotLinked, gotUnlinked := dto.LinkStatus(channels, linked)
 
 	if gotLinked != 2 {
 		t.Errorf("linked = %d, want 2", gotLinked)
@@ -43,7 +44,7 @@ func TestLinkStatusCountsWhatDeliversNothing(t *testing.T) {
 // TestLinkStatusPrefersTheIDOverTheName: a renamed channel still has an ID,
 // so a stale name must not read as unlinked.
 func TestLinkStatusPrefersTheIDOverTheName(t *testing.T) {
-	_, unlinked := linkStatus([]library.SourceChannel{{ID: "UCknown", Name: "Renamed"}}, linkedFixture())
+	_, unlinked := dto.LinkStatus([]library.SourceChannel{{ID: "UCknown", Name: "Renamed"}}, linkedFixture())
 	if unlinked != 0 {
 		t.Error("a channel whose name drifted but whose ID matched was counted as unlinked")
 	}

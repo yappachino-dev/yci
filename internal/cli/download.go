@@ -13,6 +13,7 @@ import (
 
 	"github.com/yappachino-dev/yci/internal/config"
 	"github.com/yappachino-dev/yci/internal/download"
+	"github.com/yappachino-dev/yci/internal/dto"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -301,19 +302,19 @@ func listQueue(ctx context.Context, cmd *cobra.Command) error {
 	// JSON first: a consumer asking for data should get an empty array, not
 	// a sentence explaining why there is none.
 	if jsonRequested(cmd) {
-		out := make([]jsonQueueEntry, 0, len(queue))
+		out := make([]dto.QueueEntry, 0, len(queue))
 		for _, e := range queue {
-			out = append(out, jsonQueueEntry{
+			out = append(out, dto.QueueEntry{
 				ID:        e.ID,
 				SourceID:  e.SourceID,
 				Status:    string(e.Status),
 				Attempts:  e.Attempts,
 				ErrorMsg:  e.ErrorMsg,
-				ErrorKind: queueErrorKind(e.ErrorMsg),
+				ErrorKind: dto.QueueErrorKind(e.ErrorMsg),
 			})
 		}
 
-		return writeJSON(cmd.OutOrStdout(), out)
+		return dto.WriteJSON(cmd.OutOrStdout(), out)
 	}
 
 	if len(queue) == 0 {
@@ -357,7 +358,7 @@ func queueErrorSummary(msg string) string {
 		msg = strings.TrimPrefix(msg, prefix)
 	}
 
-	if kind := queueErrorKind(msg); kind != "other" && kind != "" {
+	if kind := dto.QueueErrorKind(msg); kind != "other" && kind != "" {
 		return kind
 	}
 

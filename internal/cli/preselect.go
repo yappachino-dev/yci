@@ -128,18 +128,3 @@ func (c channelList) reportUnmatched(offered []download.ChannelRef) error {
 
 	return fmt.Errorf("--channels entries not in this playlist: %s", strings.Join(unmatched, ", "))
 }
-
-// linkStatus counts a source's selection against the linked channels, so a
-// channel that was picked but never attached to an artist is visible instead
-// of hanging silently.
-func linkStatus(channels []library.SourceChannel, linked library.LinkedChannels) (int, int) {
-	linkedCount := 0
-
-	for _, ch := range channels {
-		if linked.Contains(ch.ID, ch.Name) {
-			linkedCount++
-		}
-	}
-
-	return linkedCount, len(channels) - linkedCount
-}

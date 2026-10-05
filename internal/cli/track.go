@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/fs"
 	"github.com/yappachino-dev/yci/internal/library"
 )
@@ -303,12 +304,12 @@ func listTracks(ctx context.Context, cmd *cobra.Command) error {
 	// JSON before the empty-state message: a consumer asking for data should
 	// get an empty array, not a sentence explaining why there is none.
 	if jsonRequested(cmd) {
-		out := make([]jsonTrack, 0, len(tracks))
+		out := make([]dto.Track, 0, len(tracks))
 		for _, t := range tracks {
-			out = append(out, toJSONTrack(t))
+			out = append(out, dto.ToTrack(t))
 		}
 
-		return writeJSON(cmd.OutOrStdout(), out)
+		return dto.WriteJSON(cmd.OutOrStdout(), out)
 	}
 
 	if len(tracks) == 0 {

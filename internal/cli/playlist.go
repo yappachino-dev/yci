@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -79,12 +80,12 @@ var playlistListCmd = &cobra.Command{
 			return fmt.Errorf("list playlists: %w", err)
 		}
 		if jsonRequested(cmd) {
-			out := make([]jsonPlaylist, 0, len(playlists))
+			out := make([]dto.Playlist, 0, len(playlists))
 			for _, p := range playlists {
-				out = append(out, toJSONPlaylist(p))
+				out = append(out, dto.ToPlaylist(p))
 			}
 
-			return writeJSON(cmd.OutOrStdout(), out)
+			return dto.WriteJSON(cmd.OutOrStdout(), out)
 		}
 
 		if len(playlists) == 0 {
@@ -145,9 +146,9 @@ var playlistShowCmd = &cobra.Command{
 			})
 		}
 		if jsonRequested(cmd) {
-			out := make([]jsonPlaylistEntry, 0, len(entries))
+			out := make([]dto.PlaylistEntry, 0, len(entries))
 			for _, e := range entries {
-				out = append(out, jsonPlaylistEntry{
+				out = append(out, dto.PlaylistEntry{
 					Position: e.Position,
 					Track:    string(e.Track.ID),
 					Title:    e.Track.Title,
@@ -155,7 +156,7 @@ var playlistShowCmd = &cobra.Command{
 				})
 			}
 
-			return writeJSON(cmd.OutOrStdout(), out)
+			return dto.WriteJSON(cmd.OutOrStdout(), out)
 		}
 
 		if len(entries) == 0 {

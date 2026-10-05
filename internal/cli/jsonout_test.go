@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yappachino-dev/yci/internal/app"
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -16,44 +17,6 @@ import (
 // track internal Go field names. That only holds if the keys are asserted
 // here: a renamed field would otherwise silently change what every script
 // reading yci's output sees, with nothing failing.
-func TestJSONOutputSchemaIsStable(t *testing.T) {
-	cases := []struct {
-		name  string
-		value any
-		want  []string
-	}{
-		{"track", jsonTrack{}, []string{"id", "title", "album", "artist_id", "source_id", "source", "relative_path", "duration_sec"}},
-		{"artist", jsonArtist{}, []string{"id", "name", "folder_id"}},
-		{"folder", jsonFolder{}, []string{"id", "name", "parent_id", "depth"}},
-		{"queue", jsonQueueEntry{}, []string{"id", "source_id", "status", "attempts", "error_msg", "error_kind"}},
-		{"playlist", jsonPlaylist{}, []string{"id", "name", "seed_track_id", "fragment_tokens", "fragment_mode", "fragment_excludes"}},
-		{"playlist entry", jsonPlaylistEntry{}, []string{"position", "track_id", "title", "duration_sec"}},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			raw, err := json.Marshal(c.value)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			var got map[string]json.RawMessage
-			if err := json.Unmarshal(raw, &got); err != nil {
-				t.Fatal(err)
-			}
-
-			if len(got) != len(c.want) {
-				t.Errorf("%s has %d keys, want %d: %v", c.name, len(got), len(c.want), keysOf(got))
-			}
-
-			for _, key := range c.want {
-				if _, ok := got[key]; !ok {
-					t.Errorf("%s is missing key %q; got %v", c.name, key, keysOf(got))
-				}
-			}
-		})
-	}
-}
 
 // seedUUIDTracks mints tracks with UUID-shaped IDs, because the interesting
 // property is that a 36-character ID survives --json intact while the human
@@ -109,7 +72,7 @@ func TestJSONCarriesFullIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var tracks []jsonTrack
+	var tracks []dto.Track
 	if err := json.Unmarshal([]byte(out.String()), &tracks); err != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, out.String())
 	}
@@ -144,7 +107,7 @@ func TestJSONEmptyListIsAnArray(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var tracks []jsonTrack
+	var tracks []dto.Track
 	if err := json.Unmarshal([]byte(out.String()), &tracks); err != nil {
 		t.Fatalf("empty output is not an empty JSON array: %v\n%q", err, out.String())
 	}
@@ -169,7 +132,7 @@ func TestJSONIsOnStdoutOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var tracks []jsonTrack
+	var tracks []dto.Track
 	if err := json.Unmarshal([]byte(out.String()), &tracks); err != nil {
 		t.Fatalf("stdout is not parseable JSON: %v\n%s", err, out.String())
 	}
@@ -182,7 +145,7 @@ func TestJSONEscapesNothingAway(t *testing.T) {
 	// escaping behaviour is set. Marshalling directly would escape HTML
 	// entities and this test would not notice.
 	var out strings.Builder
-	err := writeJSON(&out, jsonTrack{
+	err := dto.WriteJSON(&out, dto.Track{
 		ID:    "id-1",
 		Title: "星街すいせい <live> & 「うた」",
 	})
@@ -201,7 +164,7 @@ func TestJSONEscapesNothingAway(t *testing.T) {
 		}
 	}
 
-	var back jsonTrack
+	var back dto.Track
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatal(err)
 	}
@@ -268,8 +231,8 @@ func TestQueueErrorKindIsClassified(t *testing.T) {
 	}
 
 	for msg, want := range cases {
-		if got := queueErrorKind(msg); got != want {
-			t.Errorf("queueErrorKind(%q) = %q, want %q", msg, got, want)
+		if got := dto.QueueErrorKind(msg); got != want {
+			t.Errorf("dto.QueueErrorKind(%q) = %q, want %q", msg, got, want)
 		}
 	}
 }
@@ -278,7 +241,7 @@ func TestQueueErrorKindIsClassified(t *testing.T) {
 // playlist: a script asking what a playlist is derived from needs the seed,
 // the tokens, the mode and the exclusions, not just the name.
 func TestPlaylistJSONCarriesTheRecipe(t *testing.T) {
-	raw, err := json.Marshal(toJSONPlaylist(library.Playlist{
+	raw, err := json.Marshal(dto.ToPlaylist(library.Playlist{
 		ID:               7,
 		Name:             "Suisei",
 		SeedTrackID:      "seed-1",
@@ -290,7 +253,7 @@ func TestPlaylistJSONCarriesTheRecipe(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var got jsonPlaylist
+	var got dto.Playlist
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +280,7 @@ func TestPlaylistJSONCarriesTheRecipe(t *testing.T) {
 // .fragment_tokens | length'` would fail on a hand-built playlist while
 // working on a seeded one.
 func TestPlaylistJSONKeepsAStableShapeWhenEmpty(t *testing.T) {
-	raw, err := json.Marshal(toJSONPlaylist(library.Playlist{ID: 1, Name: "Handmade"}))
+	raw, err := json.Marshal(dto.ToPlaylist(library.Playlist{ID: 1, Name: "Handmade"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,12 +307,12 @@ func TestPlaylistJSONKeepsAStableShapeWhenEmpty(t *testing.T) {
 }
 
 // TestArtistJSONMapsEveryField exercises the artist mapping itself, not just
-// the shape of the DTO. TestJSONOutputSchemaIsStable marshals jsonArtist
+// the shape of the DTO. TestJSONOutputSchemaIsStable marshals dto.Artist
 // directly, so it pins the keys while proving nothing about the mapping from
 // library.Artist: a field added to the domain type and never copied here
 // would pass every test and simply not appear in the output.
 func TestArtistJSONMapsEveryField(t *testing.T) {
-	raw, err := json.Marshal(toJSONArtist(library.Artist{
+	raw, err := json.Marshal(dto.ToArtist(library.Artist{
 		ID:       "mori-calliope",
 		Name:     "Mori Calliope",
 		FolderID: "vtuber",
@@ -358,7 +321,7 @@ func TestArtistJSONMapsEveryField(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var got jsonArtist
+	var got dto.Artist
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +336,7 @@ func TestArtistJSONMapsEveryField(t *testing.T) {
 // was filed, or created with no folder, must still emit folder_id; a consumer
 // reading it unconditionally would otherwise get a missing key.
 func TestArtistJSONKeepsKeysWhenFolderless(t *testing.T) {
-	raw, err := json.Marshal(toJSONArtist(library.Artist{
+	raw, err := json.Marshal(dto.ToArtist(library.Artist{
 		ID:   "unfiled",
 		Name: "未整理",
 	}))

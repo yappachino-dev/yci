@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yappachino-dev/yci/internal/app"
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -106,7 +107,7 @@ func TestTrackListJSONRespectsLimit(t *testing.T) {
 		t.Fatalf("listTracks: %v", err)
 	}
 
-	var got []jsonTrack
+	var got []dto.Track
 	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
 		t.Fatalf("output is not a JSON array: %v\n%s", err, out.String())
 	}
@@ -133,7 +134,7 @@ func TestTrackListKeepsSourceIDInJSONOnly(t *testing.T) {
 	if err := listTracks(cmd.Context(), cmd); err != nil {
 		t.Fatalf("listTracks: %v", err)
 	}
-	var got []jsonTrack
+	var got []dto.Track
 	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
 		t.Fatal(err)
 	}

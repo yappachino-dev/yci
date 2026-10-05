@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yappachino-dev/yci/internal/app"
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -82,7 +83,7 @@ func TestJSONCommandsParseWithAdvisoryPresent(t *testing.T) {
 			t.Fatalf("source list: %v", err)
 		}
 
-		var got []sourceDTO
+		var got []dto.Source
 		if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
 			t.Fatalf("stdout is not parseable JSON: %v\n%s", err, out.String())
 		}
@@ -101,7 +102,7 @@ func TestJSONCommandsParseWithAdvisoryPresent(t *testing.T) {
 			t.Fatalf("track list: %v", err)
 		}
 
-		var got []jsonTrack
+		var got []dto.Track
 		if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
 			t.Fatalf("stdout is not parseable JSON: %v\n%s", err, out.String())
 		}

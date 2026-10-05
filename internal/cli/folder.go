@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 
 	"github.com/spf13/cobra"
@@ -173,10 +174,10 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 	if jsonRequested(cmd) {
 		out := folderTreeJSON(folders)
 		if out == nil {
-			out = []jsonFolder{}
+			out = []dto.Folder{}
 		}
 
-		return writeJSON(cmd.OutOrStdout(), out)
+		return dto.WriteJSON(cmd.OutOrStdout(), out)
 	}
 
 	if userFolders == 0 {
@@ -226,7 +227,7 @@ func listFolders(ctx context.Context, cmd *cobra.Command) error {
 // The root is omitted: it exists to give the tree a starting point and is not
 // a folder anyone creates or refers to. The order is the same one the human
 // view draws, so a diff between the two views lines up row for row.
-func folderTreeJSON(folders []library.Folder) []jsonFolder {
+func folderTreeJSON(folders []library.Folder) []dto.Folder {
 	childrenOf := make(map[library.FolderID][]library.Folder)
 	for _, f := range folders {
 		childrenOf[f.ParentID] = append(childrenOf[f.ParentID], f)
@@ -234,7 +235,7 @@ func folderTreeJSON(folders []library.Folder) []jsonFolder {
 
 	root := library.FolderID(library.RootID)
 
-	var out []jsonFolder
+	var out []dto.Folder
 
 	var traverse func(parentID library.FolderID, depth int)
 	traverse = func(parentID library.FolderID, depth int) {
@@ -242,7 +243,7 @@ func folderTreeJSON(folders []library.Folder) []jsonFolder {
 			if child.ID == root {
 				continue
 			}
-			out = append(out, toJSONFolder(child, depth))
+			out = append(out, dto.ToFolder(child, depth))
 			traverse(child.ID, depth+1)
 		}
 	}

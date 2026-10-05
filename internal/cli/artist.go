@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 
 	"github.com/spf13/cobra"
@@ -205,12 +206,12 @@ func listArtists(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	if jsonRequested(cmd) {
-		out := make([]jsonArtist, 0, len(artists))
+		out := make([]dto.Artist, 0, len(artists))
 		for _, a := range artists {
-			out = append(out, toJSONArtist(a))
+			out = append(out, dto.ToArtist(a))
 		}
 
-		return writeJSON(cmd.OutOrStdout(), out)
+		return dto.WriteJSON(cmd.OutOrStdout(), out)
 	}
 
 	table := NewTable(cmd.OutOrStdout(), "ID", "NAME", "FOLDER_ID")

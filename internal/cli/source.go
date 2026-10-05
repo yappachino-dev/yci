@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yappachino-dev/yci/internal/download"
+	"github.com/yappachino-dev/yci/internal/dto"
 	"github.com/yappachino-dev/yci/internal/library"
 )
 
@@ -154,7 +155,7 @@ func listSources(ctx context.Context, cmd *cobra.Command) error {
 			return err
 		}
 
-		return writeJSON(cmd.OutOrStdout(), sourceListJSON(sources, linked))
+		return dto.WriteJSON(cmd.OutOrStdout(), dto.SourceList(sources, linked))
 	}
 
 	if len(sources) == 0 {
@@ -171,7 +172,7 @@ func listSources(ctx context.Context, cmd *cobra.Command) error {
 
 	table := NewTable(cmd.OutOrStdout(), "NAME", "LINKED", "CHANNELS", "URL")
 	for _, src := range sources {
-		linkedCount, unlinked := linkStatus(src.Channels, linked)
+		linkedCount, unlinked := dto.LinkStatus(src.Channels, linked)
 		hanging += unlinked
 
 		table.Row(src.Name, fmt.Sprintf("%d/%d", linkedCount, len(src.Channels)),
@@ -188,35 +189,6 @@ func listSources(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	return nil
-}
-
-func sourceListJSON(sources []library.Source, linked library.LinkedChannels) []sourceDTO {
-	rows := make([]sourceDTO, 0, len(sources))
-	for _, src := range sources {
-		linkedCount, unlinked := linkStatus(src.Channels, linked)
-
-		rows = append(rows, sourceDTO{
-			Name:           src.Name,
-			URL:            src.URL,
-			Channels:       src.ChannelNames(),
-			LinkedChannels: linkedCount,
-			UnlinkedCount:  unlinked,
-		})
-	}
-
-	return rows
-}
-
-// sourceDTO is the JSON contract for a watched playlist: full strings, stable
-// names, and an array that is always present.
-type sourceDTO struct {
-	Name     string   `json:"name"`
-	URL      string   `json:"url"`
-	Channels []string `json:"channels"`
-	// LinkedChannels counts selections already attached to an artist.
-	// UnlinkedCount is the remainder, which is what delivers nothing.
-	LinkedChannels int `json:"linked_channels"`
-	UnlinkedCount  int `json:"unlinked_count"`
 }
 
 var sourceUpdateCmd = &cobra.Command{
