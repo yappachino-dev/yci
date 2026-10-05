@@ -88,7 +88,6 @@ Proposed. No route exists for any of these:
 | Method | Path | Service |
 |---|---|---|
 | GET | `/api/v1/playlists/{name}` | `PlaylistService` |
-| POST | `/api/v1/playlinks` | `ChannelService.Link` |
 | GET | `/api/v1/channels` | `ChannelService` |
 | POST | `/api/v1/queue/retry` `{ids?}` | `DownloadService.RetryFailed` |
 | POST | `/api/v1/sources/pull` | `SourceService.Pull` |
