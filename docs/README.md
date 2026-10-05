@@ -24,6 +24,7 @@ quirks), see `AGENTS.md` at the repository root.
 | [library-structure.md](library-structure.md) | Artists and folders — slug identity, the leaf-folder convention, the three ways an artist gets placed, and why `--parent` refuses to reuse an existing folder | implemented |
 | [config.md](config.md) | Configuration system — layered sources, strict TOML parsing, `yci config` command group, deliberate non-features | implemented |
 | [api.md](api.md) | Remote API — `yci serve` over HTTP behind a bearer token; read-only endpoints today, plus the worker and the import-prompting problem still to come | partial |
+| [download-queue.md](download-queue.md) | Download queue — the conditional claim that serialises two workers, the heartbeat and staleness bound that make reclaiming safe, and the timestamp-format trap behind both | implemented |
 | [fs-journal.md](fs-journal.md) | Filesystem action journal — transactional outbox making file moves/deletes crash-safe (redo replay, post-commit flush, startup recovery, `yci repair`) | implemented |
 | [style-guide.md](style-guide.md) | Production-grade style guide — design principles, layering, naming, errors, SQL, CLI, comment length, tooling gates | living document |
 | [technical-debt.md](technical-debt.md) | Debt register — open flaws only, with severity and remediation plan; entries are deleted when fixed | living document |

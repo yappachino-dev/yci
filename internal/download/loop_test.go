@@ -83,7 +83,7 @@ func (r *recordingReporter) OnTrackFailure(sourceID string, err error) {
 func newLoopService(t *testing.T, dl Downloader) (*Service, *SQLiteQueueRepo) {
 	t.Helper()
 
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	return NewService(ServiceConfig{
 		QueueRepo:   repo,
 		StagingDirs: staticStaging{StagingDirPath: t.TempDir()},
@@ -338,20 +338,20 @@ func TestProcessQueueCancellationLeavesTheTrackForTheNextRun(t *testing.T) {
 	}
 
 	e := entryBySource(t, repo, "aaaaaaaaaaa")
-	if e.Status != QueueStatusProcessing {
-		t.Errorf("status = %q, want processing so the next run re-arms it", e.Status)
+	// A cancelled run knows it has stopped, so it re-arms its own row
+	// instead of leaving it to the next run's orphan sweep. Interrupting is
+	// not a failure and must not cost a retry.
+	if e.Status != QueueStatusPending {
+		t.Errorf("status = %q, want pending: the run released it on the way out", e.Status)
 	}
 	if e.ErrorMsg != "" {
 		t.Errorf("error_msg = %q, want no bogus failure recorded against a cancelled run", e.ErrorMsg)
 	}
-	// Start counted the attempt before the download ran, and the cancelled
-	// context left no way to write it back here.
-	if e.Attempts != 1 {
-		t.Errorf("attempts = %d, want 1: Start increments before the download", e.Attempts)
+	if e.Attempts != 0 {
+		t.Errorf("attempts = %d, want 0: the interrupted attempt was given back", e.Attempts)
 	}
 
-	// The next run re-arms the row, gives the attempt back, and finishes the
-	// track. Interrupting is not a failure, so it must not cost a retry.
+	// The next run picks the row straight up and finishes the track.
 	fresh := context.Background()
 	recovered, err := svc.ProcessQueue(fresh, QueueRunConfig{}, noOpReporter{})
 	if err != nil {
@@ -396,16 +396,16 @@ func TestProcessQueueRepeatedInterruptsDoNotFailATrack(t *testing.T) {
 			t.Fatalf("run %d: want the context error", run)
 		}
 
-		// The row is still processing: ResetPending runs at the start of the
-		// *next* run, so the attempt spent here is returned there, not here.
+		// Each interrupted run releases its own row and gives the attempt
+		// back, so nothing accumulates across interrupts.
 		e := entryBySource(t, repo, "aaaaaaaaaaa")
-		if e.Status != QueueStatusProcessing {
-			t.Fatalf("run %d: status = %q, want processing", run, e.Status)
+		if e.Status != QueueStatusPending {
+			t.Fatalf("run %d: status = %q, want pending", run, e.Status)
 		}
-		// The number that matters: without the return, this would be 3 after
+		// The number that matters: without the return this would be 3 after
 		// three runs and the fourth run would fail the track outright.
-		if e.Attempts != 1 {
-			t.Fatalf("run %d: attempts = %d, want 1: interrupts must not accumulate", run, e.Attempts)
+		if e.Attempts != 0 {
+			t.Fatalf("run %d: attempts = %d, want 0: interrupts must not accumulate", run, e.Attempts)
 		}
 	}
 

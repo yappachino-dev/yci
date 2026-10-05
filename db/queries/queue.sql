@@ -12,12 +12,37 @@ SELECT
 FROM download_queue
 ORDER BY COALESCE(updated_at, created_at) ASC;
 
--- name: StartDownload :exec
+-- name: StartDownload :execrows
+-- Conditional on 'pending', because this claim is what serialises two
+-- workers. Both can read the same pending row, and an unconditional update
+-- would match for both: each would increment attempts, and both would run
+-- yt-dlp on the same video. Zero rows means someone else won it.
 UPDATE download_queue
 SET
     status = 'processing',
     attempts = attempts + 1,
     updated_at = CURRENT_TIMESTAMP
+WHERE id = :id
+  AND status = 'pending';
+
+-- name: ReleaseDownload :exec
+-- Re-arms a row this process is giving up on, giving back the attempt it
+-- never spent. Used when the run is cancelled: the process knows it has
+-- stopped, so it does not have to wait out the staleness window that a
+-- crash has to.
+UPDATE download_queue
+SET
+    attempts = MAX(attempts - 1, 0),
+    status = 'pending',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = :id;
+
+-- name: TouchDownload :exec
+-- Refreshes the heartbeat of a row being downloaded. Without it a long
+-- download is indistinguishable from a run that died holding it, and the
+-- staleness bound below has to be a guess wide enough to be safe.
+UPDATE download_queue
+SET updated_at = CURRENT_TIMESTAMP
 WHERE id = :id;
 
 -- name: CompleteDownload :exec
@@ -52,7 +77,17 @@ SET
         ELSE error_msg
     END,
     updated_at = CURRENT_TIMESTAMP
-WHERE status = 'processing';
+WHERE status = 'processing'
+  -- Age is the only evidence that the process holding this row is gone.
+  -- Without the bound a routine run reclaims rows another run is actively
+  -- downloading, which is the double-download this guards against.
+  --
+  -- :stale_before is bound as a preformatted string, not a time.Time. The
+  -- driver renders a time.Time as Go's Time.String() ("2026-10-05 11:26:55
+  -- +0300 EEST m=-3599"), which SQLite cannot parse or compare against the
+  -- column's CURRENT_TIMESTAMP text. Passing one silently makes this
+  -- comparison NULL, i.e. nothing is ever reclaimed again.
+  AND updated_at < CAST(sqlc.arg(stale_before) AS TEXT);
 
 -- name: ResetHardFailedDownloads :execrows
 UPDATE download_queue

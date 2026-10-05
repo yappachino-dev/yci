@@ -99,6 +99,24 @@ func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
 	return items, nil
 }
 
+const releaseDownload = `-- name: ReleaseDownload :exec
+UPDATE download_queue
+SET
+    attempts = MAX(attempts - 1, 0),
+    status = 'pending',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?1
+`
+
+// Re-arms a row this process is giving up on, giving back the attempt it
+// never spent. Used when the run is cancelled: the process knows it has
+// stopped, so it does not have to wait out the staleness window that a
+// crash has to.
+func (q *Queries) ReleaseDownload(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, releaseDownload, id)
+	return err
+}
+
 const resetDownloadByID = `-- name: ResetDownloadByID :execrows
 UPDATE download_queue
 SET
@@ -149,7 +167,22 @@ SET
     END,
     updated_at = CURRENT_TIMESTAMP
 WHERE status = 'processing'
+  -- Age is the only evidence that the process holding this row is gone.
+  -- Without the bound a routine run reclaims rows another run is actively
+  -- downloading, which is the double-download this guards against.
+  --
+  -- :stale_before is bound as a preformatted string, not a time.Time. The
+  -- driver renders a time.Time as Go's Time.String() ("2026-10-05 11:26:55
+  -- +0300 EEST m=-3599"), which SQLite cannot parse or compare against the
+  -- column's CURRENT_TIMESTAMP text. Passing one silently makes this
+  -- comparison NULL, i.e. nothing is ever reclaimed again.
+  AND updated_at < CAST(?2 AS TEXT)
 `
+
+type ResetOrphanedDownloadsParams struct {
+	MaxAttempts int64
+	StaleBefore string
+}
 
 // An orphaned row is one left 'processing' by a run that was interrupted
 // (Ctrl-C, crash, SIGTERM) rather than one that failed: a failure goes
@@ -159,22 +192,44 @@ WHERE status = 'processing'
 //
 // The CASE reads the pre-update attempts, so the status decision and the
 // decremented counter stay consistent.
-func (q *Queries) ResetOrphanedDownloads(ctx context.Context, maxAttempts int64) error {
-	_, err := q.db.ExecContext(ctx, resetOrphanedDownloads, maxAttempts)
+func (q *Queries) ResetOrphanedDownloads(ctx context.Context, arg ResetOrphanedDownloadsParams) error {
+	_, err := q.db.ExecContext(ctx, resetOrphanedDownloads, arg.MaxAttempts, arg.StaleBefore)
 	return err
 }
 
-const startDownload = `-- name: StartDownload :exec
+const startDownload = `-- name: StartDownload :execrows
 UPDATE download_queue
 SET
     status = 'processing',
     attempts = attempts + 1,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?1
+  AND status = 'pending'
 `
 
-func (q *Queries) StartDownload(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, startDownload, id)
+// Conditional on 'pending', because this claim is what serialises two
+// workers. Both can read the same pending row, and an unconditional update
+// would match for both: each would increment attempts, and both would run
+// yt-dlp on the same video. Zero rows means someone else won it.
+func (q *Queries) StartDownload(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, startDownload, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const touchDownload = `-- name: TouchDownload :exec
+UPDATE download_queue
+SET updated_at = CURRENT_TIMESTAMP
+WHERE id = ?1
+`
+
+// Refreshes the heartbeat of a row being downloaded. Without it a long
+// download is indistinguishable from a run that died holding it, and the
+// staleness bound below has to be a guess wide enough to be safe.
+func (q *Queries) TouchDownload(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, touchDownload, id)
 	return err
 }
 

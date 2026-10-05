@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yappachino-dev/yci/internal/fs"
 )
@@ -41,6 +42,10 @@ const (
 
 // maxAttempts is hardcoded amount of times to retry a download
 const maxAttempts = 3
+
+// keepAliveInterval refreshes a claimed row well inside orphanStaleAfter, so
+// a row being downloaded is never mistaken for one whose worker died.
+const keepAliveInterval = 30 * time.Second
 
 // isActionable reports whether an entry will be picked up by Next.
 func isActionable(e QueueEntry) bool {
@@ -110,7 +115,9 @@ type QueueRepo interface {
 	All(ctx context.Context) ([]QueueEntry, error)
 	Enqueue(ctx context.Context, sourceID string) (bool, error)
 	ResetPending(ctx context.Context, maxAttempts int) error
-	Start(ctx context.Context, id int) error
+	Start(ctx context.Context, id int) (bool, error)
+	Release(ctx context.Context, id int) error
+	Touch(ctx context.Context, id int) error
 	Complete(ctx context.Context, id int) error
 	Fail(ctx context.Context, id int, status string, err error) error
 	RetryByID(ctx context.Context, id int) (bool, error)
@@ -491,6 +498,37 @@ func (s *Service) recordChannel(ctx context.Context, entry QueueEntry, meta Vide
 	return nil
 }
 
+// keepAlive refreshes a claimed row's timestamp while it is being worked on,
+// and returns the function that stops it.
+//
+// Without this the staleness bound in ResetOrphanedDownloads has to be wide
+// enough to cover the slowest conceivable download, which turns every crash
+// into a queue that stays stuck for that long. A dropped refresh is not
+// fatal -- it only makes the row look older -- so the error is not reported.
+func (s *Service) keepAlive(ctx context.Context, id int) func() {
+	stop := make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(keepAliveInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.repo.Touch(ctx, id); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	return func() { close(stop) }
+}
+
 func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter Reporter) (ProcessResult, error) {
 	if reporter == nil {
 		reporter = defaultNoOpReporter
@@ -541,16 +579,30 @@ func (s *Service) ProcessQueue(ctx context.Context, run QueueRunConfig, reporter
 			CookiesFile:        run.CookiesFile,
 		}
 
-		if err := s.repo.Start(ctx, entry.ID); err != nil {
+		claimed, err := s.repo.Start(ctx, entry.ID)
+		if err != nil {
 			return result, fmt.Errorf("start queue entry %d: %w", entry.ID, err)
 		}
 
+		// Another worker got there first. Skipping costs nothing: the row is
+		// already claimed, and it is not this run's to retry or report.
+		if !claimed {
+			total--
+			continue
+		}
+
+		stop := s.keepAlive(ctx, entry.ID)
 		meta, err := s.downloader.Download(ctx, cfg)
+		stop()
 		if err != nil {
-			// Cancelled: leave the row processing and record nothing, since
-			// the write would need the cancelled context. The next run's
-			// ResetPending re-arms it and returns the attempt it never spent.
+			// Cancelled. This process knows it has stopped, so it re-arms its own
+			// row now rather than leaving it to the next run's orphan sweep.
+			// WithoutCancel is required: the write needs a live context.
 			if ctx.Err() != nil {
+				if err := s.repo.Release(context.WithoutCancel(ctx), entry.ID); err != nil {
+					return result, fmt.Errorf("release queue entry %d: %w", entry.ID, err)
+				}
+
 				return result, ctx.Err()
 			}
 

@@ -85,7 +85,7 @@ func TestProcessQueueRecordsTheChannel(t *testing.T) {
 	}
 	channels := &recordingChannels{}
 
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	svc := NewService(ServiceConfig{
 		QueueRepo:   repo,
 		StagingDirs: staticStaging{StagingDirPath: t.TempDir()},
@@ -112,7 +112,7 @@ func TestProcessQueueWithoutAChannelIsNotAnError(t *testing.T) {
 	dl := &fakeDownloader{}
 	channels := &recordingChannels{}
 
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	svc := NewService(ServiceConfig{
 		QueueRepo:   repo,
 		StagingDirs: staticStaging{StagingDirPath: t.TempDir()},

@@ -46,8 +46,10 @@ func (f *fakeQueueRepo) Next(context.Context) (QueueEntry, bool, error) {
 	return QueueEntry{}, false, nil
 }
 
-func (f *fakeQueueRepo) Start(context.Context, int) error    { return nil }
-func (f *fakeQueueRepo) Complete(context.Context, int) error { return nil }
+func (f *fakeQueueRepo) Start(context.Context, int) (bool, error) { return true, nil }
+func (f *fakeQueueRepo) Touch(context.Context, int) error         { return nil }
+func (f *fakeQueueRepo) Release(context.Context, int) error       { return nil }
+func (f *fakeQueueRepo) Complete(context.Context, int) error      { return nil }
 func (f *fakeQueueRepo) Fail(context.Context, int, string, error) error {
 	return nil
 }

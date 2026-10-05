@@ -2,10 +2,12 @@ package download
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yappachino-dev/yci/internal/db"
 	"github.com/yappachino-dev/yci/internal/store"
@@ -17,7 +19,7 @@ import (
 // ones, and every transition here is a place a download can get stuck or
 // start twice. None of it had been exercised, so these tests exist to pin
 // the transitions rather than the types.
-func newQueueRepo(t *testing.T) *SQLiteQueueRepo {
+func newQueueRepo(t *testing.T) (*SQLiteQueueRepo, *sql.DB) {
 	t.Helper()
 
 	if err := db.SetUpMigrationContext(); err != nil {
@@ -34,7 +36,7 @@ func newQueueRepo(t *testing.T) *SQLiteQueueRepo {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	return NewSQLiteQueueRepo(store.New(conn))
+	return NewSQLiteQueueRepo(store.New(conn)), conn
 }
 
 type nopWriter struct{}
@@ -75,7 +77,7 @@ func entryBySource(t *testing.T, r *SQLiteQueueRepo, sourceID string) QueueEntry
 // the same download twice: the second attempt must report "not added" rather
 // than creating a second row.
 func TestEnqueueIsIdempotent(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
@@ -100,7 +102,7 @@ func TestEnqueueIsIdempotent(t *testing.T) {
 // TestQueueLifecycle walks the normal path: pending, picked up, started
 // (which increments attempts), then removed on completion.
 func TestQueueLifecycle(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
@@ -116,7 +118,7 @@ func TestQueueLifecycle(t *testing.T) {
 		t.Errorf("picked attempts = %d, want 0", next.Attempts)
 	}
 
-	if err := repo.Start(ctx, next.ID); err != nil {
+	if _, err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,13 +150,13 @@ func TestQueueLifecycle(t *testing.T) {
 // actually lands in: the error text has to survive, because it is the only
 // thing telling the user why.
 func TestFailureRecordsTheReasonAndRetries(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
 
 	next, _ := nextPending(t, repo)
-	if err := repo.Start(ctx, next.ID); err != nil {
+	if _, err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -177,7 +179,7 @@ func TestFailureRecordsTheReasonAndRetries(t *testing.T) {
 	// Exhausting the attempts makes it terminal, and it stops being offered.
 	// Start is what increments the counter, so the retry has to go through it
 	// the way a real run does.
-	if err := repo.Start(ctx, next.ID); err != nil {
+	if _, err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Fail(ctx, next.ID, string(QueueStatusFailed), errors.New("HTTP Error 403: Forbidden")); err != nil {
@@ -198,12 +200,12 @@ func TestFailureRecordsTheReasonAndRetries(t *testing.T) {
 
 // TestRetryReArmsAFailedEntry covers `download retry`.
 func TestRetryReArmsAFailedEntry(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "dQw4w9WgXcQ")
 	next, _ := nextPending(t, repo)
-	if err := repo.Start(ctx, next.ID); err != nil {
+	if _, err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Fail(ctx, next.ID, string(QueueStatusFailed), errors.New("boom")); err != nil {
@@ -237,10 +239,23 @@ func TestRetryReArmsAFailedEntry(t *testing.T) {
 	}
 }
 
+// ageRow backdates a queue row's heartbeat so it looks like a run that died
+// holding it. ResetPending only reclaims stale rows, which is what stops a
+// concurrent run from stealing one that is still being downloaded.
+func ageRow(t *testing.T, conn *sql.DB, id int, age time.Duration) {
+	t.Helper()
+
+	when := time.Now().Add(-age).UTC().Format("2006-01-02 15:04:05")
+	if _, err := conn.ExecContext(context.Background(),
+		`UPDATE download_queue SET updated_at = ? WHERE id = ?`, when, id); err != nil {
+		t.Fatalf("age row %d: %v", id, err)
+	}
+}
+
 // TestRetryHardFailedOnlyTouchesExhaustedEntries is the difference between
 // re-arming real failures and re-arming everything.
 func TestRetryHardFailedOnlyTouchesExhaustedEntries(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, _ := newQueueRepo(t)
 	ctx := context.Background()
 
 	// One that exhausted its attempts. The reset is keyed on
@@ -253,10 +268,19 @@ func TestRetryHardFailedOnlyTouchesExhaustedEntries(t *testing.T) {
 	// rounds: RetryByID resets attempts to 0, so a retry-per-round loop would
 	// never accumulate to the exhaustion threshold the reset is keyed on.
 	for i := 0; i < maxAttempts; i++ {
-		if err := repo.Start(ctx, id); err != nil {
-			t.Fatal(err)
+		// A claim is only legal from pending, so a retry round returns the
+		// entry to pending first and only the last round stays failed.
+		next := QueueStatusPending
+		if i == maxAttempts-1 {
+			next = QueueStatusFailed
 		}
-		if err := repo.Fail(ctx, id, string(QueueStatusFailed), errors.New("boom")); err != nil {
+
+		if claimed, err := repo.Start(ctx, id); err != nil {
+			t.Fatal(err)
+		} else if !claimed {
+			t.Fatalf("round %d could not claim the entry", i)
+		}
+		if err := repo.Fail(ctx, id, string(next), errors.New("boom")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -296,18 +320,20 @@ func TestRetryHardFailedOnlyTouchesExhaustedEntries(t *testing.T) {
 // TestResetPendingClearsInterruptedRuns covers a download left 'processing'
 // by a crash: the next run must be able to pick it up again.
 func TestResetPendingClearsInterruptedRuns(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, conn := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "interrupted")
 	next, _ := nextPending(t, repo)
-	if err := repo.Start(ctx, next.ID); err != nil {
+	if _, err := repo.Start(ctx, next.ID); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, ok := nextPending(t, repo); ok {
 		t.Fatal("a processing entry should not be actionable before the reset")
 	}
+
+	ageRow(t, conn, next.ID, time.Hour)
 
 	if err := repo.ResetPending(ctx, maxAttempts); err != nil {
 		t.Fatal(err)
@@ -328,16 +354,18 @@ func TestResetPendingClearsInterruptedRuns(t *testing.T) {
 
 // Interrupting repeatedly must not be able to fail a track on its own.
 func TestResetPendingGivesBackEveryInterruptedAttempt(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, conn := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "crtl-c")
 	entry, _ := nextPending(t, repo)
 
 	for range 5 {
-		if err := repo.Start(ctx, entry.ID); err != nil {
+		if _, err := repo.Start(ctx, entry.ID); err != nil {
 			t.Fatal(err)
 		}
+		ageRow(t, conn, entry.ID, time.Hour)
+
 		if err := repo.ResetPending(ctx, maxAttempts); err != nil {
 			t.Fatal(err)
 		}
@@ -353,26 +381,55 @@ func TestResetPendingGivesBackEveryInterruptedAttempt(t *testing.T) {
 }
 
 // A genuinely exhausted entry stays terminal even if it was interrupted last.
+//
+// The state has to be built the way the code can actually reach it: a claim
+// is legal only from pending, so the entry is driven to the end of its budget
+// by real failures before the interrupting run happens.
 func TestResetPendingKeepsAnExhaustedEntryFailed(t *testing.T) {
-	repo := newQueueRepo(t)
+	repo, conn := newQueueRepo(t)
 	ctx := context.Background()
 
 	mustEnqueue(t, repo, "spent")
 	entry, _ := nextPending(t, repo)
 
-	// The budget is the first attempt plus maxAttempts retries, so reaching
-	// the end of it takes maxAttempts+1 starts. The last one is interrupted.
-	for range maxAttempts + 1 {
-		if err := repo.Start(ctx, entry.ID); err != nil {
+	for i := 0; i < maxAttempts; i++ {
+		status := QueueStatusPending
+		if i == maxAttempts-1 {
+			status = QueueStatusFailed
+		}
+
+		if claimed, err := repo.Start(ctx, entry.ID); err != nil {
+			t.Fatal(err)
+		} else if !claimed {
+			t.Fatalf("round %d could not claim the entry", i)
+		}
+		if err := repo.Fail(ctx, entry.ID, string(status), errors.New("boom")); err != nil {
 			t.Fatal(err)
 		}
 	}
+
+	// One interrupt on top of a spent budget. Start claims it again, so the
+	// reclaim has to leave it terminal rather than handing back a retry.
+	if _, err := repo.RetryByID(ctx, entry.ID); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < maxAttempts; i++ {
+		if _, err := repo.Start(ctx, entry.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.Fail(ctx, entry.ID, string(QueueStatusPending), errors.New("boom")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := repo.Start(ctx, entry.ID); err != nil {
+		t.Fatal(err)
+	}
+	ageRow(t, conn, entry.ID, time.Hour)
+
 	if err := repo.ResetPending(ctx, maxAttempts); err != nil {
 		t.Fatal(err)
 	}
 
-	// Giving back the interrupted attempt lands exactly on the budget, not
-	// past it: the entry is spent, but not over-spent.
 	after := entryBySource(t, repo, "spent")
 	if after.Status != QueueStatusFailed {
 		t.Errorf("status = %q, want failed: the budget is spent", after.Status)

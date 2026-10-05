@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/yappachino-dev/yci/internal/appctx"
 	"github.com/yappachino-dev/yci/internal/db"
@@ -47,12 +48,55 @@ func (r *SQLiteQueueRepo) Enqueue(ctx context.Context, sourceID string) (bool, e
 	return rows > 0, nil
 }
 
+// orphanStaleAfter is how long a row may sit in 'processing' before another
+// run treats it as abandoned. It has to exceed any single download, because
+// resetting a row that is actively downloading causes both runs to fetch the
+// same video; TouchDownload keeps the row's age fresh so this stays a
+// bound on a dead process rather than on a slow one.
+const orphanStaleAfter = 5 * time.Minute
+
+// sqliteTimestampLayout is the format SQLite's CURRENT_TIMESTAMP writes.
+// A lexicographic comparison is only correct when both sides use it.
+const sqliteTimestampLayout = "2006-01-02 15:04:05"
+
+// ResetPending reclaims rows left 'processing' by an interrupted run.
+//
+// Only rows stale past orphanStaleAfter: age is the sole evidence that the
+// process holding one is gone, so a run that started a moment ago must not
+// reclaim rows a slower run is still downloading.
 func (r *SQLiteQueueRepo) ResetPending(ctx context.Context, maxAttempts int) error {
-	return r.db(ctx).ResetOrphanedDownloads(ctx, int64(maxAttempts))
+	// Formatted to match CURRENT_TIMESTAMP, which is what the column holds.
+	// See the query comment: binding a time.Time here is not merely ugly, it
+	// silently disables the reclaim.
+	staleBefore := time.Now().Add(-orphanStaleAfter).UTC().Format(sqliteTimestampLayout)
+
+	return r.db(ctx).ResetOrphanedDownloads(ctx, store.ResetOrphanedDownloadsParams{
+		MaxAttempts: int64(maxAttempts),
+		StaleBefore: staleBefore,
+	})
 }
 
-func (r *SQLiteQueueRepo) Start(ctx context.Context, id int) error {
-	return r.db(ctx).StartDownload(ctx, int64(id))
+// Start claims a row for this worker, reporting whether it actually won.
+//
+// A false return is not an error: it means another worker claimed the row
+// between this run reading the queue and this run reaching it.
+func (r *SQLiteQueueRepo) Start(ctx context.Context, id int) (bool, error) {
+	rows, err := r.db(ctx).StartDownload(ctx, int64(id))
+	if err != nil {
+		return false, err
+	}
+
+	return rows > 0, nil
+}
+
+// Release re-arms a row the caller is knowingly abandoning.
+func (r *SQLiteQueueRepo) Release(ctx context.Context, id int) error {
+	return r.db(ctx).ReleaseDownload(ctx, int64(id))
+}
+
+// Touch refreshes the heartbeat of a row this worker is downloading.
+func (r *SQLiteQueueRepo) Touch(ctx context.Context, id int) error {
+	return r.db(ctx).TouchDownload(ctx, int64(id))
 }
 
 // Complete removes a finished entry from the queue.
