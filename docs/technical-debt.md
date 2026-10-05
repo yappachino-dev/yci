@@ -28,15 +28,9 @@ safe.
 
 ## Open entries
 
-**TD-45 — a missing staging directory fails the download commands with a raw
-path error.** `Enqueue` reads the staging directory to skip videos already
-downloaded but not yet imported, and does not create it. On a fresh install
-where nothing has made the directory yet, `download <url>` and
-`POST /api/v1/queue` both fail with `read staged dir: ... no such file or
-directory` instead of creating it. Severity: low, and it is a confusing
-first-run failure rather than data loss. The library directory is created at
-boot and the staging directory is not. Remediation: create it in the container
-boot beside the library one.
+**This section currently has no entries**, which is a statement about when it
+was last read rather than a claim that the codebase is clean. The next flaw
+found starts at `TD-46`.
 
 ---
 

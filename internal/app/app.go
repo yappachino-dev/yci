@@ -54,6 +54,9 @@ func (c *Container) Close() error {
 // database connection must already be open and migrated.
 func NewContainer(dbConn *sql.DB, cfg config.Config) (*Container, error) {
 	paths := fs.NewAppPaths(cfg.ConfigDir(), cfg.LibraryDir, cfg.StagingDir)
+	if err := fs.EnsureDirs(paths); err != nil {
+		return nil, err
+	}
 
 	queries := store.New(dbConn)
 

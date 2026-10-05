@@ -78,6 +78,62 @@ type io_Discard struct{}
 
 func (io_Discard) Write(p []byte) (int, error) { return len(p), nil }
 
+// TestContainerCreatesTheLibraryAndStagingRoots is the TD-45 regression.
+//
+// boot above pre-creates both directories, which is why the gap went
+// unnoticed: nothing ever exercised a container built against roots that do
+// not exist yet. On a fresh install those are the only roots there are, and
+// Enqueue lists staging on every download.
+func TestContainerCreatesTheLibraryAndStagingRoots(t *testing.T) {
+	if err := db.SetUpMigrationContext(); err != nil {
+		t.Fatalf("set up migrations: %v", err)
+	}
+
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	libraryDir := filepath.Join(root, "Music", "Managed")
+	stagingDir := filepath.Join(root, "Music", "Staging")
+
+	// Only the config directory, which config resolution insists on. The
+	// library and staging roots are deliberately absent.
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dbConn, err := db.Open(filepath.Join(root, "data.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { dbConn.Close() })
+
+	if err := db.RunMigrations(t.Context(), dbConn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	env := map[string]string{
+		config.EnvConfigPath:  filepath.Join(configDir, "config.toml"),
+		config.EnvLibraryPath: libraryDir,
+		config.EnvStagingPath: stagingDir,
+	}
+	cfg, err := config.Load(func(key string) string { return env[key] })
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if _, err := app.NewContainer(dbConn, cfg); err != nil {
+		t.Fatalf("NewContainer: %v", err)
+	}
+
+	for name, dir := range map[string]string{"library": libraryDir, "staging": stagingDir} {
+		if _, err := os.Stat(dir); err != nil {
+			t.Errorf("%s directory was not created: %v", name, err)
+		}
+	}
+}
+
 // TestContainerWiresEveryService is a smoke test for the composition root.
 //
 // This package existed at 0% coverage, which is why a connection-level
