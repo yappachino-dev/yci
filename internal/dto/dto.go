@@ -86,6 +86,10 @@ type QueueEnqueueRequest struct {
 	// ForcePlaylist treats a hybrid watch/list URL as a playlist instead of
 	// the single video it names.
 	ForcePlaylist bool `json:"force_playlist"`
+	// Force re-queues a video that was deleted from the library before.
+	// Without it such a video is skipped, because a caller posting from a
+	// phone cannot know the local deletion rules the journal records.
+	Force bool `json:"force"`
 }
 
 // QueueEnqueueResponse reports one item per video the request resolved to.

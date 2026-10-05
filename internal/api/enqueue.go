@@ -51,6 +51,7 @@ func (s *Server) enqueue(w http.ResponseWriter, r *http.Request) {
 	result, err := s.c.DownloadService.Enqueue(r.Context(), download.EnqueueParams{
 		URLs:          req.URLs,
 		ForcePlaylist: req.ForcePlaylist,
+		Retirement:    s.retirementFor(req.Force),
 	})
 	if err != nil {
 		// The detail can name a URL and a filesystem path, neither of which
@@ -67,4 +68,20 @@ func (s *Server) enqueue(w http.ResponseWriter, r *http.Request) {
 	if err := dto.WriteJSON(w, body); err != nil {
 		return
 	}
+}
+
+// retirementFor decides whether this request honours the deletion journal.
+//
+// The journal exists to stop a deleted video coming back on the next
+// unattended `source pull`, which is why pull always reads it. A caller
+// posting over HTTP is not necessarily present, so the same rule applies by
+// default. `force` is how to disagree, and it is not optional: the journal
+// only records deletions made through yci and only since migration 015, so
+// there are videos it cannot speak for that are still worth having.
+func (s *Server) retirementFor(force bool) download.RetirementChecker {
+	if force {
+		return nil
+	}
+
+	return s.c.TrackJournal
 }

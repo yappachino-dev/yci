@@ -3,14 +3,16 @@
 Exposing yci as a network service, so a remote client can drive downloads and
 browse the library without linking yt-dlp and ffprobe into itself.
 
-- **Status:** read-only phase implemented; write endpoints and the worker are
-  not
+- **Status:** six read endpoints, `POST /queue`, and the drain worker are
+  implemented; everything else below is a proposal
 - **Introduced:** `internal/api/`
 - **Core package:** `internal/api/server.go`, `internal/dto/`
 - **Related:** `internal/cli/serve.go`, `internal/app/app.go`
 
-What exists today is `yci serve`: six read-only endpoints behind a bearer
-token. Everything below the endpoint tables is still a proposal.
+`yci serve` runs the HTTP API and drains the download queue in the background.
+It is seven endpoints, not the collection sketched below: the tables below
+separate what is built from what is only proposed, and a proposal row has no
+route behind it.
 
 ## Why this is mostly a transport problem
 
@@ -40,20 +42,27 @@ because a CLI can afford to wait. A server cannot.
 ```
 today    enqueue ──► (user waits) ──► ProcessQueue ──► done
 
-service  POST /queue ──► 202 ──┐
+service  POST /queue ──► 201 ──┐
                                 ├──► worker goroutine ──► ProcessQueue
          GET  /queue ◄─────────┘
 ```
 
-The worker is a goroutine started once at boot, looping over the queue.
-`StartDownload` already flips `pending` → `processing` and increments
-`attempts`, so a worker that dies mid-row leaves an orphan that
-`ResetOrphanedDownloads` reclaims on next start. That recovery path already
-exists because it was needed for Ctrl-C.
+`201`, not `202`: the queue row is a real resource created by this call. Only
+the download behind it is asynchronous, and the caller can watch that through
+`GET /queue`.
 
-**Exactly one worker.** Two `ProcessQueue` calls racing each other would both
-claim rows. A single goroutine is sufficient for a single-user deployment and
-is far easier to reason about than leases.
+The worker is a goroutine started once at boot, looping over the queue. Its
+first pass is immediate rather than one interval in, so a restart picks up
+work that was pending when the process went down. `--poll-interval` tunes the
+interval; the default is 30s.
+
+**Not exactly one worker.** The claim in `StartDownload` is conditional on
+`status = 'pending'`, so two drains racing each other cannot both take a row.
+That is what makes it safe for the `serve` worker to overlap a manual
+`download resume` — the case a single-worker design would have had to
+forbid. An interrupted row is reclaimed by `ResetOrphanedDownloads` after
+five minutes, kept fresh by a 30-second heartbeat, and released immediately on
+cancellation. See `docs/download-queue.md`.
 
 ## Endpoints
 
@@ -61,24 +70,74 @@ Read, all backed by existing DTOs. `internal/dto` owns them: the API and the
 CLI are two consumers of one contract, and a contract that exists once per
 consumer drifts.
 
+Implemented:
+
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/tracks?limit=&offset=` | `track list --json` |
+| GET | `/api/v1/tracks` | `track list --json`; no paging, see below |
 | GET | `/api/v1/artists` | `artist list --json` |
 | GET | `/api/v1/folders` | `folder list --json` |
-| GET | `/api/v1/playlists`, `/playlists/{name}` | |
+| GET | `/api/v1/playlists` | `playlist list --json` |
 | GET | `/api/v1/sources` | `source list --json` |
 | GET | `/api/v1/queue` | `download queue --json` |
+| POST | `/api/v1/queue` | `DownloadService.Enqueue`, see below |
 
-Write, each mapping onto one existing service method:
+Proposed. No route exists for any of these:
 
 | Method | Path | Service |
 |---|---|---|
-| POST | `/api/v1/queue` `{url}` | `DownloadService.Enqueue` |
+| GET | `/api/v1/playlists/{name}` | `PlaylistService` |
+| GET | `/api/v1/channels` | `ChannelService` |
 | POST | `/api/v1/queue/retry` `{ids?}` | `DownloadService.RetryFailed` |
 | POST | `/api/v1/sources/pull` | `SourceService.Pull` |
 | DELETE | `/api/v1/tracks/{id}` | `TrackService.Delete` |
 | POST | `/api/v1/playlinks` | `ChannelService.Link` |
+
+`GET /tracks` ignores `limit` and `offset`. `track list` pages only when
+asked to, so the CLI and the API agree on a single large response; that is
+fine at a few hundred tracks and wrong at ten thousand.
+
+## POST /api/v1/queue
+
+```json
+{ "urls": ["https://www.youtube.com/watch?v=BaW_jenozKc"],
+  "force_playlist": false, "force": false }
+```
+
+Answers `201` with one item per video the URLs resolved to, each carrying
+`url`, `video_id`, `skipped` and `reason`. Per-item outcomes are what make the
+call useful: a caller posting five URLs needs to know which one was refused,
+not that three succeeded.
+
+`skip` reasons a caller will meet:
+
+| `reason` | Meaning |
+|---|---|
+| `already in download queue` | the row exists |
+| `already exists in database` | the track is in the library |
+| `deleted from the library` | the deletion journal has the video |
+
+Playlist URLs are `400`, pointing at `source add`, which is where a channel
+choice is stored.
+
+### The deletion journal
+
+By default this endpoint honours the journal, the same way `source pull` does.
+A caller posting from a phone is not present to know a video was deliberately
+removed, and without this rule every client silently undoes a deletion made in
+the CLI.
+
+`force: true` skips the check. It exists because the journal cannot be strict:
+it records only deletions made through `TrackService.Delete`, and only since
+migration 015. A file removed in a file manager, or a track deleted before
+that migration, leaves no record. So `force` covers the cases the journal
+cannot speak for, such as deleting a track to replace a corrupt file and then
+wanting it back.
+
+`download <url>` in the CLI does **not** read the journal. That command is
+attended and explicit, and a URL typed into a terminal is a decision by
+someone who can see the library. The divergence is deliberate, not an
+oversight.
 
 Version prefix from day one. The DTOs are a contract a mobile app compiles
 against; without a version it cannot be changed without breaking a shipped
@@ -138,10 +197,12 @@ effect, so an API that appeared to apply it would be lying.
 ## Phasing
 
 1. ~~**Read-only API** over the existing DTOs, plus auth.~~ Done: `yci serve`.
-2. **Worker** and `POST /queue`, with `GET /queue` polling. This is what makes
-   the server able to act rather than only report.
-3. **Write endpoints**, deciding the import policy above.
-4. A client.
+2. ~~**Worker** and `POST /queue`, with `GET /queue` polling.~~ Done.
+3. **Import**, the missing half of the loop. A client can fetch audio but
+   cannot move it into the library; `import staging` is the only way, and it is
+   the one genuinely interactive command.
+4. **Write endpoints**, the rest of the proposed table.
+5. A client.
 
 ## Risks
 

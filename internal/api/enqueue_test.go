@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yappachino-dev/yci/internal/app"
+	"github.com/yappachino-dev/yci/internal/download"
 	"github.com/yappachino-dev/yci/internal/dto"
+	"github.com/yappachino-dev/yci/internal/library"
 )
 
 func post(t *testing.T, h http.Handler, path string, body any) *http.Response {
@@ -142,5 +145,103 @@ func TestEnqueueRequiresABearerToken(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+// retireVideo puts a track with the given YouTube ID into the library and
+// then deletes it, which is what leaves the video in the deletion journal.
+func retireVideo(t *testing.T, c *app.Container, videoID string) {
+	t.Helper()
+
+	track, err := c.TrackService.Create(t.Context(), library.TrackCreateParams{
+		ID:           library.TrackID("t" + videoID),
+		Title:        "retired " + videoID,
+		RelativePath: library.TrackPath(videoID + ".mp3"),
+		SourceID:     videoID,
+		Source:       "youtube",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := c.TrackService.Delete(t.Context(), track.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+}
+
+// TestEnqueueSkipsADeletedVideo: a caller posting from a phone is not present
+// to know that this video was deliberately removed, so the same journal rule
+// `source pull` follows applies to an unattended POST. Otherwise every client
+// silently undoes a deletion made in the CLI.
+func TestEnqueueSkipsADeletedVideo(t *testing.T) {
+	c := newTestContainer(t)
+	retireVideo(t, c, "jNQXAC9IVRw")
+
+	s, err := New(c, testToken)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	url := "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+
+	res := post(t, s.Handler(), "/api/v1/queue", dto.QueueEnqueueRequest{URLs: []string{url}})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", res.StatusCode)
+	}
+
+	var got dto.QueueEnqueueResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if len(got.Items) != 1 {
+		t.Fatalf("%d items, want 1", len(got.Items))
+	}
+	if !got.Items[0].Skipped {
+		t.Fatal("a deleted video was re-queued: the journal was not consulted")
+	}
+	if got.Items[0].Reason != download.SkipReasonRetired {
+		t.Errorf("reason = %q, want %q", got.Items[0].Reason, download.SkipReasonRetired)
+	}
+}
+
+// TestEnqueueForceOverridesTheJournal: force exists because the journal is
+// only partial. It records deletions made through yci, and only since
+// migration 015, so it cannot speak for every video that is gone. Someone who
+// deleted a track to replace a corrupt file still wants it back.
+func TestEnqueueForceOverridesTheJournal(t *testing.T) {
+	c := newTestContainer(t)
+	retireVideo(t, c, "jNQXAC9IVRw")
+
+	s, err := New(c, testToken)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	url := "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+
+	res := post(t, s.Handler(), "/api/v1/queue", dto.QueueEnqueueRequest{
+		URLs:  []string{url},
+		Force: true,
+	})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", res.StatusCode)
+	}
+
+	var got dto.QueueEnqueueResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if got.Items[0].Skipped {
+		t.Errorf("force still skipped the video: %q", got.Items[0].Reason)
+	}
+
+	entries, err := c.DownloadService.All(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("queue has %d rows, want 1", len(entries))
 	}
 }
